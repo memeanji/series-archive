@@ -89,9 +89,11 @@ def get_display_thumbnail(ad: dict) -> dict:
 
 
 def _do_extract(social_id: str, video_id: str) -> None:
-    """버튼 클릭 시에만 단건 추출(YouTube 자막). 무거운 자동추출 금지."""
+    """버튼 클릭 시에만 단건 추출. ① YouTube 자막 → ② 실패 시 Gemini 영상 전사."""
     database.update_script(social_id, "", "extracting")
     text = YT.fetch_transcript(video_id) if video_id else ""
+    if not text and video_id:
+        text = YT.gemini_transcript(video_id)   # 자막 없으면 Gemini 멀티모달
     database.update_script(social_id, text, "extracted" if text else "failed")
     _reload()
 
@@ -122,7 +124,7 @@ def render_script_section(social_id: str, video_id: str = "") -> None:
     st.caption("스크립트가 아직 없습니다." + (" (이전 추출 실패)" if status == "failed" else ""))
     c = st.columns(2)
     if c[0].button("🎬 스크립트 자동 추출", key=f"ex_{social_id}", disabled=not video_id,
-                   help="YouTube 자막에서 추출(영상 1건만 실행)"):
+                   help="① YouTube 자막 → ② 없으면 Gemini로 영상 전사 (영상 1건만 실행)"):
         _do_extract(social_id, video_id)
     with c[1].popover("✍️ 직접 입력"):
         man = st.text_area("스크립트", key=f"man_{social_id}", height=140,

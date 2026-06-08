@@ -77,6 +77,8 @@ NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET", "").strip()
 
 # ── YouTube Data API ─────────────────────────────────────
 YOUTUBE_API_KEY = secret("YOUTUBE_API_KEY")
+GEMINI_API_KEY = secret("GEMINI_API_KEY")
+GEMINI_MODEL = secret("GEMINI_MODEL", "gemini-2.5-flash")
 
 # ── Apify (옵션 수집기) ──────────────────────────────────
 USE_APIFY = (secret("USE_APIFY", "false").lower() == "true")

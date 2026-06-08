@@ -50,6 +50,29 @@ def is_enabled() -> bool:
     return bool(get_api_key())
 
 
+def gemini_transcript(video_id: str) -> str:
+    """자막이 없을 때 Gemini 멀티모달로 영상 대본을 생성(YouTube URL 직접 입력).
+    GEMINI_API_KEY 없으면 ''."""
+    if not video_id or not config.GEMINI_API_KEY:
+        return ""
+    import requests
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}")
+    body = {"contents": [{"parts": [
+        {"file_data": {"file_uri": watch_url(video_id)}},
+        {"text": "이 영상의 음성을 한국어 대본으로 전사해줘. 해설·요약 없이 말한 내용만 자연스럽게."},
+    ]}]}
+    try:
+        r = requests.post(url, json=body, timeout=120)
+        j = r.json()
+        if "error" in j:
+            return ""
+        parts = j["candidates"][0]["content"]["parts"]
+        return " ".join(p.get("text", "") for p in parts).strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def fetch_transcript(video_id: str, languages=("ko", "en")) -> str:
     """YouTube 자막(스크립트) 추출. 자막 없으면 ''. API 키 불필요."""
     if not video_id:

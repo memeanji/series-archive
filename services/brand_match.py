@@ -50,6 +50,9 @@ def score(video: dict, brand: dict, from_keyword_search: bool = True) -> dict:
     if domain and domain in src:
         s += 50
         reasons.append("공식 도메인 일치")
+    if display and author and (display in author or display.replace(" ", "") in author.replace(" ", "")):
+        s += 30
+        reasons.append("채널명에 브랜드명")
     if display and display in text:
         s += 25
         reasons.append("제목/캡션에 브랜드명")

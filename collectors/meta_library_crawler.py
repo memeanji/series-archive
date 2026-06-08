@@ -21,6 +21,24 @@ import config  # noqa: E402  (stdout utf-8 재설정 포함)
 PLATFORM = "meta"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+_STATIC = Path(__file__).resolve().parent.parent / "static" / "thumbnails"
+
+
+def _save_thumb(url: str, ad_id: str) -> str:
+    """fbcdn 서명 썸네일은 만료되므로 크롤 시점에 static 파일로 내려받아 영구 보존."""
+    if not url or not url.startswith("http"):
+        return url
+    try:
+        import requests
+        r = requests.get(url, timeout=20)
+        if r.status_code == 200 and r.content:
+            _STATIC.mkdir(parents=True, exist_ok=True)
+            safe = "".join(ch for ch in str(ad_id) if ch.isalnum() or ch in "_-")
+            (_STATIC / f"m_{safe}.jpg").write_bytes(r.content)
+            return f"app/static/thumbnails/m_{safe}.jpg"
+    except Exception:  # noqa: BLE001
+        pass
+    return url  # 실패 시 원본 URL 폴백
 
 _NAV = {
     "Meta 광고 라이브러리", "광고 라이브러리", "광고 라이브러리 보고서", "광고 라이브러리 API",
@@ -136,7 +154,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
             "transcript": "",
             "media_type": "video" if r["has_video"] else "image",
             "video_url": r["video_url"],
-            "thumbnail_url": r["thumbnail_url"],
+            "thumbnail_url": _save_thumb(r["thumbnail_url"], r["library_id"]),
             "landing_url": p["landing"],
             "original_ad_url": f"https://www.facebook.com/ads/library/?id={r['library_id']}",
             "status": "live",
