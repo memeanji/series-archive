@@ -32,6 +32,9 @@ AD_COLS = [
     "media_url", "preview_url", "status",
     "started_at", "collected_at", "score", "category", "tags",
     "is_bookmarked", "memo", "created_at", "updated_at",
+    "scrape_status", "error_message", "platforms", "local_thumbnail_path",
+    "script_text", "script_source", "script_status", "script_error_message",
+    "script_created_at", "script_updated_at",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -123,7 +126,12 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     # 안전한 컬럼 마이그레이션(이미 있으면 건너뜀)
     cols = [r[1] for r in conn.execute("PRAGMA table_info(ad_library_ads)").fetchall()]
     for c, t in (("ad_format", "TEXT DEFAULT 'unknown'"), ("transparency_url", "TEXT"),
-                 ("media_url", "TEXT"), ("preview_url", "TEXT"), ("brand_id", "INTEGER")):
+                 ("media_url", "TEXT"), ("preview_url", "TEXT"), ("brand_id", "INTEGER"),
+                 ("scrape_status", "TEXT DEFAULT 'ok'"), ("error_message", "TEXT"),
+                 ("platforms", "TEXT"), ("local_thumbnail_path", "TEXT"),
+                 ("script_text", "TEXT"), ("script_source", "TEXT"),
+                 ("script_status", "TEXT DEFAULT 'pending'"), ("script_error_message", "TEXT"),
+                 ("script_created_at", "TEXT"), ("script_updated_at", "TEXT")):
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -186,6 +194,10 @@ def _migrate_legacy(conn: sqlite3.Connection) -> int:
             "category": a.get("category"), "tags": a.get("tags") or "[]",
             "is_bookmarked": a.get("is_bookmarked") or 0, "memo": a.get("memo") or "",
             "created_at": a.get("created_at") or _now(), "updated_at": _now(),
+            "scrape_status": "ok", "error_message": "", "platforms": "",
+            "local_thumbnail_path": a.get("thumbnail_url") or "",
+            "script_text": "", "script_source": "", "script_status": "pending",
+            "script_error_message": "", "script_created_at": "", "script_updated_at": "",
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -226,6 +238,7 @@ _SUMMARY_COLS = (
     "a.id, a.brand_name, a.ad_title, substr(a.ad_copy,1,90) AS ad_copy_short, "
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
+    "a.scrape_status, a.error_message, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
     "s.views AS social_views, s.likes AS social_likes, "
@@ -618,8 +631,8 @@ def ingest_ad_library(ads: list[dict]) -> int:
         if not aid:
             continue
         tags = a.get("tags") or (a.get("hook_tags") or []) + (a.get("format_tags") or [])
-        prev = conn.execute("SELECT is_bookmarked, memo, score FROM ad_library_ads WHERE id=?",
-                            (aid,)).fetchone()
+        prev = conn.execute("SELECT * FROM ad_library_ads WHERE id=?", (aid,)).fetchone()
+        prev = dict(prev) if prev else None
         row = {
             "id": aid, "brand_name": a.get("brand_name") or a.get("advertiser_name") or "(미상)",
             "ad_title": a.get("ad_title") or a.get("headline") or "",
@@ -638,6 +651,17 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "is_bookmarked": prev["is_bookmarked"] if prev else 0,
             "memo": prev["memo"] if prev else "",
             "created_at": a.get("created_at") or _now(), "updated_at": _now(),
+            "scrape_status": a.get("scrape_status") or "ok",
+            "error_message": a.get("error_message") or "",
+            "platforms": a.get("platforms") or "",
+            "local_thumbnail_path": a.get("local_thumbnail_path") or "",
+            # 재수집 시 생성된 스크립트는 보존
+            "script_text": (prev or {}).get("script_text") or "",
+            "script_source": (prev or {}).get("script_source") or "",
+            "script_status": (prev or {}).get("script_status") or "pending",
+            "script_error_message": (prev or {}).get("script_error_message") or "",
+            "script_created_at": (prev or {}).get("script_created_at") or "",
+            "script_updated_at": (prev or {}).get("script_updated_at") or "",
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -894,6 +918,18 @@ def update_bookmark(ad_id: str, value: bool) -> None:
 def update_memo(ad_id: str, memo: str) -> None:
     conn = get_conn()
     conn.execute("UPDATE ad_library_ads SET memo=?, updated_at=? WHERE id=?", (memo, _now(), ad_id))
+    conn.commit()
+    conn.close()
+
+
+def update_ad_script(ad_id: str, text: str, source: str, status: str, error: str = "") -> None:
+    conn = get_conn()
+    row = conn.execute("SELECT script_created_at FROM ad_library_ads WHERE id=?", (ad_id,)).fetchone()
+    created = (row["script_created_at"] if row and row["script_created_at"] else _now())
+    conn.execute(
+        "UPDATE ad_library_ads SET script_text=?, script_source=?, script_status=?, "
+        "script_error_message=?, script_created_at=?, script_updated_at=? WHERE id=?",
+        (text, source, status, error, created, _now(), ad_id))
     conn.commit()
     conn.close()
 

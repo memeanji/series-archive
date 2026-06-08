@@ -370,6 +370,11 @@ def render_ad_card(ad: dict, idx: int) -> None:
     if thumb:
         inner = f"<img src='{thumb}'/>"
         thumb_cls = "sa-thumb"
+    elif ad.get("scrape_status") == "failed":
+        why = (ad.get("error_message") or "수집 실패")[:24]
+        inner = (f"<div class='sa-ph'><span class='i'>⚠️</span>수집 실패"
+                 f"<div style='font-size:10px;opacity:.7'>{why}</div></div>")
+        thumb_cls = "sa-thumb sa-thumb-empty"
     else:
         inner = (f"<div class='sa-ph'><span class='i'>{'🎬' if is_video else '🖼'}</span>"
                  f"미리보기 없음</div>")
@@ -439,21 +444,93 @@ def _render_source_buttons(ad: dict) -> None:
             st.link_button("🛒 랜딩 열기 ↗", ad["landing_url"], use_container_width=True)
 
 
+def _greybox(text: str) -> str:
+    import html as _h
+    return (f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
+            f"padding:10px 12px;white-space:pre-wrap;font-size:13px;color:{S.TEXT};"
+            f"line-height:1.5;max-height:340px;overflow:auto'>{_h.escape(text)}</div>")
+
+
+def _render_social_reaction(ad: dict) -> None:
+    st.markdown(f"##### 📊 소셜 원본 반응 <span style='font-size:11px;color:{S.SUB}'>"
+                f"· 매칭된 원본 영상 기준</span>", unsafe_allow_html=True)
+    if not ad.get("match_score"):
+        st.info("매칭된 소셜 원본 영상이 없습니다. (PPL 영상 수집·연결 시 표시)")
+        return
+    st.caption("⚠️ 아래 수치는 **광고 성과가 아니라 매칭된 원본 소셜 영상(TikTok/IG/YouTube)의 반응** 지표입니다.")
+    m = st.columns(4)
+    m[0].metric("조회수", _fmt(ad.get("social_views")))
+    m[1].metric("좋아요", _fmt(ad.get("social_likes")))
+    m[2].metric("댓글", _fmt(ad.get("social_comments")))
+    m[3].metric("공유", _fmt(ad.get("social_shares")))
+    er = ad.get("social_engagement_rate")
+    g = st.columns(4)
+    g[0].metric("참여율", f"{er*100:.1f}%" if er else "-")
+    g[1].metric("최종 등급", f"{ad.get('social_final_grade')}급" if ad.get("social_final_grade") else "-")
+    g[2].metric("절대 등급", f"{ad.get('social_absolute_grade')}급" if ad.get("social_absolute_grade") else "-")
+    g[3].metric("내부 등급", f"{ad.get('social_internal_grade')}급" if ad.get("social_internal_grade") else "준비중")
+    src = (ad.get("social_platform") or "소셜").upper()
+    st.caption(f"출처: {src} 원본 영상 · 매칭도 {ad.get('match_score')}점")
+    if is_valid_external_url(ad.get("social_source_url")):
+        st.markdown(f"[▶ 원본 영상 보기 ↗]({ad['social_source_url']})")
+
+
+def _render_video_script(ad: dict) -> None:
+    import services.script_gen as SG
+    aid = ad.get("id")
+    text = ad.get("script_text") or ""
+    status = ad.get("script_status") or "pending"
+    src_ko = {"youtube_transcript": "YouTube 자막", "gemini": "Gemini 영상분석",
+              "gemini_estimated": "Gemini 추정(카피 기반)", "manual": "직접 입력"}
+    head = st.columns([3, 1, 1])
+    head[0].markdown("##### 🎬 영상 스크립트")
+    if text and status == "completed":
+        if head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True):
+            with st.spinner("스크립트 재생성 중…"):
+                r = SG.generate(ad)
+            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+            _reload()
+        edit = head[2].toggle("편집", key=f"edit_{aid}")
+        st.caption(f"출처: {src_ko.get(ad.get('script_source'), ad.get('script_source') or '-')}"
+                   + (" · ⚠️영상 미확인 추정" if ad.get("script_source") == "gemini_estimated" else ""))
+        if edit:
+            new = st.text_area("스크립트 편집", value=text, height=260, key=f"scredit_{aid}",
+                               label_visibility="collapsed")
+            if st.button("💾 스크립트 저장", key=f"scsave_{aid}", type="primary"):
+                database.update_ad_script(aid, new, "manual", "completed", "")
+                _reload()
+        else:
+            st.markdown(_greybox(text), unsafe_allow_html=True)
+    elif status == "processing":
+        st.info("스크립트 생성 중입니다…")
+    else:
+        if status == "failed" and ad.get("script_error_message"):
+            st.caption(f"⚠️ 이전 생성 실패: {ad.get('script_error_message')}")
+        st.caption("아직 스크립트가 없습니다. 버튼을 누르면 자막→Gemini 순으로 생성합니다.")
+        cols = st.columns([1, 1])
+        if cols[0].button("✨ 스크립트 생성하기", key=f"gen_{aid}", type="primary",
+                          use_container_width=True):
+            with st.spinner("스크립트 생성 중… (자막→Gemini)"):
+                r = SG.generate(ad)
+            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+            _reload()
+        with cols[1].popover("✍️ 직접 입력"):
+            man = st.text_area("스크립트", key=f"scman_{aid}", height=160,
+                               label_visibility="collapsed", placeholder="스크립트를 직접 붙여넣기")
+            if st.button("저장", key=f"scmansave_{aid}", type="primary"):
+                database.update_ad_script(aid, man, "manual", "completed", "")
+                _reload()
+
+
 @st.dialog("광고 상세", width="large")
 def render_ad_detail(ad: dict) -> None:
     aid = ad.get("id")
-    score = int(ad.get("score") or 0)
     plat = ad.get("platform", "")
-    st.markdown(
-        f"### {PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')} "
-        f"<span style='color:{S.score_color(score)};font-size:18px'>· {score}점</span>",
-        unsafe_allow_html=True)
-    st.caption(f"{PLATFORM_LABEL.get(plat, plat)} · "
-               f"{'🟢 라이브' if ad.get('status')=='live' else '⚫ '+str(ad.get('status'))} · "
-               f"{'🎬 영상' if ad.get('media_type')=='video' else '🖼 이미지'} · "
-               f"수집일 {str(_g(ad,'collected_at','-'))[:10]}")
+    st.markdown(f"### {PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}",
+                unsafe_allow_html=True)
 
-    left, right = st.columns([2, 3])
+    left, right = st.columns([2, 3], gap="medium")
+    # ── 좌: 영상/썸네일 + 버튼 ──
     with left:
         th = get_display_thumbnail(ad)
         if ad.get("video_url"):
@@ -462,95 +539,44 @@ def render_ad_detail(ad: dict) -> None:
             st.markdown(f"<img src='{th['src']}' style='width:100%;border-radius:10px'/>",
                         unsafe_allow_html=True)
         else:
-            st.caption("소재 미리보기 없음")
+            st.markdown(f"<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:1/1'>"
+                        f"<div class='sa-ph'><span class='i'>🖼</span>미리보기 없음</div></div>",
+                        unsafe_allow_html=True)
         _render_source_buttons(ad)
+
+    # ── 우: 정보 → 소셜반응 → 카피 → 스크립트 → 메모 ──
     with right:
         if ad.get("ad_title"):
             st.markdown(f"#### {ad['ad_title']}")
-        st.markdown(f"**📄 광고 게재 정보** <span style='font-size:12px;color:{S.SUB}'>"
-                    f"· 광고 라이브러리</span>", unsafe_allow_html=True)
-        g = st.columns(3)
-        g[0].metric("게재 상태", "라이브" if ad.get("status") == "live" else (ad.get("status") or "-"))
-        g[1].metric("게재 시작", str(_g(ad, "started_at", "-"))[:10] or "-")
-        g[2].metric("플랫폼", PLATFORM_LABEL.get(plat, plat or "-"))
-        tags = ad.get("tags") or []
-        if tags:
-            st.markdown("**태그** " + " ".join(f"`{t}`" for t in tags))
+        info = st.columns(3)
+        info[0].metric("상태", "라이브" if ad.get("status") == "live" else (ad.get("status") or "-"))
+        info[1].metric("게재 시작", str(_g(ad, "started_at", "-"))[:10] or "-")
+        info[2].metric("플랫폼", PLATFORM_LABEL.get(plat, plat or "-"))
         if ad.get("landing_url"):
-            st.markdown(f"**랜딩 URL** [{ad['landing_url'][:64]}]({ad['landing_url']})")
+            st.markdown(f"**랜딩** <span style='font-size:12px'>"
+                        f"[{ad['landing_url'][:54]}…]({ad['landing_url']})</span>",
+                        unsafe_allow_html=True)
+        st.caption(f"광고 ID {aid} · 수집일 {str(_g(ad,'collected_at','-'))[:10]}")
 
-    st.divider()
-    if ad.get("ad_copy"):
+        st.divider()
+        _render_social_reaction(ad)
+
+        st.divider()
         st.markdown("##### 📝 광고 카피")
-        st.write(ad["ad_copy"])
-
-    # 소셜 원본 반응 — 광고 성과가 아니라 매칭된 원본 영상 지표(출처 명시)
-    st.markdown(f"##### 📊 소셜 원본 반응 <span style='font-size:12px;color:{S.SUB}'>"
-                f"· 매칭된 원본 영상 기준 (광고 성과 아님)</span>", unsafe_allow_html=True)
-    if ad.get("match_score"):
-        st.info("아래 수치는 **광고 성과가 아니라 매칭된 원본 소셜 영상(TikTok/IG/YT)의 반응 지표**입니다.")
-        sc = st.columns(4)
-        sc[0].metric("조회수", _fmt(ad.get("social_views")))
-        sc[1].metric("좋아요", _fmt(ad.get("social_likes")))
-        sc[2].metric("댓글", _fmt(ad.get("social_comments")))
-        sc[3].metric("공유", _fmt(ad.get("social_shares")))
-        er = ad.get("social_engagement_rate")
-        gr = st.columns(4)
-        gr[0].metric("참여율", f"{er*100:.1f}%" if er else "-")
-        fg = ad.get("social_final_grade")
-        gr[1].metric("최종 등급", f"{fg}급" if fg else "-")
-        ag = ad.get("social_absolute_grade")
-        gr[2].metric("절대 등급", f"{ag}급" if ag else "-")
-        ig = ad.get("social_internal_grade")
-        ip = ad.get("social_internal_percentile")
-        gr[3].metric("내부 등급", f"{ig}급" if ig else "준비중")
-        basis_ko = {"absolute_only": "절대 기준", "platform_category_percentile": "플랫폼·카테고리 분위수",
-                    "platform_percentile": "플랫폼 분위수", "global_percentile": "전체 분위수"}
-        bits = [f"출처: {(ad.get('social_platform') or '소셜').upper()} 원본 영상",
-                f"참여율 {ad.get('social_engagement_level') or '-'}",
-                f"기준: {basis_ko.get(ad.get('social_grading_basis'), '준비중')}"]
-        if ig and ip is not None:
-            bits.append(f"내부 상위 {round((1-ip)*100)}%")
-        bits.append(f"매칭도 {ad.get('match_score')}점")
-        st.caption(" · ".join(bits))
-        if ad.get("social_source_url"):
-            st.markdown(f"[▶ 원본 영상 보기 ↗]({ad['social_source_url']})")
-        if ad.get("social_platform") == "youtube":
-            render_script_section(ad.get("social_id") or "",
-                                   YT.extract_video_id(ad.get("social_source_url") or "") or "")
-    else:
-        st.info("매칭된 소셜 원본 영상이 없습니다. `.env`에 APIFY_TOKEN을 넣고 수집하면 "
-                "TikTok 원본의 조회수·좋아요·댓글·공유와 등급(S/A/B/C)이 여기에 표시됩니다.")
-
-    # 소셜 원본 영상(YouTube) 수동 연결
-    with st.expander("🔗 소셜 원본 영상(YouTube) 연결"):
-        if not YT.is_enabled():
-            st.info("YOUTUBE_API_KEY를 .env 또는 secrets.toml에 등록하면 YouTube 원본을 연결할 수 있습니다.")
+        if ad.get("ad_copy"):
+            st.markdown(_greybox(ad["ad_copy"]), unsafe_allow_html=True)
         else:
-            yurl = st.text_input("YouTube URL", key=f"yt_{aid}",
-                                 placeholder="https://youtube.com/watch?v=... / shorts/... / youtu.be/...")
-            if st.button("연결", key=f"ytlink_{aid}", type="primary"):
-                vid = YT.extract_video_id(yurl)
-                if not vid:
-                    st.error("유효한 YouTube URL이 아닙니다.")
-                else:
-                    data = YT.fetch_video(vid)
-                    if not data:
-                        st.error("영상 정보를 가져오지 못했습니다(API 키/영상 확인).")
-                    else:
-                        data["brand_name"] = ad.get("brand_name")
-                        database.ingest_social_videos([data])
-                        database.add_snapshot(data["id"], data["views"], data["likes"],
-                                              data["comments"], data["shares"])
-                        database.link_ad_social(aid, data["id"], 100.0)
-                        database.regrade()
-                        st.success(f"연결 완료: {data['title'][:40]}")
-                        _reload()
+            st.caption("광고 카피가 없습니다.")
 
+        st.divider()
+        _render_video_script(ad)
+
+    # ── 분석 메모(스크립트와 분리) ──
+    st.divider()
     st.markdown("##### 📒 분석 메모")
     memo = st.text_area("메모", value=ad.get("memo") or "", label_visibility="collapsed",
                         key=f"memo_{aid}", placeholder="이 레퍼런스의 후킹/구조/인사이트 메모…")
-    cc = st.columns(2)
+    cc = st.columns([1, 1, 2])
     if cc[0].button("💾 메모 저장", use_container_width=True, type="primary", key=f"sm_{aid}"):
         database.update_memo(aid, memo)
         st.toast("메모 저장됨")
@@ -560,6 +586,25 @@ def render_ad_detail(ad: dict) -> None:
                     use_container_width=True, key=f"bmm_{aid}"):
         database.update_bookmark(aid, not marked)
         _reload()
+    with cc[2].popover("🔗 YouTube 원본 연결"):
+        if not YT.is_enabled():
+            st.caption("YOUTUBE_API_KEY 등록 시 사용 가능")
+        else:
+            yurl = st.text_input("YouTube URL", key=f"yt_{aid}", placeholder="watch?v=… / shorts/…")
+            if st.button("연결", key=f"ytlink_{aid}", type="primary"):
+                vid = YT.extract_video_id(yurl)
+                data = YT.fetch_video(vid) if vid else None
+                if not data:
+                    st.error("유효한 URL/영상 아님")
+                else:
+                    data["brand_name"] = ad.get("brand_name")
+                    database.ingest_social_videos([data])
+                    database.add_snapshot(data["id"], data["views"], data["likes"],
+                                          data["comments"], data["shares"])
+                    database.link_ad_social(aid, data["id"], 100.0)
+                    database.regrade()
+                    st.success("연결 완료")
+                    _reload()
 
 
 # ════════════════════════════════════════════════════════════

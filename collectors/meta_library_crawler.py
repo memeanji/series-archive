@@ -64,11 +64,25 @@ _JS_EXTRACT = r"""
     const id = m[1];
     if (seen.has(id)) continue;
     seen.add(id);
-    const vids = Array.from(card.querySelectorAll('video')).map(v => v.src || (v.querySelector('source')||{}).src).filter(Boolean);
-    const imgs = Array.from(card.querySelectorAll('img')).map(i => i.src).filter(s => s && !s.startsWith('data:'));
+    card.setAttribute('data-sa-card', id);   // Python에서 screenshot 폴백용 위치표시
+    const vids = Array.from(card.querySelectorAll('video'))
+        .map(v => v.src || (v.querySelector('source')||{}).src).filter(Boolean);
+    const posters = Array.from(card.querySelectorAll('video')).map(v => v.poster).filter(Boolean);
+    const imgs = Array.from(card.querySelectorAll('img')).map(i => i.src)
+        .filter(s => s && !s.startsWith('data:'));
+    // background-image url 후보
+    let bg = '';
+    for (const e of card.querySelectorAll('*')) {
+      const b = getComputedStyle(e).backgroundImage || '';
+      const mm = b.match(/url\(["']?(https?:[^"')]+)["']?\)/);
+      if (mm) { bg = mm[1]; break; }
+    }
     const links = Array.from(card.querySelectorAll('a')).map(a => a.href).filter(Boolean);
+    // 우선순위: img → poster → bg
+    const thumb = imgs[0] || posters[0] || bg || '';
+    const src = imgs[0] ? 'img' : (posters[0] ? 'poster' : (bg ? 'bg' : 'none'));
     out.push({ library_id: id, has_video: vids.length > 0,
-               video_url: vids[0] || '', thumbnail_url: imgs[0] || '',
+               video_url: vids[0] || '', thumbnail_url: thumb, thumb_src: src,
                links: links.slice(0, 8), text: (card.innerText || '').trim().slice(0, 1200) });
   }
   return out;
@@ -118,51 +132,91 @@ def _parse_card(r: dict, brand: str) -> dict:
 
 
 def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
-                 headless: bool = True, shot: bool = False) -> list[dict]:
+                 headless: bool = True, shot: bool = False, retries: int = 1) -> list[dict]:
+    """Playwright 렌더 → 다단계 썸네일 추출 → 실패 시 카드 screenshot 폴백.
+    각 광고에 scrape_status(img/poster/bg/screenshot/failed)·local_thumbnail_path 기록."""
     from playwright.sync_api import sync_playwright
 
     url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
            f"&country={country}&q={quote(brand)}&search_type=keyword_unordered&media_type=all")
     rows: list[dict] = []
+    ads: list[dict] = []
+    stats = {"img": 0, "poster": 0, "bg": 0, "screenshot": 0, "failed": 0}
+
     with sync_playwright() as p:
         br = p.chromium.launch(headless=headless)
         ctx = br.new_context(locale="ko-KR", user_agent=UA,
                              viewport={"width": 1440, "height": 1000})
         page = ctx.new_page()
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(5000)
+            ok = False
+            for attempt in range(retries + 1):
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                    try:
+                        page.wait_for_selector("text=/라이브러리 ID|Library ID/", timeout=15000)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=12000)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    ok = True
+                    break
+                except Exception:  # noqa: BLE001
+                    page.wait_for_timeout(3000)
+            if not ok:
+                return []
             for _ in range(scrolls):
                 page.mouse.wheel(0, 6000)
-                page.wait_for_timeout(2500)
+                page.wait_for_timeout(2200)
             rows = page.evaluate(_JS_EXTRACT)
-            if shot:
-                Path("data").mkdir(exist_ok=True)
-                page.screenshot(path=f"data/_meta_{brand}.png")
+
+            for r in rows:
+                cid = r["library_id"]
+                parsed = _parse_card(r, brand)
+                status, err, thumb = "failed", "", ""
+                # 1) img/poster/bg 후보 다운로드
+                if r.get("thumbnail_url"):
+                    saved = _save_thumb(r["thumbnail_url"], cid)
+                    if saved.startswith("app/static"):
+                        thumb, status = saved, r.get("thumb_src", "img")
+                    else:
+                        err = "이미지 다운로드 실패"
+                # 2) 폴백: 카드 element screenshot
+                if not thumb:
+                    try:
+                        el = page.query_selector(f'[data-sa-card="{cid}"]')
+                        if el:
+                            box = el.bounding_box()
+                            if box and box["height"] <= 700:
+                                el.scroll_into_view_if_needed(timeout=3000)
+                                page.wait_for_timeout(200)
+                                _STATIC.mkdir(parents=True, exist_ok=True)
+                                el.screenshot(timeout=6000, path=str(_STATIC / f"m_{cid}.jpg"))
+                                thumb, status, err = f"app/static/thumbnails/m_{cid}.jpg", "screenshot", ""
+                    except Exception as e:  # noqa: BLE001
+                        err = f"screenshot 실패: {str(e)[:80]}"
+                stats[status] = stats.get(status, 0) + 1
+                ads.append({
+                    "platform": PLATFORM, "platform_ad_id": cid, "advertiser_name": brand,
+                    "headline": parsed["page_name"], "ad_text": parsed["ad_text"], "transcript": "",
+                    "media_type": "video" if r["has_video"] else "image",
+                    "video_url": r["video_url"], "thumbnail_url": thumb,
+                    "local_thumbnail_path": thumb if thumb.startswith("app/static") else "",
+                    "landing_url": parsed["landing"],
+                    "original_ad_url": f"https://www.facebook.com/ads/library/?id={cid}",
+                    "status": "live", "first_seen": parsed["started"], "started_at": parsed["started"],
+                    "platforms": "", "scrape_status": status, "error_message": err,
+                    "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
+                })
         finally:
             br.close()
 
-    ads = []
-    for r in rows:
-        p = _parse_card(r, brand)
-        ads.append({
-            "platform": PLATFORM,
-            "platform_ad_id": r["library_id"],
-            "advertiser_name": brand,
-            "headline": p["page_name"],
-            "ad_text": p["ad_text"],
-            "transcript": "",
-            "media_type": "video" if r["has_video"] else "image",
-            "video_url": r["video_url"],
-            "thumbnail_url": _save_thumb(r["thumbnail_url"], r["library_id"]),
-            "landing_url": p["landing"],
-            "original_ad_url": f"https://www.facebook.com/ads/library/?id={r['library_id']}",
-            "status": "live",
-            "first_seen": p["started"],
-            "started_at": p["started"],
-            "views": 0, "likes": 0, "comments": 0, "shares": 0,
-            "raw_data": r,
-        })
+    okc = len(ads) - stats["failed"]
+    print(f"  [meta-thumb] '{brand}' 성공 {okc}/{len(ads)} "
+          f"(img {stats['img']}, poster {stats['poster']}, bg {stats['bg']}, "
+          f"shot {stats['screenshot']}, 실패 {stats['failed']})")
     return ads
 
 
