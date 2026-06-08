@@ -29,9 +29,8 @@ def grade_color(g: str) -> str:
 
 def inject_css() -> None:
     st.markdown(f"""
-    <link rel="stylesheet" as="style" crossorigin
-      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
     <style>
+      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
       html, body, [class*="css"], .stApp, button, input, select, textarea {{
           font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
                        "Malgun Gothic", sans-serif !important; }}
@@ -58,8 +57,6 @@ def inject_css() -> None:
       div[data-testid="stSegmentedControl"] button[aria-checked="true"],
       div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}
-    </style>
-    <style>
       #MainMenu, footer, header {{visibility:hidden;}}
       .stApp {{background:{BG};}}
       .block-container {{padding-top:1rem; padding-bottom:2.5rem; max-width:1560px;}}
