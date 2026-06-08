@@ -58,6 +58,13 @@ def get_conn() -> sqlite3.Connection:
 
 
 def init_db(seed_users: Optional[dict] = None) -> None:
+    # DB가 없는 환경(예: Streamlit Cloud 첫 실행)이면 번들된 데모 DB로 시드
+    if not DB_PATH.exists():
+        seed = ROOT / "sample_data" / "demo.db"
+        if seed.exists():
+            import shutil
+            DATA.mkdir(parents=True, exist_ok=True)
+            shutil.copy(seed, DB_PATH)
     conn = get_conn()
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS ad_library_ads (
