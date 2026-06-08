@@ -142,7 +142,8 @@ def render_header(ads=None) -> dict:
     with h[0]:
         st.markdown(
             f"<div class='sa-header'><div><div class='sa-logo'>📚 Series Archive</div>"
-            f"<div class='sa-sub'>Ad Reference Library for Series Builder</div></div></div>",
+            f"<div class='sa-sub'>Ad Reference Library · "
+            f"<b style='color:{S.PRIMARY}'>build 2026-06-08 #8</b></div></div></div>",
             unsafe_allow_html=True)
     search = h[1].text_input("검색", placeholder="🔎 브랜드 · 광고명 · 카피 통합 검색",
                              label_visibility="collapsed").strip().lower()
