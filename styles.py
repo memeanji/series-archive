@@ -29,6 +29,36 @@ def grade_color(g: str) -> str:
 
 def inject_css() -> None:
     st.markdown(f"""
+    <link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"/>
+    <style>
+      html, body, [class*="css"], .stApp, button, input, select, textarea {{
+          font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
+                       "Malgun Gothic", sans-serif !important; }}
+      /* 메인 폭 제한 + 여백 */
+      .block-container {{padding: 1rem 2rem 2.5rem !important; max-width: 1480px;}}
+      ::-webkit-scrollbar {{width: 8px; height: 8px;}}
+      ::-webkit-scrollbar-thumb {{background: #CBD5E1; border-radius: 8px;}}
+      ::-webkit-scrollbar-track {{background: transparent;}}
+
+      /* 헤더 통합검색 input */
+      .stTextInput input {{height: 42px; border-radius: 12px !important; border:1px solid {BORDER};
+          background:#fff; font-size:14px;}}
+      .stTextInput input:focus {{border-color:{PRIMARY}; box-shadow:0 0 0 3px {SOFT_MINT};}}
+
+      /* selectbox / multiselect — Streamlit 기본 느낌 줄이기 */
+      div[data-baseweb="select"] > div {{border-radius:12px !important; border-color:{BORDER} !important;
+          min-height:44px; background:#fff;}}
+      .stSelectbox label, .stMultiSelect label {{font-size:13px !important; color:{SUB};
+          font-weight:600;}}
+
+      /* segmented control(탭/필터) → pill */
+      div[data-testid="stSegmentedControl"] button {{border-radius:10px !important;
+          font-size:13.5px; font-weight:600; border:1px solid {BORDER};}}
+      div[data-testid="stSegmentedControl"] button[aria-checked="true"],
+      div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
+          background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}
+    </style>
     <style>
       #MainMenu, footer, header {{visibility:hidden;}}
       .stApp {{background:{BG};}}
@@ -50,9 +80,9 @@ def inject_css() -> None:
           background:{CARD}; border:1px solid {BORDER} !important; border-radius:16px;
           box-shadow:0 1px 2px rgba(16,24,40,.04); transition:transform .15s, box-shadow .15s;}}
       div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
-          transform:translateY(-4px); box-shadow:0 10px 24px rgba(3,199,90,.12);}}
+          transform:translateY(-3px); box-shadow:0 8px 22px rgba(16,24,40,.10);}}
       .sa-thumb {{position:relative; aspect-ratio:4/3; border-radius:12px; overflow:hidden;
-                  background:linear-gradient(160deg,{SOFT_MINT},#E0F2FE);}}
+                  background:#0F172A;}}
       .sa-thumb img {{width:100%; height:100%; object-fit:cover;}}
       .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:800; font-size:12px;
                   padding:3px 9px; border-radius:999px; box-shadow:0 1px 4px rgba(0,0,0,.2);}}
@@ -62,12 +92,16 @@ def inject_css() -> None:
                   font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;}}
       .sa-play {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:38px;
                  color:#fff; opacity:.95; text-shadow:0 2px 10px rgba(0,0,0,.55);}}
-      .sa-ph {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:40px; opacity:.6;}}
-      .sa-brand {{font-weight:800; font-size:13px; color:{PRIMARY}; margin-top:9px;
+      .sa-thumb-empty {{background:{BG} !important; border:1px dashed {BORDER};}}
+      .sa-ph {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+               text-align:center; color:{OFF_GRAY}; font-size:13px; font-weight:600;}}
+      .sa-ph .i {{display:block; font-size:30px; margin-bottom:2px; opacity:.7;}}
+      .sa-brand {{font-weight:800; font-size:13px; color:{PRIMARY}; margin-top:10px;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
-      .sa-title {{font-size:12.5px; color:{TEXT}; font-weight:600; margin-top:1px;
+      .sa-title {{font-size:15px; color:{TEXT}; font-weight:700; margin-top:2px; line-height:1.3;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
-      .sa-copy {{font-size:11.5px; color:{SUB}; height:30px; overflow:hidden; line-height:1.28; margin-top:2px;}}
+      .sa-copy {{font-size:12.5px; color:{SUB}; line-height:1.35; margin-top:3px; min-height:34px;
+                 display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
       .sa-meta {{font-size:11.5px; color:{SUB}; margin-top:6px; display:flex; justify-content:space-between;}}
       .sa-pbadge {{font-size:10.5px; font-weight:700; color:{SUB}; background:{BG};
                    border:1px solid {BORDER}; padding:1px 7px; border-radius:6px;}}

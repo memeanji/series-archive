@@ -246,7 +246,9 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
     if tab in ("meta", "google"):
         w.append("a.platform=?"); p.append(tab)
     if tab == "TOP":
-        w.append("s.final_grade IN ('S','A')")
+        w.append("s.final_grade IN ('S','A','B')")
+        w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")  # placeholder 카드 제외
+        w.append("a.ad_format NOT IN ('search_text','unknown')")
     if not f.get("show_hidden"):
         w.append("a.ad_format NOT IN ('search_text','unknown')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")

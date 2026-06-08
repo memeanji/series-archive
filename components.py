@@ -299,9 +299,15 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
     c = st.columns([1.1, 1, 1, 1.4, 1.5, 0.9, 0.7])
 
-    grade = c[0].selectbox("등급(소셜 원본 기준)", ["전체", "S급", "A급 이상", "B급 이상", "C급 이상"],
+    grade = c[0].selectbox("등급 ⓘ", ["전체", "S급", "A급 이상", "B급 이상", "C급 이상"],
                            index=0, disabled=not has_social, key="f_grade",
-                           help="매칭된 소셜 원본 영상이 있는 광고에만 적용됩니다.")
+                           help=("조회수·좋아요·댓글·공유는 광고 성과가 아니라 **소셜 원본 영상 기준**입니다.\n\n"
+                                 "• S급: 조회수 50만↑ OR 좋아요 5천↑ OR 댓글 200↑ OR 공유 200↑\n"
+                                 "• A급: 조회수 10만↑ OR 좋아요 1천↑ OR 댓글 50↑ OR 공유 50↑\n"
+                                 "• B급: 조회수 5만↑ OR 좋아요 500↑ OR 댓글 30↑ OR 공유 30↑\n"
+                                 "• C급: 조회수 1만↑ OR 좋아요 100↑ OR 댓글 10↑ OR 공유 10↑\n\n"
+                                 "참여율 = (좋아요+댓글+공유)/조회수 — High ≥3%, Medium ≥1%, Low <1%\n\n"
+                                 "초기엔 절대 기준, 소셜 100건↑ 쌓이면 내부 분위수 기준도 함께 계산."))
     media = c[1].multiselect("매체(소재)", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
@@ -366,10 +372,16 @@ def render_ad_card(ad: dict, idx: int) -> None:
 
     if thumb:
         inner = f"<img src='{thumb}'/>"
+        thumb_cls = "sa-thumb"
     else:
-        inner = f"<div class='sa-ph'>{'🎬' if is_video else '🖼'}</div>"
+        inner = (f"<div class='sa-ph'><span class='i'>{'🎬' if is_video else '🖼'}</span>"
+                 f"미리보기 없음</div>")
+        thumb_cls = "sa-thumb sa-thumb-empty"
     play = "<div class='sa-play'>▶</div>" if is_video and thumb else ""
-    media_badge = f"<div class='sa-media'>{'▶ 영상' if is_video else '🖼 이미지'}</div>"
+    if plat == "google":
+        media_badge = "<div class='sa-media'>🔍 Google Preview</div>"
+    else:
+        media_badge = f"<div class='sa-media'>{'▶ 영상' if is_video else '🖼 이미지'}</div>"
     dot = S.status_color(ad.get("status"))
 
     status_txt = "🟢 라이브" if ad.get("status") == "live" else "⚫ " + str(ad.get("status") or "-")
@@ -385,7 +397,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
         badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
     with st.container(border=True):
         st.markdown(
-            f"<div class='sa-thumb'>{inner}{badge}"
+            f"<div class='{thumb_cls}'>{inner}{badge}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}</div>"
             f"<div class='sa-brand'>{PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}</div>"
             f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','(제목 없음)')[:40]}</div>"
