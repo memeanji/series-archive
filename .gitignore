@@ -26,3 +26,6 @@ playwright/.cache/
 venv/
 
 # ë‚´ë¶€ í™•ì¸ìš© ìƒ˜í”Œì€ sample_data/ ì— ë¯¼ê°ì •ë³´ ì—†ì´ë§Œ í¬í•¨
+
+# µ¥¸ğ¿ë clean DB´Â ¿¹¿Ü(°èÁ¤/ºñ¹Ğ ¾øÀ½)
+!sample_data/demo.db
