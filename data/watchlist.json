@@ -1,0 +1,81 @@
+{
+  "_comment": "관심 브랜드. brands=크롤러 검색어(flat). groups=모회사→산하 브랜드(참고용/사이드바 그룹화). 한글명은 추정이므로 메타 검색이 안 잡히면 정확한 광고주명으로 수정 필요.",
+  "brands": [
+    "더스크랙",
+    "제노바",
+    "레이셀턴",
+    "비렌느",
+    "치젠트리",
+    "링클백",
+    "리바엔",
+    "비피리젠",
+    "오도리스",
+    "테키라",
+    "아치핀",
+    "리칼지메디",
+    "아비크",
+    "소다랩",
+    "세라블랑",
+    "노크톤",
+    "핏팝",
+    "소나담",
+    "https://sonadam.co.kr/product/%EC%86%8C%EB%82%98%EB%8B%B4/11/category/1/display/2/?icid=MAIN.product_listmain_1",
+    "메라블"
+  ],
+  "groups": {
+    "바이탈스코프": [],
+    "천경": [
+      {
+        "name": "레이셀턴",
+        "domain": "racelturn.co.kr"
+      }
+    ],
+    "솔라릭스": [],
+    "LSCC": [
+      {
+        "name": "비렌느",
+        "domain": "virenne.co.kr"
+      },
+      {
+        "name": "치젠트리",
+        "domain": "chigentri.co.kr"
+      },
+      {
+        "name": "링클백",
+        "domain": "wrinkleback.co.kr"
+      }
+    ],
+    "베그리프": [
+      {
+        "name": "리바엔",
+        "domain": "rivaen.co.kr"
+      },
+      {
+        "name": "비피리젠",
+        "domain": "bpregen.co.kr"
+      }
+    ],
+    "아비크": [
+      {
+        "name": "오도리스",
+        "domain": "odoris.co.kr"
+      }
+    ],
+    "어센트원": [
+      {
+        "name": "테키라",
+        "domain": "tekira.co.kr"
+      }
+    ],
+    "_standalone": [
+      {
+        "name": "더스크랙",
+        "domain": "duskrack.kr"
+      },
+      {
+        "name": "제노바",
+        "domain": ""
+      }
+    ]
+  }
+}

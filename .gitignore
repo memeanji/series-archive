@@ -1,0 +1,28 @@
+# 비밀/데이터 — 절대 커밋 금지
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.db
+data/*.db
+data/local_db.json
+data/user_state.json
+data/_*.png
+data/_*.json
+data/_*.log
+
+# 캐시/생성물
+__pycache__/
+*.pyc
+*.log
+_st.log
+downloads/
+temp/
+cache/
+static/thumbnails_raw/
+.apify_storage/
+playwright/.cache/
+.venv/
+venv/
+
+# 내부 확인용 샘플은 sample_data/ 에 민감정보 없이만 포함

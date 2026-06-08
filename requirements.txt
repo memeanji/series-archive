@@ -1,0 +1,10 @@
+# Series Archive 의존성
+streamlit>=1.33          # 뷰어/앱
+python-dotenv>=1.0       # .env 로드
+requests>=2.31           # YouTube API / Apify / 메타 probe
+pandas>=2.0              # 7일 추이 차트
+playwright>=1.40         # 메타/구글 라이브러리 웹 크롤링 (설치 후: playwright install chromium)
+youtube-transcript-api>=1.2  # YouTube 영상 스크립트(자막) 추출
+
+# 선택(레거시/옵션)
+# supabase>=2.4          # 구 저장 레이어(현재 SQLite 사용, 미사용)
