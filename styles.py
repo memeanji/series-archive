@@ -113,14 +113,20 @@ def inject_css() -> None:
       div[data-testid="stButton"] button[kind="primary"] {{background:{PRIMARY}; border-color:{PRIMARY}; color:#fff;}}
 
       /* ── 사이드바(흰 카드) ── */
-      section[data-testid="stSidebar"] {{background:{CARD}; border-right:1px solid {BORDER};}}
+      section[data-testid="stSidebar"] {{background:{CARD}; border-right:1px solid {BORDER};
+          width:320px !important; min-width:320px !important;}}
+      section[data-testid="stSidebar"] > div {{width:320px !important;}}
+      section[data-testid="stSidebar"] .block-container {{padding:1rem 18px 1rem !important;}}
+      section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.22rem;}}
+      /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */
       section[data-testid="stSidebar"] div[data-testid="stButton"] button {{
-          width:100%; text-align:left; background:transparent; border:none; color:{TEXT};
-          font-size:12.5px; padding:3px 8px; min-height:0; line-height:1.35;}}
+          width:100%; background:transparent; border:none; color:{TEXT};
+          font-size:13px; padding:7px 10px; min-height:0; line-height:1.3; border-radius:8px;}}
+      section[data-testid="stSidebar"] div[data-testid="stButton"] button p {{
+          display:flex; justify-content:space-between; align-items:center; width:100%; margin:0;}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {{
           background:{SOFT_MINT}; color:{DEEP};}}
-      section[data-testid="stSidebar"] .block-container {{padding-top:.5rem;}}
-      section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.15rem;}}
+      section[data-testid="stSidebar"] .stTextInput input {{height:38px;}}
 
       /* 탭(segmented) 라운드 */
       div[data-testid="stSegmentedControl"] button {{border-radius:9px;}}

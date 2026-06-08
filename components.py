@@ -478,21 +478,35 @@ def _render_social_reaction(ad: dict) -> None:
 def _render_video_script(ad: dict) -> None:
     import services.script_gen as SG
     aid = ad.get("id")
+    src_ko = {"youtube_transcript": "YouTube 자막", "gemini_video": "Gemini 영상분석",
+              "gemini_estimated": "Gemini 추정(카피 기반)", "manual": "직접 입력"}
+
+    # ── 상세 진입 시 자동 생성(세션당 광고별 1회) ──
+    if (ad.get("script_status") or "pending") == "pending":
+        done = st.session_state.setdefault("_autogen_done", set())
+        if aid not in done:
+            done.add(aid)
+            with st.spinner("🎬 영상 스크립트 생성 중… (자막 → Gemini)"):
+                r = SG.generate(ad)
+            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+            ad["script_text"], ad["script_status"] = r["text"], r["status"]
+            ad["script_source"], ad["script_error_message"] = r["source"], r["error"]
+
     text = ad.get("script_text") or ""
     status = ad.get("script_status") or "pending"
-    src_ko = {"youtube_transcript": "YouTube 자막", "gemini": "Gemini 영상분석",
-              "gemini_estimated": "Gemini 추정(카피 기반)", "manual": "직접 입력"}
     head = st.columns([3, 1, 1])
     head[0].markdown("##### 🎬 영상 스크립트")
+
     if text and status == "completed":
         if head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True):
+            st.session_state.setdefault("_autogen_done", set()).discard(aid)
             with st.spinner("스크립트 재생성 중…"):
                 r = SG.generate(ad)
             database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
             _reload()
         edit = head[2].toggle("편집", key=f"edit_{aid}")
         st.caption(f"출처: {src_ko.get(ad.get('script_source'), ad.get('script_source') or '-')}"
-                   + (" · ⚠️영상 미확인 추정" if ad.get("script_source") == "gemini_estimated" else ""))
+                   + (" · ⚠️ 영상 미확인 추정" if ad.get("script_source") == "gemini_estimated" else ""))
         if edit:
             new = st.text_area("스크립트 편집", value=text, height=260, key=f"scredit_{aid}",
                                label_visibility="collapsed")
@@ -501,15 +515,15 @@ def _render_video_script(ad: dict) -> None:
                 _reload()
         else:
             st.markdown(_greybox(text), unsafe_allow_html=True)
-    elif status == "processing":
-        st.info("스크립트 생성 중입니다…")
     else:
-        if status == "failed" and ad.get("script_error_message"):
-            st.caption(f"⚠️ 이전 생성 실패: {ad.get('script_error_message')}")
-        st.caption("아직 스크립트가 없습니다. 버튼을 누르면 자막→Gemini 순으로 생성합니다.")
+        if ad.get("script_error_message"):
+            st.caption(f"⚠️ 생성 실패: {ad.get('script_error_message')}")
+        else:
+            st.caption("스크립트를 불러오지 못했습니다.")
         cols = st.columns([1, 1])
-        if cols[0].button("✨ 스크립트 생성하기", key=f"gen_{aid}", type="primary",
+        if cols[0].button("🔄 다시 생성하기", key=f"gen_{aid}", type="primary",
                           use_container_width=True):
+            st.session_state.setdefault("_autogen_done", set()).discard(aid)
             with st.spinner("스크립트 생성 중… (자막→Gemini)"):
                 r = SG.generate(ad)
             database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])

@@ -61,8 +61,24 @@ def _gemini(parts: list) -> str:
         return ""
 
 
+def _gemini_video_file(url: str, ad: dict) -> str:
+    """Meta(fbcdn) 등 영상 URL을 다운로드해 inline_data(base64)로 Gemini에 전달.
+    URL 텍스트만 넘기면 Gemini가 접근 못 하므로 파일을 직접 업로드."""
+    import base64
+    import requests
+    try:
+        r = requests.get(url, timeout=90, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200 or not r.content or len(r.content) > 20 * 1024 * 1024:
+            return ""
+        b64 = base64.b64encode(r.content).decode()
+    except Exception:  # noqa: BLE001
+        return ""
+    return _gemini([{"inline_data": {"mime_type": "video/mp4", "data": b64}},
+                    {"text": PROMPT + _ctx(ad)}])
+
+
 def generate(ad: dict) -> dict:
-    """반환 {text, source, status, error}."""
+    """반환 {text, source, status, error, input_type}."""
     vid = (YT.extract_video_id(ad.get("social_source_url") or "")
            or YT.extract_video_id(ad.get("video_url") or ""))
 
@@ -70,21 +86,33 @@ def generate(ad: dict) -> dict:
     if vid:
         tr = YT.fetch_transcript(vid)
         if tr:
-            return {"text": tr, "source": "youtube_transcript", "status": "completed", "error": ""}
+            return {"text": tr, "source": "youtube_transcript", "status": "completed",
+                    "error": "", "input_type": "transcript"}
 
     if not config.GEMINI_API_KEY:
         return {"text": "", "source": "manual", "status": "failed",
-                "error": "자막 없음 + GEMINI_API_KEY 미설정"}
+                "error": "자막 없음 + GEMINI_API_KEY 미설정", "input_type": "none"}
 
     # ② Gemini 영상 분석(YouTube URL 직접)
     if vid:
         g = _gemini([{"file_data": {"file_uri": YT.watch_url(vid)}}, {"text": PROMPT + _ctx(ad)}])
         if g:
-            return {"text": g, "source": "gemini", "status": "completed", "error": ""}
+            return {"text": g, "source": "gemini_video", "status": "completed",
+                    "error": "", "input_type": "video_url"}
 
-    # ③ Gemini 추정(영상 접근 불가 — fbcdn/구글 등 → 카피 기반 추정)
+    # ③ Meta/기타 영상 파일 다운로드 → Gemini inline 분석
+    vurl = ad.get("video_url") or ad.get("media_url") or ""
+    if vurl.startswith("http"):
+        g = _gemini_video_file(vurl, ad)
+        if g:
+            return {"text": g, "source": "gemini_video", "status": "completed",
+                    "error": "", "input_type": "video_file"}
+
+    # ④ Gemini 추정(영상 접근 불가 → 썸네일/카피 기반 추정)
     est = _gemini([{"text": PROMPT + "\n\n※ 영상 직접 확인 불가 → 아래 정보 기반 '추정' 스크립트."
                     + _ctx(ad)}])
     if est:
-        return {"text": est, "source": "gemini_estimated", "status": "completed", "error": ""}
-    return {"text": "", "source": "gemini", "status": "failed", "error": "Gemini 응답 없음/오류"}
+        return {"text": est, "source": "gemini_estimated", "status": "completed",
+                "error": "", "input_type": "thumbnail_adcopy"}
+    return {"text": "", "source": "gemini", "status": "failed",
+            "error": "Gemini 응답 없음/오류", "input_type": "none"}
