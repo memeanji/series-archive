@@ -198,6 +198,9 @@ def render_add_brand() -> None:
     """브랜드 추가 위저드: 입력 → 후보 찾기 → 선택 → 저장 → 수집(버튼 클릭 시에만)."""
     with st.sidebar.expander("➕ 브랜드 추가", expanded=False):
         name = st.text_input("브랜드명", key="ab_name", placeholder="예: 리바엔").strip()
+        gadv = st.text_input("구글 광고주명(법인명)", key="ab_gadv",
+                             placeholder="예: 주식회사 어센트원",
+                             help="구글 투명성센터는 브랜드명이 아니라 '주식회사 OOO' 법인명으로 검색해야 잘 잡힙니다.").strip()
         domain = st.text_input("공식몰 도메인(선택)", key="ab_domain", placeholder="rivan.co.kr").strip()
         kw_raw = st.text_input("검색 키워드(쉼표 구분)", key="ab_kw", placeholder="리바엔, RIVAN, 리바엔 공식몰")
         cat = st.text_input("카테고리(선택)", key="ab_cat").strip()
@@ -209,9 +212,9 @@ def render_add_brand() -> None:
                 st.warning("브랜드명을 입력하세요.")
             elif not _domain_ok(domain):
                 st.warning("도메인 형식이 올바르지 않습니다.")
-            elif database.brand_exists(name):
-                st.warning("이미 등록된 브랜드명입니다.")
             else:
+                if database.brand_exists(name):
+                    st.info("이미 등록된 브랜드 — 저장 시 법인명/도메인/키워드가 갱신됩니다.")
                 st.session_state.ab_cands = database.find_brand_candidates(name, domain, keywords)
                 st.session_state.ab_searched = True
 
@@ -242,7 +245,7 @@ def render_add_brand() -> None:
                          disabled=not can_save, use_container_width=True):
                 kws = list(dict.fromkeys([name] + keywords + picked))
                 database.add_brand(name, kws, domain, cat,
-                                   extra={"google_advertiser_name": picked[0] if picked else ""})
+                                   extra={"google_advertiser_name": gadv or (picked[0] if picked else "")})
                 st.session_state.ab_saved = name
                 st.session_state.sa_brand = name
                 st.cache_data.clear()
@@ -574,6 +577,10 @@ def render_ad_detail(ad: dict) -> None:
         info[0].metric("상태", "라이브" if ad.get("status") == "live" else (ad.get("status") or "-"))
         info[1].metric("게재 시작", str(_g(ad, "started_at", "-"))[:10] or "-")
         info[2].metric("플랫폼", PLATFORM_LABEL.get(plat, plat or "-"))
+        if ad.get("cta"):
+            st.markdown(f"**CTA 버튼** <span style='background:{S.SOFT_MINT};color:{S.DEEP};"
+                        f"padding:1px 8px;border-radius:6px;font-size:12px;font-weight:700'>"
+                        f"{ad['cta']}</span>", unsafe_allow_html=True)
         if ad.get("landing_url"):
             st.markdown(f"**랜딩** <span style='font-size:12px'>"
                         f"[{ad['landing_url'][:54]}…]({ad['landing_url']})</span>",

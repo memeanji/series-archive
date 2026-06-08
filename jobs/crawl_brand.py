@@ -33,8 +33,12 @@ def crawl_one(display: str) -> dict:
     bid = _brand_id(display)
     keywords = database.get_brand_keywords(display) if database.brand_exists(display) else [display]
 
+    # 구글 광고주명(법인명) — 있으면 구글은 이걸로 검색
+    brand = database.get_brand(display) or {}
+    google_term = (brand.get("google_advertiser_name") or "").strip() or display
+
+    # 메타: 키워드(브랜드명)로 검색 — 브랜드명이 잘 잡힘
     for kw in keywords:
-        # 메타
         t0 = _now()
         try:
             ads = [{**a, "brand_name": display} for a in meta_library_crawler.search_brand(kw)]
@@ -46,19 +50,20 @@ def crawl_one(display: str) -> dict:
         except Exception as e:  # noqa: BLE001
             database.log_brand_collection(bid, "meta", kw, "error", error=str(e)[:200], started=t0)
             print(f"  [meta]   '{kw}' 실패: {e}")
-        # 구글
-        t0 = _now()
-        try:
-            gads, glog = google_library_crawler.search_brand(kw, limit=GOOGLE_LIMIT)
-            gads = [{**a, "brand_name": display} for a in gads]
-            saved = database.ingest_ad_library(gads)
-            database.log_brand_collection(bid, "google", kw, "success", glog["found"], saved,
-                                          glog["found"] - saved, started=t0)
-            res["ad"] += saved
-            print(f"  [google] '{kw}' 발견 {glog['found']} 저장 {saved}")
-        except Exception as e:  # noqa: BLE001
-            database.log_brand_collection(bid, "google", kw, "error", error=str(e)[:200], started=t0)
-            print(f"  [google] '{kw}' 실패: {e}")
+
+    # 구글: 법인명(google_advertiser_name)으로 1회 검색
+    t0 = _now()
+    try:
+        gads, glog = google_library_crawler.search_brand(google_term, limit=GOOGLE_LIMIT)
+        gads = [{**a, "brand_name": display} for a in gads]
+        saved = database.ingest_ad_library(gads)
+        database.log_brand_collection(bid, "google", google_term, "success", glog["found"], saved,
+                                      glog["found"] - saved, started=t0)
+        res["ad"] += saved
+        print(f"  [google] '{google_term}' 발견 {glog['found']} 저장 {saved}")
+    except Exception as e:  # noqa: BLE001
+        database.log_brand_collection(bid, "google", google_term, "error", error=str(e)[:200], started=t0)
+        print(f"  [google] '{google_term}' 실패: {e}")
 
     # YouTube (디스플레이명 1회, quota 절약)
     try:

@@ -34,7 +34,7 @@ AD_COLS = [
     "is_bookmarked", "memo", "created_at", "updated_at",
     "scrape_status", "error_message", "platforms", "local_thumbnail_path",
     "script_text", "script_source", "script_status", "script_error_message",
-    "script_created_at", "script_updated_at",
+    "script_created_at", "script_updated_at", "cta",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -131,7 +131,8 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("platforms", "TEXT"), ("local_thumbnail_path", "TEXT"),
                  ("script_text", "TEXT"), ("script_source", "TEXT"),
                  ("script_status", "TEXT DEFAULT 'pending'"), ("script_error_message", "TEXT"),
-                 ("script_created_at", "TEXT"), ("script_updated_at", "TEXT")):
+                 ("script_created_at", "TEXT"), ("script_updated_at", "TEXT"),
+                 ("cta", "TEXT")):
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -197,7 +198,7 @@ def _migrate_legacy(conn: sqlite3.Connection) -> int:
             "scrape_status": "ok", "error_message": "", "platforms": "",
             "local_thumbnail_path": a.get("thumbnail_url") or "",
             "script_text": "", "script_source": "", "script_status": "pending",
-            "script_error_message": "", "script_created_at": "", "script_updated_at": "",
+            "script_error_message": "", "script_created_at": "", "script_updated_at": "", "cta": "",
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -392,19 +393,40 @@ def brand_exists(display_name: str) -> bool:
 
 def add_brand(display_name: str, keywords: list, official_domain: str = "",
               category: str = "", extra: Optional[dict] = None) -> int:
+    """있으면 갱신(upsert): 법인명/도메인/카테고리 채우고 키워드 병합."""
     extra = extra or {}
     conn = get_conn()
-    conn.execute(
-        "INSERT OR IGNORE INTO brands(display_name, search_keywords, official_domain, "
-        "meta_page_name, google_advertiser_name, youtube_channel_name, tiktok_handle, "
-        "instagram_handle, category, is_active, created_at, updated_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,1,?,?)",
-        (display_name, json.dumps(list(dict.fromkeys(keywords)), ensure_ascii=False),
-         official_domain, extra.get("meta_page_name", ""), extra.get("google_advertiser_name", ""),
-         extra.get("youtube_channel_name", ""), extra.get("tiktok_handle", ""),
-         extra.get("instagram_handle", ""), category, _now(), _now()))
+    exist = conn.execute("SELECT id, search_keywords FROM brands WHERE display_name=?",
+                         (display_name,)).fetchone()
+    kws = list(dict.fromkeys(keywords))
+    gadv = extra.get("google_advertiser_name", "")
+    if exist:
+        try:
+            kws = list(dict.fromkeys((json.loads(exist["search_keywords"] or "[]")) + kws))
+        except Exception:  # noqa: BLE001
+            pass
+        sets, vals = ["search_keywords=?", "updated_at=?"], [json.dumps(kws, ensure_ascii=False), _now()]
+        if official_domain:
+            sets.append("official_domain=?"); vals.append(official_domain)
+        if category:
+            sets.append("category=?"); vals.append(category)
+        if gadv:
+            sets.append("google_advertiser_name=?"); vals.append(gadv)
+        vals.append(display_name)
+        conn.execute(f"UPDATE brands SET {','.join(sets)} WHERE display_name=?", vals)
+        rid = exist["id"]
+    else:
+        conn.execute(
+            "INSERT INTO brands(display_name, search_keywords, official_domain, "
+            "meta_page_name, google_advertiser_name, youtube_channel_name, tiktok_handle, "
+            "instagram_handle, category, is_active, created_at, updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,1,?,?)",
+            (display_name, json.dumps(kws, ensure_ascii=False),
+             official_domain, extra.get("meta_page_name", ""), gadv,
+             extra.get("youtube_channel_name", ""), extra.get("tiktok_handle", ""),
+             extra.get("instagram_handle", ""), category, _now(), _now()))
+        rid = conn.execute("SELECT id FROM brands WHERE display_name=?", (display_name,)).fetchone()[0]
     conn.commit()
-    rid = conn.execute("SELECT id FROM brands WHERE display_name=?", (display_name,)).fetchone()[0]
     conn.close()
     return rid
 
@@ -667,6 +689,7 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "script_error_message": (prev or {}).get("script_error_message") or "",
             "script_created_at": (prev or {}).get("script_created_at") or "",
             "script_updated_at": (prev or {}).get("script_updated_at") or "",
+            "cta": a.get("cta") or (prev or {}).get("cta") or "",
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))

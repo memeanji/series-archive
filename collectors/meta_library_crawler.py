@@ -123,11 +123,18 @@ def _parse_card(r: dict, brand: str) -> dict:
         lines.append(ln)
     page_name = lines[0] if lines else brand
     page_name = re.sub(r"\s*페이지는.*함께합니다$", "", page_name)
+    cta_set = ["지금 구매하기", "구매하기", "지금 주문하기", "주문하기", "자세히 알아보기",
+               "더 알아보기", "자세히 보기", "지금 신청하기", "신청하기", "문의하기",
+               "지금 예약하기", "예약하기", "다운로드", "가입하기", "무료 체험하기",
+               "지금 이용해 보기", "쇼핑하기", "지금 쇼핑", "할인받기", "더보기"]
+    full_text = r.get("text", "")
+    cta = next((c for c in cta_set if c in full_text), "")
     return {
         "started": started,
         "page_name": page_name,
         "ad_text": "\n".join(lines),
         "landing": _pick_landing(r.get("links", [])),
+        "cta": cta,
     }
 
 
@@ -207,6 +214,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     "landing_url": parsed["landing"],
                     "original_ad_url": f"https://www.facebook.com/ads/library/?id={cid}",
                     "status": "live", "first_seen": parsed["started"], "started_at": parsed["started"],
+                    "cta": parsed.get("cta", ""),
                     "platforms": "", "scrape_status": status, "error_message": err,
                     "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
                 })
