@@ -305,10 +305,14 @@ def _order(tab: str, sort: str) -> str:
     }.get(sort, "ORDER BY a.collected_at DESC")
 
 
+# 같은 영상/이미지를 쓰는 중복 광고를 1개로(브랜드별). 영상URL>썸네일>id 순 키.
+_DEDUP = "a.brand_name || '|' || COALESCE(NULLIF(a.video_url,''), NULLIF(a.thumbnail_url,''), a.id)"
+
+
 def count_ads(tab: str, f: dict) -> int:
     where, p = _where(tab, f)
     conn = get_conn()
-    n = conn.execute(f"SELECT COUNT(*) {_JOIN} WHERE {where}", p).fetchone()[0]
+    n = conn.execute(f"SELECT COUNT(DISTINCT {_DEDUP}) {_JOIN} WHERE {where}", p).fetchone()[0]
     conn.close()
     return n
 
@@ -318,7 +322,8 @@ def load_ads_page(tab: str, f: dict, page: int = 1, page_size: int = 12) -> list
     order = _order(tab, f.get("sort", ""))
     conn = get_conn()
     rows = conn.execute(
-        f"SELECT {_SUMMARY_COLS} {_JOIN} WHERE {where} {order} LIMIT ? OFFSET ?",
+        f"SELECT {_SUMMARY_COLS} {_JOIN} WHERE {where} "
+        f"GROUP BY {_DEDUP} {order} LIMIT ? OFFSET ?",
         p + [page_size, max(0, (page - 1) * page_size)]).fetchall()
     conn.close()
     return [dict(r) for r in rows]

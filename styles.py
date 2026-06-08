@@ -127,6 +127,11 @@ def inject_css() -> None:
       section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {{
           background:{SOFT_MINT}; color:{DEEP};}}
       section[data-testid="stSidebar"] .stTextInput input {{height:38px;}}
+      section[data-testid="stSidebar"] hr {{margin:.45rem 0 !important;}}
+      section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{margin:0 !important;}}
+      section[data-testid="stSidebar"] [data-testid="stExpander"] {{margin:.15rem 0;}}
+      section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{padding:.3rem .6rem;}}
+      section[data-testid="stSidebar"] [data-testid="stElementContainer"] {{margin-bottom:0 !important;}}
 
       /* 탭(segmented) 라운드 */
       div[data-testid="stSegmentedControl"] button {{border-radius:9px;}}

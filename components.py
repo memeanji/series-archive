@@ -476,64 +476,71 @@ def _render_social_reaction(ad: dict) -> None:
 
 
 def _render_video_script(ad: dict) -> None:
+    """모달을 닫지 않고(=튕김 없음) 세션 상태에 결과를 캐시해 즉시 갱신."""
     import services.script_gen as SG
     aid = ad.get("id")
     src_ko = {"youtube_transcript": "YouTube 자막", "gemini_video": "Gemini 영상분석",
               "gemini_estimated": "Gemini 추정(카피 기반)", "manual": "직접 입력"}
+    ovr = st.session_state.setdefault("_script_result", {})
 
-    # ── 상세 진입 시 자동 생성(세션당 광고별 1회) ──
-    if (ad.get("script_status") or "pending") == "pending":
+    def _gen(label: str):
+        with st.spinner(label):
+            r = SG.generate(ad)
+        database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+        ovr[aid] = r   # 세션 캐시 → 리런 없이 바로 표시
+
+    # 현재 상태(세션 캐시 우선)
+    cur = ovr.get(aid) or {"text": ad.get("script_text") or "",
+                           "status": ad.get("script_status") or "pending",
+                           "source": ad.get("script_source") or "",
+                           "error": ad.get("script_error_message") or ""}
+
+    # 상세 진입 시 자동 생성(세션당 광고별 1회)
+    if cur["status"] == "pending" and aid not in ovr:
         done = st.session_state.setdefault("_autogen_done", set())
         if aid not in done:
             done.add(aid)
-            with st.spinner("🎬 영상 스크립트 생성 중… (자막 → Gemini)"):
-                r = SG.generate(ad)
-            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
-            ad["script_text"], ad["script_status"] = r["text"], r["status"]
-            ad["script_source"], ad["script_error_message"] = r["source"], r["error"]
+            _gen("🎬 영상 스크립트 생성 중… (자막 → Gemini)")
+            cur = ovr[aid]
 
-    text = ad.get("script_text") or ""
-    status = ad.get("script_status") or "pending"
     head = st.columns([3, 1, 1])
     head[0].markdown("##### 🎬 영상 스크립트")
+    completed = bool(cur["text"]) and cur["status"] == "completed"
 
-    if text and status == "completed":
-        if head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True):
-            st.session_state.setdefault("_autogen_done", set()).discard(aid)
-            with st.spinner("스크립트 재생성 중…"):
-                r = SG.generate(ad)
-            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
-            _reload()
+    # 버튼(재생성 / 다시 생성) — 클릭 시 생성 후 같은 화면에서 갱신(리런 X)
+    if completed:
+        regen = head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True)
         edit = head[2].toggle("편집", key=f"edit_{aid}")
-        st.caption(f"출처: {src_ko.get(ad.get('script_source'), ad.get('script_source') or '-')}"
-                   + (" · ⚠️ 영상 미확인 추정" if ad.get("script_source") == "gemini_estimated" else ""))
-        if edit:
-            new = st.text_area("스크립트 편집", value=text, height=260, key=f"scredit_{aid}",
-                               label_visibility="collapsed")
-            if st.button("💾 스크립트 저장", key=f"scsave_{aid}", type="primary"):
-                database.update_ad_script(aid, new, "manual", "completed", "")
-                _reload()
-        else:
-            st.markdown(_greybox(text), unsafe_allow_html=True)
     else:
-        if ad.get("script_error_message"):
-            st.caption(f"⚠️ 생성 실패: {ad.get('script_error_message')}")
+        regen = head[1].button("다시 생성", key=f"rgen2_{aid}", use_container_width=True)
+        edit = False
+    if regen:
+        _gen("스크립트 생성 중…")
+        cur = ovr[aid]
+        completed = bool(cur["text"]) and cur["status"] == "completed"
+        edit = False
+
+    if completed and not edit:
+        st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}"
+                   + (" · ⚠️ 영상 미확인 추정" if cur["source"] == "gemini_estimated" else ""))
+        st.markdown(_greybox(cur["text"]), unsafe_allow_html=True)
+    elif completed and edit:
+        new = st.text_area("스크립트 편집", value=cur["text"], height=260, key=f"scredit_{aid}",
+                           label_visibility="collapsed")
+        if st.button("💾 스크립트 저장", key=f"scsave_{aid}", type="primary"):
+            database.update_ad_script(aid, new, "manual", "completed", "")
+            ovr[aid] = {"text": new, "status": "completed", "source": "manual", "error": ""}
+    else:
+        if cur["error"]:
+            st.caption(f"⚠️ 생성 실패: {cur['error']}")
         else:
-            st.caption("스크립트를 불러오지 못했습니다.")
-        cols = st.columns([1, 1])
-        if cols[0].button("🔄 다시 생성하기", key=f"gen_{aid}", type="primary",
-                          use_container_width=True):
-            st.session_state.setdefault("_autogen_done", set()).discard(aid)
-            with st.spinner("스크립트 생성 중… (자막→Gemini)"):
-                r = SG.generate(ad)
-            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
-            _reload()
-        with cols[1].popover("✍️ 직접 입력"):
+            st.caption("스크립트를 불러오지 못했습니다. '다시 생성'을 눌러보세요.")
+        with st.popover("✍️ 직접 입력"):
             man = st.text_area("스크립트", key=f"scman_{aid}", height=160,
                                label_visibility="collapsed", placeholder="스크립트를 직접 붙여넣기")
             if st.button("저장", key=f"scmansave_{aid}", type="primary"):
                 database.update_ad_script(aid, man, "manual", "completed", "")
-                _reload()
+                ovr[aid] = {"text": man, "status": "completed", "source": "manual", "error": ""}
 
 
 @st.dialog("광고 상세", width="large")
