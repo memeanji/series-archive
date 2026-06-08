@@ -808,3 +808,17 @@ def render_insights() -> None:
         g = a.get("social_final_grade") or "-"
         st.write(f"- `{g}급` **{a.get('brand_name')}** · "
                  f"{a.get('ad_title') or (a.get('ad_copy_short') or '')[:40]}")
+
+    st.divider()
+    st.markdown("#### 🩺 브랜드 진단 — 0건 브랜드 원인 분류")
+    st.caption("사이드바 숫자는 **광고 + 소셜 승인(approved)** 기준. 데이터가 있어도 검토 필요(needs_review)면 0으로 보입니다.")
+    diag = database.brand_diagnostics()
+    import pandas as pd
+    st.dataframe(pd.DataFrame(diag), use_container_width=True, hide_index=True,
+                 column_config={"조치": st.column_config.TextColumn(width="large")})
+    cause_ko = {"not_collected": "수집 미실행", "no_result": "결과 없음(검색어 부족)",
+                "needs_review_only": "검토 필요만 있음(승인 전)", "rejected_only": "전부 무관 판정",
+                "ok": "정상", "unknown": "확인 필요"}
+    import collections as _c
+    dist = _c.Counter(d["원인"] for d in diag)
+    st.caption("원인 분포: " + " · ".join(f"{cause_ko.get(k,k)} {v}" for k, v in dist.most_common()))

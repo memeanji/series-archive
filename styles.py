@@ -34,26 +34,29 @@ def inject_css() -> None:
       html, body, [class*="css"], .stApp, button, input, select, textarea {{
           font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
                        "Malgun Gothic", sans-serif !important; }}
-      /* 메인 폭 제한 + 여백 */
-      .block-container {{padding: 1rem 2rem 2.5rem !important; max-width: 1480px;}}
-      ::-webkit-scrollbar {{width: 8px; height: 8px;}}
+      /* 메인 폭 제한 + 여백(밀도 ↑) */
+      .block-container {{padding: 0.4rem 1.8rem 2rem !important; max-width: 1480px;}}
+      [data-testid="stHorizontalBlock"] {{gap: 0.7rem;}}
+      [data-testid="stVerticalBlock"] {{gap: 0.45rem;}}
+      ::-webkit-scrollbar {{width: 7px; height: 7px;}}
       ::-webkit-scrollbar-thumb {{background: #CBD5E1; border-radius: 8px;}}
       ::-webkit-scrollbar-track {{background: transparent;}}
 
-      /* 헤더 통합검색 input */
-      .stTextInput input {{height: 42px; border-radius: 12px !important; border:1px solid {BORDER};
-          background:#fff; font-size:14px;}}
+      /* 헤더 통합검색 input(낮게) */
+      .stTextInput input {{height: 38px; border-radius: 10px !important; border:1px solid {BORDER};
+          background:#fff; font-size:13.5px;}}
       .stTextInput input:focus {{border-color:{PRIMARY}; box-shadow:0 0 0 3px {SOFT_MINT};}}
 
-      /* selectbox / multiselect — Streamlit 기본 느낌 줄이기 */
-      div[data-baseweb="select"] > div {{border-radius:12px !important; border-color:{BORDER} !important;
-          min-height:44px; background:#fff;}}
-      .stSelectbox label, .stMultiSelect label {{font-size:13px !important; color:{SUB};
-          font-weight:600;}}
+      /* selectbox / multiselect — 낮고 컴팩트하게 */
+      div[data-baseweb="select"] > div {{border-radius:10px !important; border-color:{BORDER} !important;
+          min-height:38px; background:#fff; font-size:13px;}}
+      .stSelectbox label, .stMultiSelect label {{font-size:12px !important; color:{SUB};
+          font-weight:600; margin-bottom:1px !important;}}
+      div[data-testid="stCheckbox"] label {{font-size:11.5px; color:{OFF_GRAY};}}
 
-      /* segmented control(탭/필터) → pill */
-      div[data-testid="stSegmentedControl"] button {{border-radius:10px !important;
-          font-size:13.5px; font-weight:600; border:1px solid {BORDER};}}
+      /* segmented control(탭/필터) → 작은 pill */
+      div[data-testid="stSegmentedControl"] button {{border-radius:9px !important;
+          font-size:12.5px; font-weight:600; border:1px solid {BORDER}; padding:3px 12px;}}
       div[data-testid="stSegmentedControl"] button[aria-checked="true"],
       div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}
@@ -63,9 +66,9 @@ def inject_css() -> None:
 
       /* ── 헤더 ── */
       .sa-header {{display:flex; align-items:center; gap:12px;}}
-      .sa-logo {{font-size:21px; font-weight:800; color:{PRIMARY}; line-height:1; white-space:nowrap;}}
-      .sa-sub {{font-size:12px; color:{SUB}; margin-top:2px;}}
-      .sa-info {{color:{SUB}; font-size:13px; margin:.4rem 0 1rem;}}
+      .sa-logo {{font-size:18px; font-weight:800; color:{PRIMARY}; line-height:1.1; white-space:nowrap;}}
+      .sa-sub {{font-size:11px; color:{SUB}; margin-top:1px;}}
+      .sa-info {{color:{SUB}; font-size:12.5px; margin:.2rem 0 .6rem;}}
       .sa-info b {{color:{TEXT};}}
 
       /* ── 칩 ── */
@@ -93,13 +96,13 @@ def inject_css() -> None:
       .sa-ph {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                text-align:center; color:{OFF_GRAY}; font-size:13px; font-weight:600;}}
       .sa-ph .i {{display:block; font-size:30px; margin-bottom:2px; opacity:.7;}}
-      .sa-brand {{font-weight:800; font-size:13px; color:{PRIMARY}; margin-top:10px;
+      .sa-brand {{font-weight:800; font-size:13px; color:{PRIMARY}; margin-top:7px;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
-      .sa-title {{font-size:15px; color:{TEXT}; font-weight:700; margin-top:2px; line-height:1.3;
+      .sa-title {{font-size:14.5px; color:{TEXT}; font-weight:700; margin-top:1px; line-height:1.25;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
-      .sa-copy {{font-size:12.5px; color:{SUB}; line-height:1.35; margin-top:3px; min-height:34px;
+      .sa-copy {{font-size:12px; color:{SUB}; line-height:1.3; margin-top:2px; min-height:30px;
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
-      .sa-meta {{font-size:11.5px; color:{SUB}; margin-top:6px; display:flex; justify-content:space-between;}}
+      .sa-meta {{font-size:11.5px; color:{SUB}; margin-top:4px; display:flex; justify-content:space-between;}}
       .sa-pbadge {{font-size:10.5px; font-weight:700; color:{SUB}; background:{BG};
                    border:1px solid {BORDER}; padding:1px 7px; border-radius:6px;}}
 
@@ -112,9 +115,12 @@ def inject_css() -> None:
       /* ── 사이드바(흰 카드) ── */
       section[data-testid="stSidebar"] {{background:{CARD}; border-right:1px solid {BORDER};}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button {{
-          width:100%; text-align:left; background:transparent; border:none; color:{TEXT}; font-size:13px;}}
+          width:100%; text-align:left; background:transparent; border:none; color:{TEXT};
+          font-size:12.5px; padding:3px 8px; min-height:0; line-height:1.35;}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {{
           background:{SOFT_MINT}; color:{DEEP};}}
+      section[data-testid="stSidebar"] .block-container {{padding-top:.5rem;}}
+      section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.15rem;}}
 
       /* 탭(segmented) 라운드 */
       div[data-testid="stSegmentedControl"] button {{border-radius:9px;}}

@@ -508,6 +508,59 @@ def brand_counts() -> list[dict]:
             for r in rows]
 
 
+def brand_diagnostics() -> list[dict]:
+    """브랜드별 수집/매칭 상태 진단(읽기 전용). 0건 원인 분류 포함."""
+    conn = get_conn()
+    out = []
+    for b in conn.execute("SELECT * FROM brands WHERE is_active=1").fetchall():
+        bn, bid = b["display_name"], b["id"]
+        ad = conn.execute("SELECT COUNT(*) FROM ad_library_ads WHERE brand_name=?", (bn,)).fetchone()[0]
+        sc = conn.execute(
+            "SELECT review_status, COUNT(*) n FROM social_videos WHERE brand_name=? "
+            "GROUP BY review_status", (bn,)).fetchall()
+        scd = {r["review_status"]: r["n"] for r in sc}
+        ap, rv, rj = scd.get("approved", 0), scd.get("needs_review", 0), scd.get("rejected", 0)
+        logs = conn.execute(
+            "SELECT platform, SUM(found_count) f, SUM(saved_count) s, COUNT(*) tries "
+            "FROM brand_collection_logs WHERE brand_id=? GROUP BY platform", (bid,)).fetchall()
+        plat = {r["platform"]: {"found": r["f"] or 0, "saved": r["s"] or 0, "tries": r["tries"]}
+                for r in logs}
+        has_kw = len((b["search_keywords"] or "[]")) > 4
+        has_official = any(b[k] for k in ("official_domain", "youtube_channel_name",
+                                          "tiktok_handle", "instagram_handle", "meta_page_name"))
+        total = ap + rv + rj
+        if (ap + ad) > 0:
+            cause = "ok"                       # 광고 있거나 소셜 승인 있으면 정상
+        elif not logs and total == 0:
+            cause = "not_collected"
+        elif total == 0:
+            cause = "no_result"
+        elif rv > 0:
+            cause = "needs_review_only"
+        elif rj > 0:
+            cause = "rejected_only"
+        else:
+            cause = "unknown"
+        action = {
+            "not_collected": "수집 미실행 → '소량 재수집' 또는 jobs/crawl_brand.py 실행",
+            "no_result": "검색어/핸들 부족 가능 → search_keywords 확장",
+            "needs_review_only": "데이터 있음(승인 전) → 소셜탭 '검토 필요 포함' 후 '이 브랜드 맞음' 승인 / 공식핸들 등록 시 자동승인",
+            "rejected_only": "영상이 브랜드와 무관 판정 → 공식 채널/도메인 등록 또는 키워드 정확화",
+            "ok": "정상", "unknown": "확인 필요",
+        }[cause]
+        out.append({
+            "브랜드": bn, "광고": ad, "소셜승인": ap, "검토필요": rv, "제외": rj,
+            "Meta": f"{plat.get('meta',{}).get('saved',0)}/{plat.get('meta',{}).get('found',0)}" if 'meta' in plat else "-",
+            "Google": f"{plat.get('google',{}).get('saved',0)}/{plat.get('google',{}).get('found',0)}" if 'google' in plat else "-",
+            "YouTube": f"{plat.get('youtube',{}).get('saved',0)}/{plat.get('youtube',{}).get('found',0)}" if 'youtube' in plat else "-",
+            "키워드": "O" if has_kw else "부족", "공식정보": "O" if has_official else "없음",
+            "원인": cause, "조치": action,
+        })
+    conn.close()
+    out.sort(key=lambda x: (x["원인"] != "ok", -(x["광고"] + x["소셜승인"])))
+    return out
+
+
 def insight_summary() -> dict:
     conn = get_conn()
     r = conn.execute(
