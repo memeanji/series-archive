@@ -281,9 +281,13 @@ def _order(tab: str, sort: str) -> str:
     if tab == "TOP" or sort == "🔥 터진순(추천)":
         return (f"ORDER BY {rank} DESC, s.engagement_score DESC NULLS LAST, "
                 "s.views DESC NULLS LAST, a.collected_at DESC")
+    empty_last = "(a.started_at='' OR a.started_at IS NULL) ASC"
     return {
         "조회수 높은순(소셜)": "ORDER BY s.views DESC NULLS LAST",
         "최근 수집순": "ORDER BY a.collected_at DESC",
+        "오래된순": "ORDER BY a.collected_at ASC",
+        "게재기간 긴순": f"ORDER BY {empty_last}, a.started_at ASC",   # 오래 게재(시작 이른 순)
+        "게재기간 짧은순": f"ORDER BY {empty_last}, a.started_at DESC",  # 최근 게재
         "저장 많은순": "ORDER BY a.is_bookmarked DESC, a.score DESC",
     }.get(sort, "ORDER BY a.collected_at DESC")
 

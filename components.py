@@ -154,7 +154,7 @@ def render_header(ads=None) -> dict:
         cc[2].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB};margin-top:6px'>"
                        f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
-    tabs = ["전체", "Meta", "Google", "🔥 TOP", "소셜 영상", "북마크", "인사이트"]
+    tabs = ["전체", "Meta", "Google", "PPL 영상", "북마크"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
     return {"search": search, "tab": tab}
@@ -295,9 +295,8 @@ def render_sidebar(counts: list, total: int) -> str:
 
 # ════════════════════════════════════════════════════════════
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
-    cats = opts.get("categories", [])
     has_social = social_count > 0
-    c = st.columns([1.1, 1, 1, 1.4, 1.5, 0.9, 0.7])
+    c = st.columns([1.1, 1, 1, 1.7, 1, 0.7])
 
     grade = c[0].selectbox("등급 ⓘ", ["전체", "S급", "A급 이상", "B급 이상", "C급 이상"],
                            index=0, disabled=not has_social, key="f_grade",
@@ -306,26 +305,26 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                                  "• A급: 조회수 10만↑ OR 좋아요 1천↑ OR 댓글 50↑ OR 공유 50↑\n"
                                  "• B급: 조회수 5만↑ OR 좋아요 500↑ OR 댓글 30↑ OR 공유 30↑\n"
                                  "• C급: 조회수 1만↑ OR 좋아요 100↑ OR 댓글 10↑ OR 공유 10↑\n\n"
-                                 "참여율 = (좋아요+댓글+공유)/조회수 — High ≥3%, Medium ≥1%, Low <1%\n\n"
-                                 "초기엔 절대 기준, 소셜 100건↑ 쌓이면 내부 분위수 기준도 함께 계산."))
+                                 "참여율 = (좋아요+댓글+공유)/조회수 — High ≥3%, Medium ≥1%, Low <1%"))
     media = c[1].multiselect("매체(소재)", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
                              key="f_media")
     status = c[2].selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
-    categories = c[3].multiselect("카테고리", cats, key="f_cat")
-    sort = c[4].selectbox("정렬",
-                          ["🔥 터진순(추천)", "조회수 높은순(소셜)", "최근 수집순", "저장 많은순"],
+    sort = c[3].selectbox("정렬",
+                          ["🔥 터진순(추천)", "조회수 높은순(소셜)", "최근 수집순", "오래된순",
+                           "게재기간 긴순", "게재기간 짧은순", "저장 많은순"],
                           index=(0 if has_social else 2), key="f_sort")
-    period = c[5].selectbox("기간", ["전체", "7일", "30일", "90일"], key="f_period")
-    if c[6].button("초기화", use_container_width=True):
-        for k in ("f_grade", "f_media", "f_status", "f_cat", "f_sort", "f_period"):
+    period = c[4].selectbox("기간(게재 시작 기준)", ["전체", "7일", "30일", "90일"], key="f_period")
+    if c[5].button("초기화", use_container_width=True):
+        for k in ("f_grade", "f_media", "f_status", "f_sort", "f_period"):
             st.session_state.pop(k, None)
         st.rerun()
     if not has_social:
-        st.caption("ℹ️ 등급 필터는 소셜 영상 데이터가 있어야 활성화됩니다 "
-                   "(.env에 APIFY_TOKEN 설정 후 수집 시 S/A/B/C 자동 부여).")
-    show_hidden = st.checkbox("🔧 개발자: 검색광고·미디어 없는 광고도 보기", value=False, key="f_devhidden")
+        st.caption("ℹ️ 등급 필터는 소셜 영상 데이터가 있어야 활성화됩니다.")
+    show_hidden = st.checkbox("🔧 (개발용) 검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
+                              help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김. "
+                                   "켜면 그 광고들도 함께 표시(보통 끄는 게 깔끔)")
 
     # 탭 → 매체/북마크 매핑
     tab = header["tab"]
@@ -339,7 +338,6 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     chips += [f"🎬 {m}" if m == "video" else f"🖼 {m}" for m in media]
     if status != "전체":
         chips.append("● " + status)
-    chips += list(categories)
     if period != "전체":
         chips.append("📅 " + period)
     if chips:
@@ -352,7 +350,6 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
         "platforms": platforms,
         "media": media,
         "status": status,
-        "categories": categories,
         "sort": sort,
         "grade": grade,
         "period_days": {"7일": 7, "30일": 30, "90일": 90}.get(period),

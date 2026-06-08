@@ -18,7 +18,7 @@ import components as C  # noqa: E402
 import database  # noqa: E402
 import styles  # noqa: E402
 
-TAB_KEY = {"전체": "all", "Meta": "meta", "Google": "google", "🔥 TOP": "TOP"}
+TAB_KEY = {"전체": "all", "Meta": "meta", "Google": "google"}
 
 
 # ── 캐시된 경량 조회 (ttl=300) ───────────────────────────
@@ -74,16 +74,12 @@ def main() -> None:
     C.render_sidebar(counts, total=sum(r["ad"] for r in counts))
 
     tab = header["tab"]
-    if tab == "소셜 영상":
+    if tab == "PPL 영상":
         C.render_social_grid(_social())
         _footer(t0)
         return
-    if tab == "인사이트":
-        C.render_insights()
-        _footer(t0)
-        return
 
-    # ── 광고 탭(전체/Meta/Google/TOP) — SQL 페이지 로딩 ──
+    # ── 광고 탭(전체/Meta/Google) — SQL 페이지 로딩 ──
     tabkey = TAB_KEY.get(tab, "all")
     f = C.render_filters(_filter_options(), header, _social_count())
     page_size = st.session_state.get("sa_psize", 12)
