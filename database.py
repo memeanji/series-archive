@@ -192,6 +192,7 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     conn.close()
     migrate_base64_thumbnails()
     migrate_brands()
+    restore_scripts_from_store()   # Supabase에 백업된 스크립트 복원(영구 보존)
 
 
 def _migrate_legacy(conn: sqlite3.Connection) -> int:
@@ -1146,7 +1147,8 @@ def update_memo(ad_id: str, memo: str) -> None:
 
 def update_ad_script(ad_id: str, text: str, source: str, status: str, error: str = "") -> None:
     conn = get_conn()
-    row = conn.execute("SELECT script_created_at FROM ad_library_ads WHERE id=?", (ad_id,)).fetchone()
+    row = conn.execute("SELECT script_created_at, brand_name, platform, video_url "
+                       "FROM ad_library_ads WHERE id=?", (ad_id,)).fetchone()
     created = (row["script_created_at"] if row and row["script_created_at"] else _now())
     conn.execute(
         "UPDATE ad_library_ads SET script_text=?, script_source=?, script_status=?, "
@@ -1154,6 +1156,51 @@ def update_ad_script(ad_id: str, text: str, source: str, status: str, error: str
         (text, source, status, error, created, _now(), ad_id))
     conn.commit()
     conn.close()
+    # 완성된 스크립트는 Supabase에 영구 백업(reboot 후에도 복원)
+    if status == "completed" and (text or "").strip():
+        try:
+            import services.script_store as SS
+            SS.save_script(ad_id, text, source, status,
+                           (row["brand_name"] if row else ""),
+                           (row["platform"] if row else ""),
+                           (row["video_url"] if row else ""))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+_SCRIPTS_RESTORED = False
+
+
+def restore_scripts_from_store() -> int:
+    """앱 시작 시 Supabase의 스크립트를 로컬 DB에 복원(프로세스당 1회). Cloud reboot 영구 보존."""
+    global _SCRIPTS_RESTORED
+    if _SCRIPTS_RESTORED:
+        return 0
+    _SCRIPTS_RESTORED = True
+    try:
+        import services.script_store as SS
+        if not SS.enabled():
+            return 0
+        rows = SS.load_all()
+    except Exception:  # noqa: BLE001
+        return 0
+    if not rows:
+        return 0
+    conn = get_conn()
+    n = 0
+    for r in rows:
+        aid = r.get("ad_id")
+        txt = r.get("script_text")
+        if not aid or not (txt or "").strip():
+            continue
+        cur = conn.execute("UPDATE ad_library_ads SET script_text=?, script_source=?, "
+                           "script_status=?, script_updated_at=? WHERE id=?",
+                           (txt, r.get("script_source") or "stored",
+                            r.get("script_status") or "completed", _now(), aid))
+        n += cur.rowcount
+    conn.commit()
+    conn.close()
+    return n
 
 
 def filter_ads(ads: list[dict], f: dict) -> list[dict]:
