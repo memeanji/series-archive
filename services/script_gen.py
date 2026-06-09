@@ -53,13 +53,22 @@ def _parse_segments(raw: str) -> str:
         return raw
 
 
+def gemini_key() -> str:
+    """호출 시점에 st.secrets→env에서 live 로딩(import 시점 캐시 X) → reboot 없이 secret 반영."""
+    return config.secret("GEMINI_API_KEY")
+
+
+def gemini_model() -> str:
+    return config.secret("GEMINI_MODEL", "") or "gemini-2.5-flash"
+
+
 def _gemini(parts: list, retries: int = 3) -> str:
     """Gemini 호출. 503(과부하)/429는 백오프 재시도. 실패 시 '' (앱 멈춤 방지)."""
     import time
 
     import requests
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}")
+           f"{gemini_model()}:generateContent?key={gemini_key()}")
     body = {
         "contents": [{"parts": parts}],
         # 2.5-flash는 thinking이 출력 토큰을 소진해 본문이 빌 수 있음 → thinking 끄고 출력 상향
@@ -182,7 +191,7 @@ def generate(ad: dict) -> dict:
         return {"text": "", "source": "", "status": "thumbnail_only",
                 "error": "영상 없음(이미지 소재) — '썸네일 분석'을 사용하세요", "input_type": "none"}
 
-    if not config.GEMINI_API_KEY:
+    if not gemini_key():
         return {"text": "", "source": "manual", "status": "failed",
                 "error": "GEMINI_API_KEY 미설정", "input_type": "none"}
 
@@ -244,7 +253,7 @@ def analyze_thumbnail(ad: dict) -> dict:
     import hashlib
 
     import database
-    if not config.GEMINI_API_KEY:
+    if not gemini_key():
         return {"text": "", "source": "", "status": "thumbnail_only",
                 "error": "GEMINI_API_KEY 미설정", "input_type": "none"}
     content, mime = _thumb_bytes(ad)

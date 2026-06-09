@@ -460,7 +460,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
             f"<div class='sa-meta'><span>{eng}</span>"
             f"<span title='게재 플랫폼: {', '.join(plats) if plats else '-'}'>{plat_chip}"
             f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span></span></div>"
-            f"<div class='sa-meta'><span>📅 수집 {str(_g(ad,'collected_at','-'))[:10]}</span>"
+            f"<div class='sa-meta' style='margin-bottom:10px'><span>📅 수집 {str(_g(ad,'collected_at','-'))[:10]}</span>"
             f"<span>{status_txt}</span></div>",
             unsafe_allow_html=True)
         b = st.columns([3, 1])
@@ -961,8 +961,7 @@ def _run_yt_match(brand: str) -> None:
     else:
         conn = database.get_conn()
         brands = [r[0] for r in conn.execute(
-            "SELECT DISTINCT brand_name FROM ad_library_ads WHERE platform='google' "
-            "AND brand_name<>''").fetchall()]
+            "SELECT DISTINCT brand_name FROM ad_library_ads WHERE brand_name<>''").fetchall()]
         conn.close()
     if not brands:
         st.warning("구글 광고를 가진 브랜드가 없습니다. 먼저 구글 투명성센터 광고를 수집하세요.")

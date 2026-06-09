@@ -68,18 +68,22 @@ _JS_EXTRACT = r"""
     const vids = Array.from(card.querySelectorAll('video'))
         .map(v => v.src || (v.querySelector('source')||{}).src).filter(Boolean);
     const posters = Array.from(card.querySelectorAll('video')).map(v => v.poster).filter(Boolean);
-    // 이미지 후보를 '화면에 보이는 크기(rendered)'와 함께 수집.
-    // naturalWidth(원본 해상도)는 작은 프로필 아바타도 원본이 커서 오인됨 → getBoundingClientRect 사용.
+    // 이미지 후보를 '화면 표시 크기(rendered)'+'카드 내 세로 위치'와 함께 수집.
+    // 프로필/로고는 (1) 작거나 (2) 카드 상단 헤더(페이지명 옆)에 있음 → 둘 다로 걸러냄.
+    const cardTop = card.getBoundingClientRect().top;
     const imgInfo = Array.from(card.querySelectorAll('img'))
         .filter(i => i.src && !i.src.startsWith('data:'))
         .map(i => { const rc = i.getBoundingClientRect();
                     return { src: i.src,
                              w: rc.width || i.clientWidth || 0,
-                             h: rc.height || i.clientHeight || 0 }; });
-    imgInfo.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-    // 화면 표시 한 변이 100px 미만이면 프로필/로고 아이콘으로 보고 제외(없으면 가장 큰 것)
-    const bigImgs = imgInfo.filter(x => Math.min(x.w, x.h) >= 100);
-    const creativeImg = (bigImgs[0] || imgInfo[0] || {}).src || '';
+                             h: rc.height || i.clientHeight || 0,
+                             top: rc.top - cardTop }; });
+    // 상단 헤더 밴드(~70px)에 있고 작은 이미지는 프로필/로고로 보고 제외(큰 소재는 유지)
+    let pool = imgInfo.filter(x => x.top >= 70 || Math.min(x.w, x.h) >= 170);
+    if (!pool.length) pool = imgInfo;
+    pool.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+    const bigImgs = pool.filter(x => Math.min(x.w, x.h) >= 100);
+    const creativeImg = (bigImgs[0] || pool[0] || {}).src || '';
     // background-image url 후보
     let bg = '';
     for (const e of card.querySelectorAll('*')) {

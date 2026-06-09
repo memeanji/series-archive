@@ -87,10 +87,10 @@ def main() -> None:
     if len(sys.argv) > 1:
         brands = [sys.argv[1]]
     else:
+        # 광고가 있는 모든 브랜드(구글+메타) — 브랜드 단위로 YouTube 광고 매칭
         conn = database.get_conn()
         brands = [r[0] for r in conn.execute(
-            "SELECT DISTINCT brand_name FROM ad_library_ads WHERE platform='google' "
-            "AND brand_name<>''").fetchall()]
+            "SELECT DISTINCT brand_name FROM ad_library_ads WHERE brand_name<>''").fetchall()]
         conn.close()
     print(f"=== YouTube 광고 매칭: {len(brands)}개 브랜드 ===")
     tot = {"matched": 0, "candidate": 0, "ppl": 0}
