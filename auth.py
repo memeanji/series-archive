@@ -19,13 +19,14 @@ _ASSETS = Path(__file__).resolve().parent / "assets"
 
 @lru_cache(maxsize=1)
 def _login_bg_uri() -> str:
-    """assets/login_bg.png 를 base64 data URI 로(없으면 '')."""
-    try:
-        fp = _ASSETS / "login_bg.png"
-        if fp.exists():
-            return "data:image/png;base64," + base64.b64encode(fp.read_bytes()).decode()
-    except Exception:  # noqa: BLE001
-        pass
+    """왼쪽 캐릭터/배경만 크롭한 login_left.png(없으면 원본) base64 data URI."""
+    for name in ("login_left.png", "login_bg.png"):
+        try:
+            fp = _ASSETS / name
+            if fp.exists():
+                return "data:image/png;base64," + base64.b64encode(fp.read_bytes()).decode()
+        except Exception:  # noqa: BLE001
+            pass
     return ""
 
 
@@ -66,49 +67,55 @@ def check_password(username: str, password: str) -> bool:
 
 
 def login() -> None:
-    """로그인 화면 — 커스텀 배경 이미지 + 오른쪽 카드에 실제 로그인 입력. (로직은 그대로)"""
+    """로그인 화면 — 왼쪽은 캐릭터 비주얼(이미지의 그려진 로그인 박스는 크롭 제거),
+    오른쪽은 실제 입력 가능한 카드 1개. (로직은 그대로)"""
     bg = _login_bg_uri()
-    bg_layer = (f"background-image:url('{bg}');background-size:cover;background-position:center;"
-                if bg else "")
+    # 왼쪽 캐릭터 이미지는 화면 높이에 맞춰 좌측 하단 정렬, 오른쪽은 하늘→잔디 그라데이션
+    img_layer = (f", url('{bg}') left bottom / auto 100% no-repeat" if bg else "")
     st.markdown(f"""
     <style>
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
       html, body, [class*="css"], .stApp, input, button {{ font-family:'Pretendard',-apple-system,sans-serif; }}
       header[data-testid="stHeader"] {{ background:transparent; }}
-      /* 배경: 이미지(cover/center) + 실패 시 초록 폴백색 */
-      .stApp {{ background-color:#A7E3C0; {bg_layer} }}
-      .block-container {{ padding-top:0 !important; max-width:1180px; }}
-      /* 오른쪽 로그인 카드(이미지의 카드 영역에 얹음) */
+      /* 배경: 하늘→잔디 그라데이션(폴백) + 왼쪽 캐릭터 이미지 */
+      .stApp {{ background:linear-gradient(180deg,#BCE8FF 0%,#CFEFD8 52%,#A7E3C0 100%){img_layer}; }}
+      .block-container {{ padding-top:0 !important; max-width:1240px; }}
+      /* 오른쪽 실제 로그인 카드 1개 (불투명 흰색 → 왼쪽 이미지와 겹쳐 보이지 않음) */
       div[data-testid="stForm"] {{
-        background:rgba(255,255,255,0.93); border:none !important; border-radius:34px;
-        padding:30px 28px 26px; box-shadow:0 24px 60px rgba(16,24,40,.28);
-        backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+        background:rgba(255,255,255,0.97); border:none !important; border-radius:34px;
+        padding:40px 34px 30px; box-shadow:0 26px 70px rgba(16,24,40,.30);
+        max-width:470px; min-width:330px; margin:0 0 0 auto;
       }}
       div[data-testid="stForm"] label {{ font-weight:700; color:#334155; font-size:13px; }}
-      .stTextInput input {{ border-radius:13px !important; height:46px; border:1px solid #D1FAE5;
-        background:#F8FFFB; }}
-      .stTextInput input:focus {{ border-color:#03C75A !important; box-shadow:0 0 0 2px rgba(3,199,90,.18) !important; }}
-      /* 버튼: 초록 그라데이션 + 그림자 (파란 포인트 → 초록) */
+      .stTextInput input {{ border-radius:20px !important; height:50px; border:1px solid #D1FAE5;
+        background:#F6FFFA; font-size:14px; }}
+      .stTextInput input:focus {{ border-color:#03C75A !important;
+        box-shadow:0 0 0 3px rgba(3,199,90,.16) !important; }}
       div[data-testid="stForm"] button {{
         background:linear-gradient(135deg,#34D399 0%,#03C75A 100%) !important;
-        color:#fff !important; border:none !important; border-radius:14px !important;
-        height:48px; font-weight:800 !important; font-size:15px;
-        box-shadow:0 10px 22px rgba(3,199,90,.38) !important; }}
-      div[data-testid="stForm"] button:hover {{ filter:brightness(1.04); }}
+        color:#fff !important; border:none !important; border-radius:18px !important;
+        height:50px; font-weight:800 !important; font-size:15.5px;
+        box-shadow:0 12px 26px rgba(3,199,90,.40) !important; }}
+      div[data-testid="stForm"] button:hover {{ filter:brightness(1.05); }}
       a, .stMarkdown a {{ color:#03C75A !important; }}
+      /* 모바일: 배경 캐릭터는 흐리게 깔고 카드 중앙 */
+      @media (max-width:768px) {{
+        .stApp {{ background:linear-gradient(180deg,#BCE8FF,#A7E3C0); }}
+        div[data-testid="stForm"] {{ margin:0 auto; }}
+      }}
     </style>
     """, unsafe_allow_html=True)
 
-    company = st.secrets.get("auth", {}).get("company", "Series Builder")
-    # 왼쪽 캐릭터 여백 : 오른쪽 카드 = 이미지 카드 위치에 맞춤
-    _, right = st.columns([1.45, 1])
+    # 왼쪽 55%(캐릭터) : 오른쪽 45%(카드) — 카드는 오른쪽 세로 중앙
+    _, right = st.columns([1.25, 1])
     with right:
-        st.markdown("<div style='height:13vh'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:14vh'></div>", unsafe_allow_html=True)
         with st.form("login", border=True):
-            st.markdown("<div style='font-size:30px;font-weight:900;color:#03C75A;"
-                        "letter-spacing:-.5px'>📚 Series Archive</div>"
-                        f"<div style='color:#64748B;font-size:13px;margin:4px 0 16px'>"
-                        f"Ad Reference Library · {company} 💚</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='font-size:34px;font-weight:900;color:#03C75A;"
+                "letter-spacing:-1px;line-height:1.1'>Repurely</div>"
+                "<div style='color:#64748B;font-size:13px;margin:6px 0 18px'>"
+                "깨끗한 일상, 리퓨얼리와 함께 💚</div>", unsafe_allow_html=True)
             u = st.text_input("아이디", placeholder="아이디")
             p = st.text_input("비밀번호", type="password", placeholder="비밀번호")
             if st.form_submit_button("로그인", use_container_width=True, type="primary"):
@@ -118,7 +125,7 @@ def login() -> None:
                     st.rerun()
                 else:
                     st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
-            st.markdown("<div style='text-align:center;color:#94A3B8;font-size:12px;margin-top:10px'>"
+            st.markdown("<div style='text-align:center;color:#94A3B8;font-size:12px;margin-top:12px'>"
                         "내부 공유용 · 계정 문의는 관리자에게</div>", unsafe_allow_html=True)
 
 
