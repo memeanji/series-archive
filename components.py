@@ -350,34 +350,24 @@ def render_sidebar(counts: list, total: int) -> str:
 # ════════════════════════════════════════════════════════════
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
-    c = st.columns([1.1, 1, 1, 1.55, 1, 0.8])
+    grade = "전체"   # 등급 기능 제거
+    c = st.columns([1, 1, 1.6, 1, 0.8])
 
-    grade = c[0].selectbox("등급 ⓘ", ["전체", "S급", "A급 이상", "B급 이상", "C급 이상"],
-                           index=0, disabled=not has_social, key="f_grade",
-                           help=("조회수·좋아요·댓글·공유는 광고 성과가 아니라 **소셜 원본 영상 기준**입니다.\n\n"
-                                 "• S급: 조회수 50만↑ OR 좋아요 5천↑ OR 댓글 200↑ OR 공유 200↑\n"
-                                 "• A급: 조회수 10만↑ OR 좋아요 1천↑ OR 댓글 50↑ OR 공유 50↑\n"
-                                 "• B급: 조회수 5만↑ OR 좋아요 500↑ OR 댓글 30↑ OR 공유 30↑\n"
-                                 "• C급: 조회수 1만↑ OR 좋아요 100↑ OR 댓글 10↑ OR 공유 10↑\n\n"
-                                 "참여율 = (좋아요+댓글+공유)/조회수 — High ≥3%, Medium ≥1%, Low <1%"))
-    media = c[1].multiselect("매체(소재)", ["video", "image"],
+    media = c[0].multiselect("매체(소재)", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
                              key="f_media")
-    status = c[2].selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
-    sort = c[3].selectbox("정렬",
-                          ["🔥 터진순(추천)", "조회수 높은순(소셜)", "최근 수집순", "오래된순",
-                           "게재기간 긴순", "게재기간 짧은순", "저장 많은순"],
-                          index=(0 if has_social else 2), key="f_sort")
-    period = c[4].selectbox("기간(게재 시작 기준)", ["전체", "7일", "30일", "90일"], key="f_period")
-    # 다른 위젯은 라벨 아래에 입력칸이 있으므로, 버튼도 라벨 높이만큼 내려 입력칸과 수평 정렬
-    c[5].markdown("<div style='height:2.05rem'></div>", unsafe_allow_html=True)
-    if c[5].button("초기화", use_container_width=True, help="필터 초기화"):
-        for k in ("f_grade", "f_media", "f_status", "f_sort", "f_period"):
+    status = c[1].selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
+    sort = c[2].selectbox("정렬",
+                          ["최근 수집순", "오래된순", "조회수 높은순", "게재기간 긴순",
+                           "게재기간 짧은순", "저장 많은순"],
+                          index=0, key="f_sort")
+    period = c[3].selectbox("기간(게재 시작 기준)", ["전체", "7일", "30일", "90일"], key="f_period")
+    c[4].markdown("<div style='height:2.05rem'></div>", unsafe_allow_html=True)
+    if c[4].button("초기화", use_container_width=True, help="필터 초기화"):
+        for k in ("f_media", "f_status", "f_sort", "f_period"):
             st.session_state.pop(k, None)
         st.rerun()
-    if not has_social:
-        st.caption("ℹ️ 등급 필터는 소셜 영상 데이터가 있어야 활성화됩니다.")
     hc = st.columns([1, 1])
     show_hidden = hc[0].checkbox("🔧 (개발용) 검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
                                  help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김.")
@@ -458,20 +448,12 @@ def render_ad_card(ad: dict, idx: int) -> None:
     dot = S.status_color(ad.get("status"))
 
     status_txt = "🟢 라이브" if ad.get("status") == "live" else "⚫ " + str(ad.get("status") or "-")
-    grade = ad.get("social_final_grade")
-    if grade and ad.get("match_score"):
-        eng = (f"<span title='매칭된 소셜 원본 영상 반응'>👁 {_fmt(ad.get('social_views'))} "
-               f"❤ {_fmt(ad.get('social_likes'))} "
-               f"<span style='color:{S.MINT};font-weight:700'>· 소셜 원본</span></span>")
-        badge = (f"<div class='sa-badge' style='background:{S.grade_color(grade)};font-size:14px'>"
-                 f"{grade}급</div>")
-    elif int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
+    badge = ""   # 등급/점수 뱃지 제거
+    if int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
         eng = (f"<span title='연결된 유튜브 원본 영상의 공개 지표 · 광고 성과 아님'>"
-               f"👁 {_full(ad.get('yt_views'))} ❤ {_full(ad.get('yt_likes'))}</span>")
-        badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
+               f"👁 {_full(ad.get('yt_views'))}회 ❤ {_full(ad.get('yt_likes'))}</span>")
     else:
         eng = f"<span style='color:{S.SUB}'>게재 {str(_g(ad,'started_at','-'))[:10] or '-'}</span>"
-        badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
     _title = (_g(ad, "ad_title", "") or "")[:40]            # 실제 제목만(없으면 공백 div 생략)
     _copy = (_g(ad, "ad_copy_short", "") or "")[:60]
     with st.container(border=True):
@@ -488,14 +470,15 @@ def render_ad_card(ad: dict, idx: int) -> None:
             f"<div class='sa-meta' style='margin-bottom:10px'><span>📅 수집 {str(_g(ad,'collected_at','-'))[:10]}</span>"
             f"<span>{status_txt}</span></div>",
             unsafe_allow_html=True)
-        b = st.columns([3, 1])
+        b = st.columns([2, 1])
         if b[0].button("상세 보기", key=f"open_{aid}_{idx}", use_container_width=True):
             full = database.get_ad_full(aid)   # 상세 클릭 시에만 1건 전체 로드
             if full:
                 render_ad_detail(full)
         marked = bool(ad.get("is_bookmarked"))
-        if b[1].button("🔖" if marked else "🏷️", key=f"bm_{aid}_{idx}",
-                       use_container_width=True, help="북마크"):
+        if b[1].button("북마크됨" if marked else "북마크", key=f"bm_{aid}_{idx}",
+                       use_container_width=True, type=("primary" if marked else "secondary"),
+                       help="북마크"):
             database.update_bookmark(aid, not marked)
             _reload()
         if st.session_state.get("f_devhidden"):
@@ -783,7 +766,7 @@ def render_ad_detail(ad: dict) -> None:
         yv, yl, yc = (int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0),
                       int(ad.get("yt_comments") or 0))
         if ad.get("video_url") and (yv or yl or yc):
-            cards = [("👁", "조회수", _full(yv), "#03C75A"),
+            cards = [("👁", "조회수", _full(yv) + ("회" if yv else ""), "#03C75A"),
                      ("❤", "좋아요", _full(yl), "#EF4444"),
                      ("💬", "댓글", _full(yc), "#0EA5E9")]
             html = "<div style='display:flex;gap:10px;margin:10px 0 6px'>"
