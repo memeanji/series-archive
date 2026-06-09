@@ -805,6 +805,9 @@ def compute_matches(threshold: float = 30.0) -> int:
     for s in socials:
         by_brand.setdefault(s.get("brand_name"), []).append(s)
     for ad in ads:
+        # 구글 투명성센터 광고는 카피·랜딩이 없어 영상 단위 확인 불가 → 유튜브 매칭 안 함(트렌드만).
+        if (ad.get("platform") or "") == "google":
+            continue
         for s in by_brand.get(ad.get("brand_name"), []):
             r = M.match(ad, s)
             # 창작물 수준 확인: 랜딩 상품토큰이 캡션에 있거나(url_sim≈1) 카피가 상당히 유사할 때만.

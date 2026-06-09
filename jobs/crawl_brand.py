@@ -70,14 +70,19 @@ def crawl_one(display: str) -> dict:
         import services.youtube as YT
         if YT.is_enabled():
             t0 = _now()
+            # 검색어: 브랜드명 + 상품/문구 키워드 + 법인명 (산하 브랜드/상품으로 광고 원본 후보 탐색)
             yt_terms = [display]
+            for kw in keywords:
+                if kw and kw != display and kw not in yt_terms:
+                    yt_terms.append(kw)
             gname = (brand.get("google_advertiser_name") or "").strip()
             if gname and gname != display:
                 yt_terms.append(gname)
+            yt_terms = yt_terms[:4]   # quota 보호(검색당 100유닛)
             ids: list = []
             for term in yt_terms:
                 ids += YT.search_video_ids(term, max_results=5)
-            ids = list(dict.fromkeys(ids))[:10]   # 중복 제거, 최대 10개
+            ids = list(dict.fromkeys(ids))[:15]   # 중복 제거, 최대 15개
             vids = [{**v, "brand_name": display} for v in YT.fetch_videos(ids)]
             saved = database.ingest_social_videos(vids)
             for v in vids:

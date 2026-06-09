@@ -68,15 +68,17 @@ _JS_EXTRACT = r"""
     const vids = Array.from(card.querySelectorAll('video'))
         .map(v => v.src || (v.querySelector('source')||{}).src).filter(Boolean);
     const posters = Array.from(card.querySelectorAll('video')).map(v => v.poster).filter(Boolean);
-    // 이미지 후보를 크기와 함께 수집 → 작은 '프로필/로고'는 제외하고 가장 큰 것을 소재로
+    // 이미지 후보를 '화면에 보이는 크기(rendered)'와 함께 수집.
+    // naturalWidth(원본 해상도)는 작은 프로필 아바타도 원본이 커서 오인됨 → getBoundingClientRect 사용.
     const imgInfo = Array.from(card.querySelectorAll('img'))
         .filter(i => i.src && !i.src.startsWith('data:'))
-        .map(i => ({ src: i.src,
-                     w: i.naturalWidth || i.width || i.clientWidth || 0,
-                     h: i.naturalHeight || i.height || i.clientHeight || 0 }));
+        .map(i => { const rc = i.getBoundingClientRect();
+                    return { src: i.src,
+                             w: rc.width || i.clientWidth || 0,
+                             h: rc.height || i.clientHeight || 0 }; });
     imgInfo.sort((a, b) => (b.w * b.h) - (a.w * a.h));
-    // 한 변이 80px 미만이면 프로필/아이콘으로 보고 제외(없으면 가장 큰 것 사용)
-    const bigImgs = imgInfo.filter(x => Math.min(x.w, x.h) >= 80);
+    // 화면 표시 한 변이 100px 미만이면 프로필/로고 아이콘으로 보고 제외(없으면 가장 큰 것)
+    const bigImgs = imgInfo.filter(x => Math.min(x.w, x.h) >= 100);
     const creativeImg = (bigImgs[0] || imgInfo[0] || {}).src || '';
     // background-image url 후보
     let bg = '';
@@ -211,6 +213,16 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
             for _ in range(scrolls):
                 page.mouse.wheel(0, 6000)
                 page.wait_for_timeout(2200)
+            # lazy-load 소재 이미지가 모두 뜨도록: 천천히 위로 되감으며 viewport 통과시키고 대기
+            for _ in range(scrolls):
+                page.mouse.wheel(0, -4000)
+                page.wait_for_timeout(700)
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:  # noqa: BLE001
+                pass
+            page.mouse.wheel(0, 200000)  # 다시 끝까지(레이아웃 확정)
+            page.wait_for_timeout(1500)
             rows = page.evaluate(_JS_EXTRACT)
 
             for r in rows:
