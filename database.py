@@ -885,6 +885,26 @@ def social_count() -> int:
     return n
 
 
+def brand_youtube_summary(brand_name: str) -> dict:
+    """브랜드 단위 유튜브 존재 여부 — '이 브랜드가 유튜브에도 광고/영상을 돌리는지'.
+    (특정 광고↔영상 1:1 매칭이 아니라 브랜드 차원의 참고용)"""
+    out = {"count": 0, "max_views": 0, "top": None, "videos": []}
+    if not brand_name:
+        return out
+    conn = get_conn()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, title, source_url, views, likes, thumbnail_url, final_grade, posted_at "
+        "FROM social_videos WHERE brand_name=? AND platform='youtube' "
+        "ORDER BY views DESC", (brand_name,)).fetchall()]
+    conn.close()
+    out["count"] = len(rows)
+    out["videos"] = rows[:6]
+    if rows:
+        out["max_views"] = int(rows[0].get("views") or 0)
+        out["top"] = rows[0]
+    return out
+
+
 def regrade() -> int:
     """social_videos 전체 재등급(절대→내부분위수). ingest 후 호출."""
     import services.grading as G

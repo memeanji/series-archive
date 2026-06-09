@@ -81,9 +81,9 @@ def _gemini_video_file(url: str, ad: dict) -> str:
 
 def transcript_only(ad: dict) -> dict | None:
     """무료(YouTube 자막)만 시도 — Gemini 호출 없이. 자막 없으면 None.
-    상세 진입 시 자동 호출해 Gemini API 사용을 최소화한다."""
-    vid = (YT.extract_video_id(ad.get("social_source_url") or "")
-           or YT.extract_video_id(ad.get("video_url") or ""))
+    상세 진입 시 자동 호출해 Gemini API 사용을 최소화한다.
+    ※ 매칭된 소셜 영상(social_source_url)이 아니라 '이 광고 자체 영상'만 본다."""
+    vid = YT.extract_video_id(ad.get("video_url") or "")
     if not vid:
         return None
     segs = YT.fetch_transcript_segments(vid)
@@ -99,9 +99,9 @@ def transcript_only(ad: dict) -> dict | None:
 
 
 def generate(ad: dict) -> dict:
-    """반환 {text, source, status, error, input_type}. Gemini 사용(버튼 클릭 시)."""
-    vid = (YT.extract_video_id(ad.get("social_source_url") or "")
-           or YT.extract_video_id(ad.get("video_url") or ""))
+    """반환 {text, source, status, error, input_type}. Gemini 사용(버튼 클릭 시).
+    ※ 메타 등은 '이 광고가 재생하는 자체 영상'을 분석한다(매칭 소셜 영상 사용 안 함)."""
+    vid = YT.extract_video_id(ad.get("video_url") or "")
 
     # ① YouTube 자막 (타임스탬프 구간 — 스니핏 스타일, 무료)
     free = transcript_only(ad)

@@ -541,27 +541,30 @@ def _render_script_body(text: str) -> str:
 
 
 def _render_social_reaction(ad: dict) -> None:
-    st.markdown(f"##### 📊 소셜 원본 반응 <span style='font-size:11px;color:{S.SUB}'>"
-                f"· 매칭된 원본 영상 기준</span>", unsafe_allow_html=True)
-    if not ad.get("match_score"):
-        st.info("매칭된 소셜 원본 영상이 없습니다. (유튜브 영상 수집·연결 시 표시)")
+    """이 광고를 돌리는 브랜드가 '유튜브에도' 광고/영상을 돌리는지 — 브랜드 단위 참고.
+    (특정 광고↔영상 1:1 매칭은 정확도가 낮아 제거. '원본 영상 보기' 링크 없음.)"""
+    brand = ad.get("brand_name") or ""
+    yt = database.brand_youtube_summary(brand)
+    st.markdown(f"##### 📺 이 브랜드의 유튜브 <span style='font-size:11px;color:{S.SUB}'>"
+                f"· 브랜드 단위 참고(이 광고 영상과 1:1 아님)</span>", unsafe_allow_html=True)
+    if not yt["count"]:
+        st.info(f"'{brand}'의 유튜브 영상은 아직 없습니다. (유튜브 탭에서 수집 시 표시)")
         return
-    st.caption("⚠️ 아래 수치는 **광고 성과가 아니라 매칭된 원본 소셜 영상(TikTok/IG/YouTube)의 반응** 지표입니다.")
-    m = st.columns(4)
-    m[0].metric("조회수", _fmt(ad.get("social_views")))
-    m[1].metric("좋아요", _fmt(ad.get("social_likes")))
-    m[2].metric("댓글", _fmt(ad.get("social_comments")))
-    m[3].metric("공유", _fmt(ad.get("social_shares")))
-    er = ad.get("social_engagement_rate")
-    g = st.columns(4)
-    g[0].metric("참여율", f"{er*100:.1f}%" if er else "-")
-    g[1].metric("최종 등급", f"{ad.get('social_final_grade')}급" if ad.get("social_final_grade") else "-")
-    g[2].metric("절대 등급", f"{ad.get('social_absolute_grade')}급" if ad.get("social_absolute_grade") else "-")
-    g[3].metric("내부 등급", f"{ad.get('social_internal_grade')}급" if ad.get("social_internal_grade") else "준비중")
-    src = (ad.get("social_platform") or "소셜").upper()
-    st.caption(f"출처: {src} 원본 영상 · 매칭도 {ad.get('match_score')}점")
-    if is_valid_external_url(ad.get("social_source_url")):
-        st.markdown(f"[▶ 원본 영상 보기 ↗]({ad['social_source_url']})")
+    st.caption(f"**{brand}**는 유튜브에도 영상 **{yt['count']}개**가 수집됐습니다. "
+               "아래 수치는 광고 성과가 아니라 **유튜브 원본 영상의 반응**입니다.")
+    top = yt["top"] or {}
+    m = st.columns(3)
+    m[0].metric("유튜브 영상 수", f"{yt['count']}개")
+    m[1].metric("최고 조회수", _fmt(yt["max_views"]))
+    m[2].metric("최고 영상 등급",
+                f"{top.get('final_grade')}급" if top.get("final_grade") else "-")
+    for v in yt["videos"][:4]:
+        title = (v.get("title") or "(제목 없음)")[:42]
+        line = (f"👁 {_fmt(v.get('views'))} · ❤ {_fmt(v.get('likes'))} · {title}")
+        if is_valid_external_url(v.get("source_url")):
+            st.markdown(f"- [{line} ↗]({v['source_url']})")
+        else:
+            st.markdown(f"- {line}")
 
 
 def _render_video_script(ad: dict) -> None:
