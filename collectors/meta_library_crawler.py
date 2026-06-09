@@ -129,12 +129,17 @@ def _parse_card(r: dict, brand: str) -> dict:
                "지금 이용해 보기", "쇼핑하기", "지금 쇼핑", "할인받기", "더보기"]
     full_text = r.get("text", "")
     cta = next((c for c in cta_set if c in full_text), "")
+    # A/B 테스트: "이 크리에이티브 및 문구를 사용하는 광고 N개" / "광고 N개에서 …" → N 추출
+    vm = (re.search(r"광고\s*(\d+)\s*개[^\n]{0,40}(?:크리에이티브|문구)", full_text)
+          or re.search(r"(?:크리에이티브|문구)[^\n]{0,40}광고\s*(\d+)\s*개", full_text))
+    variant_count = int(vm.group(1)) if vm else 1
     return {
         "started": started,
         "page_name": page_name,
         "ad_text": "\n".join(lines),
         "landing": _pick_landing(r.get("links", [])),
         "cta": cta,
+        "variant_count": variant_count,
     }
 
 
@@ -215,6 +220,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     "original_ad_url": f"https://www.facebook.com/ads/library/?id={cid}",
                     "status": "live", "first_seen": parsed["started"], "started_at": parsed["started"],
                     "cta": parsed.get("cta", ""),
+                    "ad_variant_count": parsed.get("variant_count", 1),
                     "platforms": "", "scrape_status": status, "error_message": err,
                     "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
                 })

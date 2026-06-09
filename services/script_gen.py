@@ -79,22 +79,34 @@ def _gemini_video_file(url: str, ad: dict) -> str:
                     {"text": PROMPT + _ctx(ad)}])
 
 
+def transcript_only(ad: dict) -> dict | None:
+    """무료(YouTube 자막)만 시도 — Gemini 호출 없이. 자막 없으면 None.
+    상세 진입 시 자동 호출해 Gemini API 사용을 최소화한다."""
+    vid = (YT.extract_video_id(ad.get("social_source_url") or "")
+           or YT.extract_video_id(ad.get("video_url") or ""))
+    if not vid:
+        return None
+    segs = YT.fetch_transcript_segments(vid)
+    if segs:
+        return {"text": "[영상 스크립트]\n" + YT.format_segments(segs),
+                "source": "youtube_transcript", "status": "completed",
+                "error": "", "input_type": "transcript"}
+    tr = YT.fetch_transcript(vid)
+    if tr:
+        return {"text": tr, "source": "youtube_transcript", "status": "completed",
+                "error": "", "input_type": "transcript"}
+    return None
+
+
 def generate(ad: dict) -> dict:
-    """반환 {text, source, status, error, input_type}."""
+    """반환 {text, source, status, error, input_type}. Gemini 사용(버튼 클릭 시)."""
     vid = (YT.extract_video_id(ad.get("social_source_url") or "")
            or YT.extract_video_id(ad.get("video_url") or ""))
 
-    # ① YouTube 자막 (타임스탬프 구간 — 스니핏 스타일)
-    if vid:
-        segs = YT.fetch_transcript_segments(vid)
-        if segs:
-            body = YT.format_segments(segs)
-            return {"text": "[영상 스크립트]\n" + body, "source": "youtube_transcript",
-                    "status": "completed", "error": "", "input_type": "transcript"}
-        tr = YT.fetch_transcript(vid)
-        if tr:
-            return {"text": tr, "source": "youtube_transcript", "status": "completed",
-                    "error": "", "input_type": "transcript"}
+    # ① YouTube 자막 (타임스탬프 구간 — 스니핏 스타일, 무료)
+    free = transcript_only(ad)
+    if free:
+        return free
 
     if not config.GEMINI_API_KEY:
         return {"text": "", "source": "manual", "status": "failed",

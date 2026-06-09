@@ -75,7 +75,7 @@ def main() -> None:
     C.render_sidebar(counts, total=sum(r["ad"] for r in counts))
 
     tab = header["tab"]
-    if tab == "PPL 영상":
+    if tab == "유튜브":
         C.render_social_grid(_social())
         _footer(t0)
         return

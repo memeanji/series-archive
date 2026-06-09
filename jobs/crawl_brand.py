@@ -65,12 +65,19 @@ def crawl_one(display: str) -> dict:
         database.log_brand_collection(bid, "google", google_term, "error", error=str(e)[:200], started=t0)
         print(f"  [google] '{google_term}' 실패: {e}")
 
-    # YouTube (디스플레이명 1회, quota 절약)
+    # YouTube (브랜드명 + 법인명으로 검색 — 둘 다 참고해 관련 영상 확보)
     try:
         import services.youtube as YT
         if YT.is_enabled():
             t0 = _now()
-            ids = YT.search_video_ids(display, max_results=5)
+            yt_terms = [display]
+            gname = (brand.get("google_advertiser_name") or "").strip()
+            if gname and gname != display:
+                yt_terms.append(gname)
+            ids: list = []
+            for term in yt_terms:
+                ids += YT.search_video_ids(term, max_results=5)
+            ids = list(dict.fromkeys(ids))[:10]   # 중복 제거, 최대 10개
             vids = [{**v, "brand_name": display} for v in YT.fetch_videos(ids)]
             saved = database.ingest_social_videos(vids)
             for v in vids:

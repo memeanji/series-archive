@@ -155,7 +155,7 @@ def render_header(ads=None) -> dict:
         cc[2].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB};margin-top:6px'>"
                        f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
-    tabs = ["전체", "Meta", "Google", "PPL 영상", "북마크"]
+    tabs = ["전체", "Meta", "Google", "유튜브", "북마크"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
     return {"search": search, "tab": tab}
@@ -423,6 +423,11 @@ def render_ad_card(ad: dict, idx: int) -> None:
         inner = (f"<div class='sa-ph'><span class='i'>{'🎬' if is_video else '🖼'}</span>"
                  f"미리보기 없음</div>")
         thumb_cls = "sa-thumb sa-thumb-empty"
+    nab = max(int(ad.get("variant_count") or 1), int(ad.get("dup_rows") or 1))
+    ab_chip = (f"<span style='background:#F59E0B;color:#fff;font-size:10px;font-weight:700;"
+               f"padding:1px 6px;border-radius:5px;margin-left:5px' "
+               f"title='이 크리에이티브·문구를 사용하는 광고 {nab}개 (A/B 테스트)'>A/B {nab}</span>"
+               if plat == "meta" and nab >= 2 else "")
     play = "<div class='sa-play'>▶</div>" if is_video and thumb else ""
     if plat == "google":
         media_badge = "<div class='sa-media'>🔍 Google Preview</div>"
@@ -445,7 +450,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
         st.markdown(
             f"<div class='{thumb_cls}'>{inner}{badge}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}</div>"
-            f"<div class='sa-brand'>{PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}</div>"
+            f"<div class='sa-brand'>{PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}{ab_chip}</div>"
             f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','(제목 없음)')[:40]}</div>"
             f"<div class='sa-copy'>{_g(ad,'ad_copy_short','')[:60]}</div>"
             f"<div class='sa-meta'><span>{eng}</span>"
@@ -534,7 +539,7 @@ def _render_social_reaction(ad: dict) -> None:
     st.markdown(f"##### 📊 소셜 원본 반응 <span style='font-size:11px;color:{S.SUB}'>"
                 f"· 매칭된 원본 영상 기준</span>", unsafe_allow_html=True)
     if not ad.get("match_score"):
-        st.info("매칭된 소셜 원본 영상이 없습니다. (PPL 영상 수집·연결 시 표시)")
+        st.info("매칭된 소셜 원본 영상이 없습니다. (유튜브 영상 수집·연결 시 표시)")
         return
     st.caption("⚠️ 아래 수치는 **광고 성과가 아니라 매칭된 원본 소셜 영상(TikTok/IG/YouTube)의 반응** 지표입니다.")
     m = st.columns(4)
@@ -574,27 +579,34 @@ def _render_video_script(ad: dict) -> None:
                            "source": ad.get("script_source") or "",
                            "error": ad.get("script_error_message") or ""}
 
-    # 상세 진입 시 자동 생성(세션당 광고별 1회)
+    # 상세 진입 시 자동 생성 — 무료(YouTube 자막)만. Gemini 는 버튼 클릭 시에만(키 절약)
     if cur["status"] == "pending" and aid not in ovr:
         done = st.session_state.setdefault("_autogen_done", set())
         if aid not in done:
             done.add(aid)
-            _gen("🎬 영상 스크립트 생성 중… (자막 → Gemini)")
+            with st.spinner("🎬 자막 확인 중…"):
+                r = SG.transcript_only(ad)
+            if r:
+                database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+                ovr[aid] = r
+            else:
+                ovr[aid] = {"text": "", "status": "needs_ai", "source": "", "error": ""}
             cur = ovr[aid]
 
     head = st.columns([3, 1, 1])
     head[0].markdown("##### 🎬 영상 스크립트")
     completed = bool(cur["text"]) and cur["status"] == "completed"
 
-    # 버튼(재생성 / 다시 생성) — 클릭 시 생성 후 같은 화면에서 갱신(리런 X)
+    # 버튼 — Gemini 는 클릭 시에만 호출(키 절약). 자막 있으면 '재생성', 없으면 'AI 생성'
     if completed:
         regen = head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True)
         edit = head[2].toggle("편집", key=f"edit_{aid}")
     else:
-        regen = head[1].button("다시 생성", key=f"rgen2_{aid}", use_container_width=True)
+        regen = head[1].button("🤖 AI 생성", key=f"rgen2_{aid}", use_container_width=True,
+                               help="자막이 없어 Gemini로 영상을 분석해 구간별 대본을 만듭니다(API 사용).")
         edit = False
     if regen:
-        _gen("스크립트 생성 중…")
+        _gen("🤖 Gemini가 영상을 분석해 구간별 대본 작성 중… (최대 2분)")
         cur = ovr[aid]
         completed = bool(cur["text"]) and cur["status"] == "completed"
         edit = False
@@ -611,9 +623,9 @@ def _render_video_script(ad: dict) -> None:
             ovr[aid] = {"text": new, "status": "completed", "source": "manual", "error": ""}
     else:
         if cur["error"]:
-            st.caption(f"⚠️ 생성 실패: {cur['error']}")
+            st.caption(f"⚠️ 생성 실패: {cur['error']} — 'AI 생성'을 눌러 다시 시도하세요.")
         else:
-            st.caption("스크립트를 불러오지 못했습니다. '다시 생성'을 눌러보세요.")
+            st.caption("자막이 없는 영상입니다. **🤖 AI 생성**을 누르면 Gemini가 구간별 대본을 만듭니다.")
         with st.popover("✍️ 직접 입력"):
             man = st.text_area("스크립트", key=f"scman_{aid}", height=160,
                                label_visibility="collapsed", placeholder="스크립트를 직접 붙여넣기")
@@ -656,6 +668,13 @@ def render_ad_detail(ad: dict) -> None:
             st.markdown(f"**CTA 버튼** <span style='background:{S.SOFT_MINT};color:{S.DEEP};"
                         f"padding:1px 8px;border-radius:6px;font-size:12px;font-weight:700'>"
                         f"{ad['cta']}</span>", unsafe_allow_html=True)
+        nab = int(ad.get("ad_variant_count") or 1)
+        if plat == "meta" and nab >= 2:
+            st.markdown(f"**A/B 테스트** <span style='background:#F59E0B;color:#fff;"
+                        f"padding:1px 8px;border-radius:6px;font-size:12px;font-weight:700'>"
+                        f"광고 {nab}개</span> "
+                        f"<span style='font-size:11px;color:{S.SUB}'>· 같은 크리에이티브·문구를 "
+                        f"여러 광고에서 사용</span>", unsafe_allow_html=True)
         if ad.get("landing_url"):
             st.markdown(f"**랜딩** <span style='font-size:12px'>"
                         f"[{ad['landing_url'][:54]}…]({ad['landing_url']})</span>",

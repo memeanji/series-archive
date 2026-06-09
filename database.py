@@ -34,7 +34,7 @@ AD_COLS = [
     "is_bookmarked", "memo", "created_at", "updated_at",
     "scrape_status", "error_message", "platforms", "local_thumbnail_path",
     "script_text", "script_source", "script_status", "script_error_message",
-    "script_created_at", "script_updated_at", "cta",
+    "script_created_at", "script_updated_at", "cta", "ad_variant_count",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -132,7 +132,7 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("script_text", "TEXT"), ("script_source", "TEXT"),
                  ("script_status", "TEXT DEFAULT 'pending'"), ("script_error_message", "TEXT"),
                  ("script_created_at", "TEXT"), ("script_updated_at", "TEXT"),
-                 ("cta", "TEXT")):
+                 ("cta", "TEXT"), ("ad_variant_count", "INTEGER DEFAULT 1")):
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -199,6 +199,7 @@ def _migrate_legacy(conn: sqlite3.Connection) -> int:
             "local_thumbnail_path": a.get("thumbnail_url") or "",
             "script_text": "", "script_source": "", "script_status": "pending",
             "script_error_message": "", "script_created_at": "", "script_updated_at": "", "cta": "",
+            "ad_variant_count": 1,
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -243,7 +244,8 @@ _SUMMARY_COLS = (
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
     "s.views AS social_views, s.likes AS social_likes, "
-    "s.engagement_score AS social_engagement_score, s.platform AS social_platform"
+    "s.engagement_score AS social_engagement_score, s.platform AS social_platform, "
+    "COUNT(*) AS dup_rows, MAX(a.ad_variant_count) AS variant_count"
 )
 _JOIN = (" FROM ad_library_ads a "
          "LEFT JOIN (SELECT ad_id, social_id, match_score, "
@@ -306,8 +308,11 @@ def _order(tab: str, sort: str) -> str:
     }.get(sort, "ORDER BY a.collected_at DESC")
 
 
-# 같은 영상/이미지를 쓰는 중복 광고를 1개로(브랜드별). 영상URL>썸네일>id 순 키.
-_DEDUP = "a.brand_name || '|' || COALESCE(NULLIF(a.video_url,''), NULLIF(a.thumbnail_url,''), a.id)"
+# 같은 크리에이티브+문구를 쓰는 A/B 변형을 1개로 묶는다(브랜드+매체+카피 시그니처).
+# 카피가 비면(구글 등) 영상URL>썸네일>id 로 폴백 → 과합치기 방지.
+_DEDUP = ("a.brand_name || '|' || a.media_type || '|' || "
+          "COALESCE(NULLIF(TRIM(a.ad_copy),''), NULLIF(a.video_url,''), "
+          "NULLIF(a.thumbnail_url,''), a.id)")
 
 
 def count_ads(tab: str, f: dict) -> int:
@@ -690,6 +695,8 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "script_created_at": (prev or {}).get("script_created_at") or "",
             "script_updated_at": (prev or {}).get("script_updated_at") or "",
             "cta": a.get("cta") or (prev or {}).get("cta") or "",
+            "ad_variant_count": max(int(a.get("ad_variant_count") or 1),
+                                    int((prev or {}).get("ad_variant_count") or 1)),
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
