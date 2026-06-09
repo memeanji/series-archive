@@ -94,16 +94,17 @@ def login() -> None:
         background:#F6FFFA !important; box-sizing:border-box; }
       div[data-testid="stForm"] [data-baseweb="input"]:focus-within {
         border-color:#03C75A !important; box-shadow:0 0 0 3px rgba(3,199,90,.16) !important; }
-      div[data-testid="stForm"] [data-baseweb="input"] input {
-        font-size:14.5px !important; background:transparent !important; }
-      /* 비밀번호 눈 아이콘: 모든 상태에서 배경·테두리·그림자·아웃라인 제거(초록 박스 X) */
-      div[data-testid="stForm"] [data-baseweb="input"] button,
-      div[data-testid="stForm"] [data-baseweb="input"] button:hover,
-      div[data-testid="stForm"] [data-baseweb="input"] button:focus,
-      div[data-testid="stForm"] [data-baseweb="input"] button:active,
-      div[data-testid="stForm"] [data-baseweb="input"] button:focus-visible {
+      /* ★ 컨테이너 내부 모든 요소(눈 아이콘 enhancer/button 포함)의 배경·그림자·테두리 제거
+         → 아이콘 뒤 연한 초록 박스 완전 제거. 컨테이너 자체 배경/테두리/포커스글로우는 위에서 유지 */
+      div[data-testid="stForm"] [data-baseweb="input"] *,
+      div[data-testid="stForm"] [data-baseweb="input"] *:hover,
+      div[data-testid="stForm"] [data-baseweb="input"] *:focus,
+      div[data-testid="stForm"] [data-baseweb="input"] *:active,
+      div[data-testid="stForm"] [data-baseweb="input"] *:focus-visible {
         background:transparent !important; background-color:transparent !important;
-        border:none !important; box-shadow:none !important; outline:none !important;
+        box-shadow:none !important; outline:none !important; border:none !important; }
+      div[data-testid="stForm"] [data-baseweb="input"] input { font-size:14.5px !important; }
+      div[data-testid="stForm"] [data-baseweb="input"] button {
         border-radius:0 !important; color:#64748B !important; }
       div[data-testid="stForm"] button {
         background:linear-gradient(135deg,#34D399 0%,#03C75A 100%) !important;
