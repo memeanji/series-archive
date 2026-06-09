@@ -96,8 +96,15 @@ def login() -> None:
         border-color:#03C75A !important; box-shadow:0 0 0 3px rgba(3,199,90,.16) !important; }
       div[data-testid="stForm"] [data-baseweb="input"] input {
         font-size:14.5px !important; background:transparent !important; }
-      div[data-testid="stForm"] [data-baseweb="input"] button {
-        background:transparent !important; border:none !important; color:#64748B !important; }
+      /* 비밀번호 눈 아이콘: 모든 상태에서 배경·테두리·그림자·아웃라인 제거(초록 박스 X) */
+      div[data-testid="stForm"] [data-baseweb="input"] button,
+      div[data-testid="stForm"] [data-baseweb="input"] button:hover,
+      div[data-testid="stForm"] [data-baseweb="input"] button:focus,
+      div[data-testid="stForm"] [data-baseweb="input"] button:active,
+      div[data-testid="stForm"] [data-baseweb="input"] button:focus-visible {
+        background:transparent !important; background-color:transparent !important;
+        border:none !important; box-shadow:none !important; outline:none !important;
+        border-radius:0 !important; color:#64748B !important; }
       div[data-testid="stForm"] button {
         background:linear-gradient(135deg,#34D399 0%,#03C75A 100%) !important;
         color:#fff !important; border:none !important; border-radius:26px !important;
