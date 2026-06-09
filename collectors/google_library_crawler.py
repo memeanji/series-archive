@@ -162,7 +162,7 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
                 if not adrow.get("_iframe") or not adrow.get("_href"):
                     adrow["raw_data"]["collection_status"] = "thumbnail_only"
                     continue
-                res = _extract_google_video(dp, adrow["_href"])
+                res = _extract_google_video(dp, adrow["_href"], adrow["platform_ad_id"])
                 adrow["raw_data"].update({
                     "variant_count": res["variant_count"],
                     "selected_variant_index": res["variant_index"],
@@ -170,6 +170,12 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
                     "collection_status": "playable_video" if res["youtube_id"] else "thumbnail_only",
                 })
                 adrow["google_ad_url"] = adrow.get("transparency_url", "")
+                # 이미지 대안: 가장 화질 좋은 변형 스크린샷으로 썸네일 교체(있으면)
+                if not res["youtube_id"] and res.get("image_thumb"):
+                    adrow["thumbnail_url"] = res["image_thumb"]
+                    adrow["preview_url"] = res["image_thumb"]
+                    adrow["local_thumbnail_path"] = res["image_thumb"]
+                    adrow["scrape_status"] = "shot"
                 if res["youtube_id"]:
                     vid = res["youtube_id"]
                     adrow["video_url"] = f"https://www.youtube.com/watch?v={vid}"
@@ -232,26 +238,64 @@ def _scan_youtube(page) -> str:
     return ""
 
 
-def _extract_google_video(page, url: str) -> dict:
-    """구글 소재 상세를 열고 '대안(variation) carousel'을 끝까지 순회하며 유튜브 영상을 찾는다.
-    첫 화면은 썸네일이어도 대안 4/5·5/5 등 뒤쪽에 실제 재생 영상이 있는 경우를 잡는다.
-    반환 {youtube_id, variant_index(1-base), variant_count}."""
-    out = {"youtube_id": "", "variant_index": 0, "variant_count": 1}
+def _creative_box(page):
+    """상세의 소재 렌더 영역 핸들(스크린샷 대상). creative-bounding-box → 가장 큰 iframe 순."""
+    el = page.query_selector(".creative-bounding-box")
+    if el:
+        try:
+            bb = el.bounding_box()
+            if bb and bb["width"] >= 120:
+                return el, bb["width"] * bb["height"]
+        except Exception:  # noqa: BLE001
+            pass
+    # 폴백: 가장 큰 iframe
+    best, area = None, 0
+    for f in page.query_selector_all("iframe"):
+        try:
+            bb = f.bounding_box()
+            if bb and bb["width"] >= 120 and bb["width"] * bb["height"] > area:
+                best, area = f, bb["width"] * bb["height"]
+        except Exception:  # noqa: BLE001
+            continue
+    return best, area
+
+
+def _extract_google_video(page, url: str, cid: str) -> dict:
+    """소재 상세의 대안 carousel을 끝까지 순회.
+    - 유튜브 영상 발견 → youtube_id 반환(video)
+    - 영상 없으면 → 가장 화질 좋은(가장 큰) 대안을 고해상 스크린샷해 image_thumb 반환
+    반환 {youtube_id, variant_index, variant_count, image_thumb}."""
+    out = {"youtube_id": "", "variant_index": 0, "variant_count": 1, "image_thumb": ""}
+    safe = "".join(ch for ch in cid if ch.isalnum() or ch in "_-")
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
         page.wait_for_timeout(4500)
         body = page.inner_text("body") or ""
         m = re.search(r"\b(\d+)\s*/\s*(\d+)\b", body)
         if m:
-            out["variant_count"] = min(int(m.group(2)), 12)   # 안전 상한
+            out["variant_count"] = min(int(m.group(2)), 12)
         n = out["variant_count"] or 1
+        best_area = 0
         for i in range(n):
             vid = _scan_youtube(page)
             if vid:
                 out["youtube_id"] = vid
                 out["variant_index"] = i + 1
                 return out
-            if i < n - 1:   # 다음 대안으로
+            # 이미지 대안: 소재 영역을 고해상 스크린샷, 가장 큰 변형을 채택
+            try:
+                el, area = _creative_box(page)
+                if el and area > best_area:
+                    el.scroll_into_view_if_needed(timeout=3000)
+                    page.wait_for_timeout(250)
+                    _STATIC.mkdir(parents=True, exist_ok=True)
+                    el.screenshot(timeout=6000, path=str(_STATIC / f"{safe}.png"))
+                    out["image_thumb"] = f"app/static/thumbnails/{safe}.png"
+                    out["variant_index"] = i + 1
+                    best_area = area
+            except Exception:  # noqa: BLE001
+                pass
+            if i < n - 1:
                 btn = page.query_selector("button.variation-right-arrow, .variation-right-arrow")
                 if not btn:
                     break
