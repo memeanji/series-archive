@@ -70,15 +70,16 @@ def login() -> None:
     """로그인 화면 — 왼쪽은 캐릭터 비주얼(이미지의 그려진 로그인 박스는 크롭 제거),
     오른쪽은 실제 입력 가능한 카드 1개. (로직은 그대로)"""
     bg = _login_bg_uri()
-    # 왼쪽 캐릭터 이미지는 화면 높이에 맞춰 좌측 하단 정렬, 오른쪽은 하늘→잔디 그라데이션
-    img_layer = (f", url('{bg}') left bottom / auto 100% no-repeat" if bg else "")
+    # ★ 레이어 순서: 이미지가 '먼저'(위), 그라데이션은 '뒤'(폴백) — 안 그러면 그라데이션이 캐릭터를 덮음
+    img_layer = (f"url('{bg}') left bottom / auto 100% no-repeat, " if bg else "")
     st.markdown(f"""
     <style>
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
       html, body, [class*="css"], .stApp, input, button {{ font-family:'Pretendard',-apple-system,sans-serif; }}
       header[data-testid="stHeader"] {{ background:transparent; }}
-      /* 배경: 하늘→잔디 그라데이션(폴백) + 왼쪽 캐릭터 이미지 */
-      .stApp {{ background:linear-gradient(180deg,#BCE8FF 0%,#CFEFD8 52%,#A7E3C0 100%){img_layer}; }}
+      /* 배경: 왼쪽 캐릭터 이미지(위) + 하늘→잔디 그라데이션(뒤 폴백) */
+      .stApp {{ background:{img_layer}linear-gradient(180deg,#BCE8FF 0%,#CFEFD8 52%,#A7E3C0 100%);
+                background-color:#A7E3C0; }}
       .block-container {{ padding-top:0 !important; max-width:1240px; }}
       /* 오른쪽 실제 로그인 카드 1개 (불투명 흰색 → 왼쪽 이미지와 겹쳐 보이지 않음) */
       div[data-testid="stForm"] {{
