@@ -447,6 +447,10 @@ def render_ad_card(ad: dict, idx: int) -> None:
                f"<span style='color:{S.MINT};font-weight:700'>· 소셜 원본</span></span>")
         badge = (f"<div class='sa-badge' style='background:{S.grade_color(grade)};font-size:14px'>"
                  f"{grade}급</div>")
+    elif int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
+        eng = (f"<span title='이 광고 영상의 YouTube 공개 지표'>👁 {_fmt(ad.get('yt_views'))} "
+               f"❤ {_fmt(ad.get('yt_likes'))} 💬 {_fmt(ad.get('yt_comments'))}</span>")
+        badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
     else:
         eng = f"<span style='color:{S.SUB}'>게재 {str(_g(ad,'started_at','-'))[:10] or '-'}</span>"
         badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
@@ -761,6 +765,16 @@ def render_ad_detail(ad: dict) -> None:
                         f"[{ad['landing_url'][:54]}…]({ad['landing_url']})</span>",
                         unsafe_allow_html=True)
         st.caption(f"광고 ID {aid} · 수집일 {str(_g(ad,'collected_at','-'))[:10]}")
+
+        # 구글 영상광고 = 유튜브 광고 → 유튜브 공개 지표 표시(메타는 라이브러리가 미제공)
+        if ad.get("video_url") and (int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0)):
+            st.divider()
+            st.markdown("##### 유튜브 반응 <span style='font-size:11px;color:#64748B'>"
+                        "· 이 광고 영상의 YouTube 공개 지표</span>", unsafe_allow_html=True)
+            ym = st.columns(3)
+            ym[0].metric("조회수", _fmt(ad.get("yt_views")))
+            ym[1].metric("좋아요", _fmt(ad.get("yt_likes")))
+            ym[2].metric("댓글", _fmt(ad.get("yt_comments")))
 
         st.divider()
         st.markdown("##### 광고 카피")

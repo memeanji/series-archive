@@ -167,6 +167,17 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
                     adrow["media_type"] = "video"
                     adrow["raw_data"]["youtube_id"] = vid
                     log["youtube_linked"] = log.get("youtube_linked", 0) + 1
+                    # 구글 영상광고=유튜브 영상이므로 유튜브 공개 지표(조회수/좋아요/댓글) 수집
+                    try:
+                        import services.youtube as _YT
+                        if _YT.is_enabled():
+                            v = _YT.fetch_video(vid)
+                            if v:
+                                adrow["yt_views"] = v.get("views", 0)
+                                adrow["yt_likes"] = v.get("likes", 0)
+                                adrow["yt_comments"] = v.get("comments", 0)
+                    except Exception:  # noqa: BLE001
+                        pass
             dp.close()
             for adrow in ads:
                 adrow.pop("_href", None)

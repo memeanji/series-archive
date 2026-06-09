@@ -35,6 +35,7 @@ AD_COLS = [
     "scrape_status", "error_message", "platforms", "local_thumbnail_path",
     "script_text", "script_source", "script_status", "script_error_message",
     "script_created_at", "script_updated_at", "cta", "ad_variant_count",
+    "yt_views", "yt_likes", "yt_comments",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -146,7 +147,9 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("script_text", "TEXT"), ("script_source", "TEXT"),
                  ("script_status", "TEXT DEFAULT 'pending'"), ("script_error_message", "TEXT"),
                  ("script_created_at", "TEXT"), ("script_updated_at", "TEXT"),
-                 ("cta", "TEXT"), ("ad_variant_count", "INTEGER DEFAULT 1")):
+                 ("cta", "TEXT"), ("ad_variant_count", "INTEGER DEFAULT 1"),
+                 ("yt_views", "INTEGER DEFAULT 0"), ("yt_likes", "INTEGER DEFAULT 0"),
+                 ("yt_comments", "INTEGER DEFAULT 0")):
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -218,7 +221,7 @@ def _migrate_legacy(conn: sqlite3.Connection) -> int:
             "local_thumbnail_path": a.get("thumbnail_url") or "",
             "script_text": "", "script_source": "", "script_status": "pending",
             "script_error_message": "", "script_created_at": "", "script_updated_at": "", "cta": "",
-            "ad_variant_count": 1,
+            "ad_variant_count": 1, "yt_views": 0, "yt_likes": 0, "yt_comments": 0,
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -260,6 +263,7 @@ _SUMMARY_COLS = (
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
     "a.scrape_status, a.error_message, a.platforms, "
+    "a.yt_views, a.yt_likes, a.yt_comments, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
     "s.views AS social_views, s.likes AS social_likes, "
@@ -716,6 +720,9 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "cta": a.get("cta") or (prev or {}).get("cta") or "",
             "ad_variant_count": max(int(a.get("ad_variant_count") or 1),
                                     int((prev or {}).get("ad_variant_count") or 1)),
+            "yt_views": int(a.get("yt_views") or (prev or {}).get("yt_views") or 0),
+            "yt_likes": int(a.get("yt_likes") or (prev or {}).get("yt_likes") or 0),
+            "yt_comments": int(a.get("yt_comments") or (prev or {}).get("yt_comments") or 0),
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))

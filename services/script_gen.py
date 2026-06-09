@@ -62,8 +62,9 @@ def gemini_model() -> str:
     return config.secret("GEMINI_MODEL", "") or "gemini-2.5-flash"
 
 
-def _gemini(parts: list, retries: int = 3) -> str:
-    """Gemini 호출. 503(과부하)/429는 백오프 재시도. 실패 시 '' (앱 멈춤 방지)."""
+def _gemini(parts: list, retries: int = 5) -> str:
+    """Gemini 호출. 503(과부하)/429(무료티어 한도)는 점증 백오프로 재시도. 실패 시 '' (앱 멈춤 방지).
+    과부하 원인: ① Google 서버 503(2.5-flash 수요 급증) ② 무료 티어 분당 RPM/TPM 한도 초과."""
     import time
 
     import requests
@@ -81,8 +82,8 @@ def _gemini(parts: list, retries: int = 3) -> str:
             j = r.json()
             if "error" in j:
                 code = j["error"].get("code")
-                if code in (503, 429) and attempt < retries:
-                    time.sleep(2 * (attempt + 1))
+                if code in (503, 429, 500) and attempt < retries:
+                    time.sleep(min(3 * (attempt + 1), 20))   # 3,6,9,12,15초 백오프
                     continue
                 return ""
             cand = (j.get("candidates") or [{}])[0]

@@ -272,11 +272,40 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
         finally:
             br.close()
 
+    _drop_profile_thumbs(ads, stats)
     okc = len(ads) - stats["failed"]
     print(f"  [meta-thumb] '{brand}' 성공 {okc}/{len(ads)} "
           f"(img {stats['img']}, poster {stats['poster']}, bg {stats['bg']}, "
-          f"shot {stats['screenshot']}, 실패 {stats['failed']})")
+          f"shot {stats['screenshot']}, 실패 {stats['failed']}, 프로필제거 {stats.get('profile',0)})")
     return ads
+
+
+def _drop_profile_thumbs(ads: list[dict], stats: dict) -> None:
+    """브랜드의 여러 광고에서 '같은 이미지'가 반복되면 페이지 프로필/로고로 보고 썸네일 제거.
+    (소재는 광고마다 다르지만 프로필 아바타는 모든 광고에 동일하게 박힘)"""
+    import hashlib
+    img_ads = [a for a in ads if a.get("media_type") == "image"
+               and (a.get("thumbnail_url") or "").startswith("app/static")]
+    if len(img_ads) < 4:
+        return
+    by_hash: dict = {}
+    for a in img_ads:
+        fp = _STATIC.parent.parent / (a["thumbnail_url"][4:] if a["thumbnail_url"].startswith("app/")
+                                      else a["thumbnail_url"])
+        try:
+            h = hashlib.sha1(fp.read_bytes()).hexdigest()
+        except Exception:  # noqa: BLE001
+            continue
+        by_hash.setdefault(h, []).append(a)
+    thresh = max(4, int(len(img_ads) * 0.35))   # 35%+ 또는 4건+ 반복 → 프로필/로고
+    for h, group in by_hash.items():
+        if len(group) >= thresh:
+            for a in group:
+                a["thumbnail_url"] = ""
+                a["local_thumbnail_path"] = ""
+                a["scrape_status"] = "failed"
+                a["error_message"] = "페이지 프로필/로고 추정(여러 광고 중복) — 소재 썸네일 아님"
+                stats["profile"] = stats.get("profile", 0) + 1
 
 
 def collect() -> list[dict]:
