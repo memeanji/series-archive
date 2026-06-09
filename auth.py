@@ -104,7 +104,7 @@ def login() -> None:
     # 화면 가운데 정렬
     _, mid, _ = st.columns([1, 1.3, 1])
     with mid:
-        st.markdown("<div style='height:18vh'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:23vh'></div>", unsafe_allow_html=True)
         with st.form("login", border=True):
             st.markdown(
                 "<div style='text-align:center;font-size:38px;font-weight:900;color:#03C75A;"
