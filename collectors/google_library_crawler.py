@@ -267,6 +267,17 @@ def _extract_google_video(page, url: str, cid: str) -> dict:
     반환 {youtube_id, variant_index, variant_count, image_thumb}."""
     out = {"youtube_id": "", "variant_index": 0, "variant_count": 1, "image_thumb": ""}
     safe = "".join(ch for ch in cid if ch.isalnum() or ch in "_-")
+    # 네트워크 요청에서 youtube embed 영상 ID 포착(frame엔 안 떠도 player 요청은 감) — 순서 유지
+    net_ids: list = []
+
+    def _on_req(r):
+        mm = re.search(r"youtube\.com/embed/([A-Za-z0-9_-]{11})", r.url or "")
+        if mm and mm.group(1) not in net_ids:
+            net_ids.append(mm.group(1))
+    try:
+        page.on("request", _on_req)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
         page.wait_for_timeout(4500)
@@ -277,10 +288,14 @@ def _extract_google_video(page, url: str, cid: str) -> dict:
         n = out["variant_count"] or 1
         best_area = 0
         for i in range(n):
-            vid = _scan_youtube(page)
+            vid = _scan_youtube(page) or (net_ids[0] if net_ids else "")
             if vid:
                 out["youtube_id"] = vid
                 out["variant_index"] = i + 1
+                try:
+                    page.remove_listener("request", _on_req)
+                except Exception:  # noqa: BLE001
+                    pass
                 return out
             # 이미지 대안: 소재 영역을 고해상 스크린샷, 가장 큰 변형을 채택
             try:
@@ -304,6 +319,14 @@ def _extract_google_video(page, url: str, cid: str) -> dict:
                 except Exception:  # noqa: BLE001
                     break
                 page.wait_for_timeout(2500)
+    except Exception:  # noqa: BLE001
+        pass
+    # 순회 후에도 frame엔 없지만 네트워크로 잡힌 embed가 있으면 그걸 채택
+    if not out["youtube_id"] and net_ids:
+        out["youtube_id"] = net_ids[0]
+        out["variant_index"] = out["variant_index"] or 1
+    try:
+        page.remove_listener("request", _on_req)
     except Exception:  # noqa: BLE001
         pass
     return out

@@ -140,16 +140,14 @@ def render_script_section(social_id: str, video_id: str = "") -> None:
 
 # ════════════════════════════════════════════════════════════
 def render_header(ads=None) -> dict:
-    h = st.columns([2.4, 4, 1.4])
+    h = st.columns([5, 1.4])
     with h[0]:
         st.markdown(
-            f"<div class='sa-header'><div><div class='sa-logo'>📚 Series Archive</div>"
-            f"<div class='sa-sub'>Ad Reference Library · "
-            f"<b style='color:{S.PRIMARY}'>build 2026-06-08 #8</b></div></div></div>",
+            f"<div class='sa-header'><div><div class='sa-logo'>Series Archive</div>"
+            f"<div class='sa-sub'>Ad Reference Library</div></div></div>",
             unsafe_allow_html=True)
-    search = h[1].text_input("검색", placeholder="🔎 브랜드 · 광고명 · 카피 통합 검색",
-                             label_visibility="collapsed").strip().lower()
-    with h[2]:
+    search = ""   # 통합 검색 제거(사이드바 브랜드 검색만 사용)
+    with h[1]:
         cc = st.columns([1, 1, 2])
         if cc[0].button("🔄", help="새로고침", use_container_width=True):
             _reload()
@@ -309,9 +307,10 @@ def render_add_brand() -> None:
 def render_sidebar(counts: list, total: int) -> str:
     """counts: [(brand, n, live_flag), ...] (캐시). 상위 20개 + 검색."""
     sb = st.sidebar
-    sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;margin-bottom:.3rem'>"
-                f"🏷️ 브랜드</div>", unsafe_allow_html=True)
+    sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
+                f"margin:.2rem 0 .8rem'>🏷️ 브랜드</div>", unsafe_allow_html=True)
     render_add_brand()
+    sb.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
     q = sb.text_input("브랜드 검색", placeholder="브랜드 찾기", label_visibility="collapsed").strip().lower()
 
     sel = st.session_state.get("sa_brand", "전체")
@@ -319,7 +318,7 @@ def render_sidebar(counts: list, total: int) -> str:
         st.session_state.sa_brand = "전체"
         st.session_state.sa_page = 1
         st.rerun()
-    sb.markdown(f"<hr style='margin:.3rem 0;border-color:{S.BORDER}'>", unsafe_allow_html=True)
+    sb.markdown(f"<hr style='margin:.55rem 0 .7rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
 
     shown = [r for r in counts if not q or q in (r["name"] or "").lower()]
     if not q:
