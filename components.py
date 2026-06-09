@@ -785,6 +785,10 @@ def render_ad_detail(ad: dict) -> None:
             html += "</div>"
             st.markdown(html, unsafe_allow_html=True)
             st.caption("이 광고 영상의 YouTube 공개 지표")
+        elif plat == "meta":
+            st.caption("ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 반응 지표를 제공하지 않습니다.")
+        elif plat == "google":
+            st.caption("ℹ️ 이 구글 광고는 유튜브 영상이 아니어서 조회수·좋아요 지표가 없습니다.")
 
         d_plats = [p.strip() for p in (ad.get("platforms") or "").split(",") if p.strip()]
         if d_plats:
