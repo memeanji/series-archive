@@ -69,8 +69,9 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
 
     with sync_playwright() as p:
         br = p.chromium.launch(headless=headless)
+        # device_scale_factor=2 → 소재 스크린샷을 2배 해상도로(이미지 광고 화질 개선)
         ctx = br.new_context(locale="ko-KR", user_agent=UA,
-                             viewport={"width": 1440, "height": 1100})
+                             viewport={"width": 1440, "height": 1100}, device_scale_factor=2)
         page = ctx.new_page()
         try:
             page.goto(f"https://adstransparency.google.com/?region={region}",
@@ -175,6 +176,10 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
                     adrow["ad_format"] = "video"
                     adrow["media_type"] = "video"
                     adrow["raw_data"]["youtube_id"] = vid
+                    # 썸네일을 유튜브 고화질로 교체(스크린샷 깨짐 방지)
+                    adrow["thumbnail_url"] = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
+                    adrow["preview_url"] = adrow["thumbnail_url"]
+                    adrow["local_thumbnail_path"] = ""
                     log["youtube_linked"] = log.get("youtube_linked", 0) + 1
                     # 구글 영상광고=유튜브 영상 → 유튜브 공개 지표(조회수/좋아요/댓글) 수집
                     try:
@@ -201,10 +206,29 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
 
 
 def _scan_youtube(page) -> str:
+    """현재 대안에서 youtube 영상 ID 탐지: 중첩 frame(embed) → 앵커 → 페이지 HTML 순."""
+    # 1) 중첩 frame의 embed
     for f in page.frames:
         m = re.search(r"youtube\.com/embed/([A-Za-z0-9_-]{11})", f.url or "")
         if m:
             return m.group(1)
+    # 2) 앵커/HTML의 watch·embed·youtu.be (Visit advertiser 등으로 붙는 경우)
+    try:
+        hrefs = page.eval_on_selector_all(
+            'a[href*="youtu"]', 'els=>els.map(e=>e.href)')
+    except Exception:  # noqa: BLE001
+        hrefs = []
+    for h in hrefs:
+        m = re.search(r"(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})", h or "")
+        if m:
+            return m.group(1)
+    try:
+        html = page.content()
+        m = re.search(r"(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})", html)
+        if m:
+            return m.group(1)
+    except Exception:  # noqa: BLE001
+        pass
     return ""
 
 
