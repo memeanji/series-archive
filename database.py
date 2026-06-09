@@ -792,6 +792,9 @@ def move_social_brand(social_id: str, new_brand: str) -> None:
 
 # ── 매칭 ─────────────────────────────────────────────────
 def compute_matches(threshold: float = 30.0) -> int:
+    """광고↔소셜 영상 매칭. 브랜드명만 같은 건 '같은 광고'가 아니므로 제외하고,
+    카피/랜딩 토큰이 영상 캡션과 실제로 일치(창작물 수준 확인)될 때만 연결한다.
+    → 확인 안 되는 '원본 영상 보기' 링크가 붙지 않는다."""
     import services.matching as M
     conn = get_conn()
     ads = [dict(r) for r in conn.execute("SELECT * FROM ad_library_ads").fetchall()]
@@ -804,7 +807,12 @@ def compute_matches(threshold: float = 30.0) -> int:
     for ad in ads:
         for s in by_brand.get(ad.get("brand_name"), []):
             r = M.match(ad, s)
-            if r["match_score"] >= threshold:
+            # 창작물 수준 확인: 랜딩 상품토큰이 캡션에 있거나(url_sim≈1) 카피가 상당히 유사할 때만.
+            # 브랜드명만 일치(copy/url 0)하는 매칭은 버린다 → 엉뚱한 유튜브 연결 방지.
+            confirmed = r["brand_match"] and (r["url_sim"] >= 0.6
+                                              or r["copy_sim"] >= 0.5
+                                              or r["media_sim"] >= 0.5)
+            if confirmed and r["match_score"] >= threshold:
                 conn.execute(
                     "INSERT OR REPLACE INTO ad_social_matches"
                     "(ad_id,social_id,match_score,brand_match,copy_sim,url_sim,media_sim,created_at)"
