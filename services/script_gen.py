@@ -62,37 +62,50 @@ def gemini_model() -> str:
     return config.secret("GEMINI_MODEL", "") or "gemini-2.5-flash"
 
 
-def _gemini(parts: list, retries: int = 5) -> str:
-    """Gemini 호출. 503(과부하)/429(무료티어 한도)는 점증 백오프로 재시도. 실패 시 '' (앱 멈춤 방지).
-    과부하 원인: ① Google 서버 503(2.5-flash 수요 급증) ② 무료 티어 분당 RPM/TPM 한도 초과."""
+def _gemini(parts: list, retries: int = 3) -> str:
+    """Gemini 호출. 과부하(503)/한도(429) 대응:
+    ① 토큰을 줄여(저해상도 미디어) TPM 압박·비용 완화 ② 점증 백오프 재시도
+    ③ 그래도 과부하면 덜 붐비는 대체 모델로 폴백. 실패 시 '' (앱 멈춤 방지)."""
     import time
 
     import requests
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{gemini_model()}:generateContent?key={gemini_key()}")
+    key = gemini_key()
+    # 설정 모델 → 대체 모델 순서(2.5-flash 과부하 시 2.0-flash/flash-lite로)
+    models = []
+    for m in (gemini_model(), "gemini-2.0-flash", "gemini-2.5-flash-lite"):
+        if m and m not in models:
+            models.append(m)
     body = {
         "contents": [{"parts": parts}],
-        # 2.5-flash는 thinking이 출력 토큰을 소진해 본문이 빌 수 있음 → thinking 끄고 출력 상향
-        "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.2,
-                             "thinkingConfig": {"thinkingBudget": 0}},
+        "generationConfig": {
+            "maxOutputTokens": 8192, "temperature": 0.2,
+            "thinkingConfig": {"thinkingBudget": 0},   # thinking 끄기(빈 응답·비용 방지)
+            "mediaResolution": "MEDIA_RESOLUTION_LOW",  # 영상 토큰 대폭 절감 → 한도·비용↓
+        },
     }
-    for attempt in range(retries + 1):
-        try:
-            r = requests.post(url, json=body, timeout=180)
-            j = r.json()
-            if "error" in j:
-                code = j["error"].get("code")
-                if code in (503, 429, 500) and attempt < retries:
-                    time.sleep(min(3 * (attempt + 1), 20))   # 3,6,9,12,15초 백오프
+    for model in models:
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{model}:generateContent?key={key}")
+        for attempt in range(retries + 1):
+            try:
+                r = requests.post(url, json=body, timeout=180)
+                j = r.json()
+                if "error" in j:
+                    code = j["error"].get("code")
+                    if code in (503, 429, 500) and attempt < retries:
+                        time.sleep(min(3 * (attempt + 1), 15))
+                        continue
+                    break   # 이 모델 포기 → 다음 대체 모델
+                cand = (j.get("candidates") or [{}])[0]
+                txt = " ".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
+                if txt:
+                    return txt
+                break   # 빈 응답 → 다음 모델
+            except Exception:  # noqa: BLE001
+                if attempt < retries:
+                    time.sleep(2 * (attempt + 1))
                     continue
-                return ""
-            cand = (j.get("candidates") or [{}])[0]
-            return " ".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
-        except Exception:  # noqa: BLE001
-            if attempt < retries:
-                time.sleep(2 * (attempt + 1))
-                continue
-            return ""
+                break
     return ""
 
 

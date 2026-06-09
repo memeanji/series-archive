@@ -342,7 +342,7 @@ def render_sidebar(counts: list, total: int) -> str:
 # ════════════════════════════════════════════════════════════
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
-    c = st.columns([1.1, 1, 1, 1.7, 1, 0.7])
+    c = st.columns([1.1, 1, 1, 1.55, 1, 0.8])
 
     grade = c[0].selectbox("등급 ⓘ", ["전체", "S급", "A급 이상", "B급 이상", "C급 이상"],
                            index=0, disabled=not has_social, key="f_grade",
@@ -362,8 +362,8 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                            "게재기간 긴순", "게재기간 짧은순", "저장 많은순"],
                           index=(0 if has_social else 2), key="f_sort")
     period = c[4].selectbox("기간(게재 시작 기준)", ["전체", "7일", "30일", "90일"], key="f_period")
-    # 다른 위젯은 라벨 아래에 입력칸이 있으므로, 버튼도 라벨 높이만큼 내려 정렬
-    c[5].markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+    # 다른 위젯은 라벨 아래에 입력칸이 있으므로, 버튼도 라벨 높이만큼 내려 입력칸과 수평 정렬
+    c[5].markdown("<div style='height:2.05rem'></div>", unsafe_allow_html=True)
     if c[5].button("초기화", use_container_width=True, help="필터 초기화"):
         for k in ("f_grade", "f_media", "f_status", "f_sort", "f_period"):
             st.session_state.pop(k, None)
