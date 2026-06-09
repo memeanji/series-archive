@@ -107,11 +107,13 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     );
     CREATE TABLE IF NOT EXISTS youtube_ad_candidates (
         video_id TEXT PRIMARY KEY, brand_name TEXT, query TEXT,
+        advertiser_legal_name TEXT, source_account_name TEXT,
         title TEXT, description TEXT, channel_title TEXT,
         duration_sec INTEGER, published_at TEXT, has_caption INTEGER,
         thumbnail_url TEXT, source_url TEXT,
         views INTEGER, likes INTEGER, comments INTEGER,
-        matching_score REAL, classification TEXT, signals TEXT,
+        matching_score REAL, matching_confidence TEXT, match_status TEXT,
+        matched_by TEXT, classification TEXT, signals TEXT,
         matched_ad_id TEXT, collected_at TEXT
     );
     CREATE TABLE IF NOT EXISTS users (
@@ -156,6 +158,11 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("review_status", "TEXT DEFAULT 'needs_review'")):
         if c not in scols:
             conn.execute(f"ALTER TABLE social_videos ADD COLUMN {c} {t}")
+    yacols = [r[1] for r in conn.execute("PRAGMA table_info(youtube_ad_candidates)").fetchall()]
+    for c, t in (("advertiser_legal_name", "TEXT"), ("source_account_name", "TEXT"),
+                 ("matching_confidence", "TEXT"), ("match_status", "TEXT"), ("matched_by", "TEXT")):
+        if c not in yacols:
+            conn.execute(f"ALTER TABLE youtube_ad_candidates ADD COLUMN {c} {t}")
     conn.commit()
 
     # 계정 동기화(secrets.toml 단일 소스)
@@ -903,18 +910,25 @@ def ingest_youtube_candidates(rows: list[dict]) -> int:
         vid = r.get("video_id")
         if not vid:
             continue
+        mb = r.get("matched_by")
+        mb = _json.dumps(mb, ensure_ascii=False) if isinstance(mb, (list, dict)) else (mb or "[]")
+        status = r.get("match_status") or r.get("classification")
         conn.execute(
             "INSERT OR REPLACE INTO youtube_ad_candidates"
-            "(video_id,brand_name,query,title,description,channel_title,duration_sec,"
-            "published_at,has_caption,thumbnail_url,source_url,views,likes,comments,"
-            "matching_score,classification,signals,matched_ad_id,collected_at)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (vid, r.get("brand_name"), r.get("query"), r.get("title"), r.get("description"),
-             r.get("channel_title"), int(r.get("duration_sec") or 0), r.get("published_at"),
+            "(video_id,brand_name,query,advertiser_legal_name,source_account_name,"
+            "title,description,channel_title,duration_sec,published_at,has_caption,"
+            "thumbnail_url,source_url,views,likes,comments,matching_score,"
+            "matching_confidence,match_status,matched_by,classification,signals,"
+            "matched_ad_id,collected_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (vid, r.get("brand_name"), r.get("query"), r.get("advertiser_legal_name"),
+             r.get("source_account_name") or r.get("channel_title"),
+             r.get("title"), r.get("description"), r.get("channel_title"),
+             int(r.get("duration_sec") or 0), r.get("published_at"),
              int(r.get("has_caption") or 0), r.get("thumbnail_url"), r.get("source_url"),
              int(r.get("views") or 0), int(r.get("likes") or 0), int(r.get("comments") or 0),
-             float(r.get("matching_score") or 0), r.get("classification"),
-             _json.dumps(r.get("signals") or {}, ensure_ascii=False),
+             float(r.get("matching_score") or 0), r.get("matching_confidence"), status, mb,
+             status, _json.dumps(r.get("signals") or {}, ensure_ascii=False),
              r.get("matched_ad_id") or "", _now()))
         n += 1
     conn.commit()
@@ -923,12 +937,13 @@ def ingest_youtube_candidates(rows: list[dict]) -> int:
 
 
 def get_youtube_candidates(brand_name: str = "", classification: str = "") -> list[dict]:
-    """YouTube 광고 매칭 후보 조회(브랜드/분류 필터). 점수 내림차순."""
+    """YouTube 광고 매칭 후보 조회(브랜드/상태 필터). 점수 내림차순.
+    classification 인자는 match_status 값(youtube_ad_matched/.../not_matched)."""
     w, p = ["1=1"], []
     if brand_name and brand_name != "전체":
         w.append("brand_name=?"); p.append(brand_name)
     if classification:
-        w.append("classification=?"); p.append(classification)
+        w.append("COALESCE(match_status,classification)=?"); p.append(classification)
     conn = get_conn()
     rows = [dict(r) for r in conn.execute(
         f"SELECT * FROM youtube_ad_candidates WHERE {' AND '.join(w)} "
@@ -938,10 +953,11 @@ def get_youtube_candidates(brand_name: str = "", classification: str = "") -> li
 
 
 def youtube_candidate_counts() -> dict:
-    """분류별 후보 개수."""
+    """상태별 후보 개수(match_status 기준)."""
     conn = get_conn()
     rows = conn.execute(
-        "SELECT classification, COUNT(*) n FROM youtube_ad_candidates GROUP BY classification"
+        "SELECT COALESCE(match_status,classification) s, COUNT(*) n "
+        "FROM youtube_ad_candidates GROUP BY s"
     ).fetchall()
     conn.close()
     return {r[0]: r[1] for r in rows}

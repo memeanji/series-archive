@@ -63,20 +63,23 @@ def match_brand(brand: str) -> dict:
         return {"matched": 0, "candidate": 0, "ppl": 0}
 
     vids = YT.fetch_videos_detailed(ids)
-    rows, tally = [], {"youtube_ad_matched": 0, "youtube_ad_candidate": 0,
-                       "youtube_social_or_ppl": 0}
+    rows, tally = [], {"youtube_ad_matched": 0, "youtube_ad_candidate": 0, "not_matched": 0}
     for v in vids:
         v["thumb_hash"] = YM.ahash(v.get("thumbnail_url"))
         sc = YM.score(ctx, v)
-        tally[sc["classification"]] = tally.get(sc["classification"], 0) + 1
+        tally[sc["match_status"]] = tally.get(sc["match_status"], 0) + 1
         rows.append({**v, "brand_name": brand, "query": queries[0],
+                     "advertiser_legal_name": ctx.get("advertiser", ""),
+                     "source_account_name": v.get("channel_title", ""),
                      "matching_score": sc["matching_score"],
-                     "classification": sc["classification"], "signals": sc["signals"]})
+                     "matching_confidence": sc["matching_confidence"],
+                     "match_status": sc["match_status"], "matched_by": sc["matched_by"],
+                     "classification": sc["match_status"], "signals": sc["signals"]})
     database.ingest_youtube_candidates(rows)
-    print(f"  → 매칭 {tally['youtube_ad_matched']} · 후보 {tally['youtube_ad_candidate']} "
-          f"· 소셜/PPL {tally['youtube_social_or_ppl']}")
+    print(f"  → 광고확정 {tally['youtube_ad_matched']} · 후보 {tally['youtube_ad_candidate']} "
+          f"· 미매칭 {tally['not_matched']}")
     return {"matched": tally["youtube_ad_matched"], "candidate": tally["youtube_ad_candidate"],
-            "ppl": tally["youtube_social_or_ppl"]}
+            "ppl": tally["not_matched"]}
 
 
 def main() -> None:

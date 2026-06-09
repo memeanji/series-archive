@@ -849,8 +849,10 @@ def render_social_grid(vids: list[dict]) -> None:
 YT_CLS = {
     "youtube_ad_matched": ("광고 확정", S.PRIMARY),
     "youtube_ad_candidate": ("광고 후보", "#F59E0B"),
-    "youtube_social_or_ppl": ("소셜·PPL", S.SUB),
+    "not_matched": ("미매칭", S.SUB),
+    "youtube_social_or_ppl": ("미매칭", S.SUB),   # 구버전 호환
 }
+YT_CONF = {"high": "확신 높음", "medium": "검토 필요", "low": "약함", "none": "근거 부족"}
 
 
 def _run_yt_match(brand: str) -> None:
@@ -886,34 +888,27 @@ def _run_yt_match(brand: str) -> None:
 
 def _yt_match_card(c: dict) -> None:
     import json as _json
-    label, color = YT_CLS.get(c.get("classification"), ("?", S.SUB))
+    status = c.get("match_status") or c.get("classification")
+    label, color = YT_CLS.get(status, ("?", S.SUB))
+    conf = YT_CONF.get(c.get("matching_confidence") or "", "")
     th = c.get("thumbnail_url") or ""
     dur = int(c.get("duration_sec") or 0)
     durtxt = f"{dur//60}:{dur%60:02d}" if dur else "-"
     cap = "· 자막" if c.get("has_caption") else ""
-    sg = {}
     try:
-        sg = _json.loads(c.get("signals") or "{}")
+        why = _json.loads(c.get("matched_by") or "[]")
     except Exception:  # noqa: BLE001
-        pass
-    why = []
-    if sg.get("landing_hit"):
-        why.append("랜딩일치")
-    if sg.get("thumb_sim") is not None and sg["thumb_sim"] >= 0.7:
-        why.append(f"썸네일{int(sg['thumb_sim']*100)}%")
-    if (sg.get("copy_sim") or 0) >= 0.3:
-        why.append(f"문구{int(sg['copy_sim']*100)}%")
-    if sg.get("channel_official"):
-        why.append("공식채널")
+        why = []
+    chan = c.get("source_account_name") or c.get("channel_title") or "-"
     with st.container(border=True):
         if th:
             st.markdown(f"<div class='sa-thumb'><img src='{th}'/>"
                         f"<div class='sa-badge' style='background:{color}'>{int(c.get('matching_score') or 0)}</div>"
                         f"<div class='sa-media'>{durtxt}</div></div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-weight:700;font-size:12px;color:{color};margin-top:6px'>{label}</div>"
+        st.markdown(f"<div style='font-weight:700;font-size:12px;color:{color};margin-top:6px'>{label}"
+                    f"<span style='color:{S.SUB};font-weight:500'> · {conf}</span></div>"
                     f"<div class='sa-title'>{(c.get('title') or '(제목 없음)')[:46]}</div>"
-                    f"<div class='sa-copy'>{(c.get('channel_title') or '-')[:24]} · "
-                    f"{str(c.get('published_at') or '')[:10]} {cap}</div>",
+                    f"<div class='sa-copy'>채널 {chan[:22]} · {str(c.get('published_at') or '')[:10]} {cap}</div>",
                     unsafe_allow_html=True)
         if why:
             st.caption("근거: " + " · ".join(why))
@@ -932,18 +927,28 @@ def render_youtube_ad_matches(brand: str, candidates: list, counts: dict) -> Non
         _run_yt_match(brand)
         st.cache_data.clear()
         st.rerun()
-    run[1].caption("사이드바에서 브랜드를 고르면 그 브랜드만, '전체'면 구글 광고가 있는 브랜드 전부 매칭합니다.")
+    key_ok = YT.is_enabled()   # 키 '값'이 아니라 로딩 여부만 확인
+    run[1].caption(f"YouTube API 키: {'로딩됨 ✓' if key_ok else '미설정 ✗ (Cloud Secrets에 YOUTUBE_API_KEY 등록 필요)'}"
+                   "  ·  사이드바에서 브랜드를 고르면 그 브랜드만, '전체'면 구글 광고 보유 브랜드 전부 매칭")
 
     nm = counts.get("youtube_ad_matched", 0)
     nc = counts.get("youtube_ad_candidate", 0)
-    npp = counts.get("youtube_social_or_ppl", 0)
+    npp = counts.get("not_matched", 0) + counts.get("youtube_social_or_ppl", 0)
     pick = st.segmented_control(
-        "분류", [f"광고 확정 {nm}", f"광고 후보 {nc}", f"소셜·PPL {npp}", "전체"],
+        "상태", [f"광고 확정 {nm}", f"광고 후보 {nc}", f"미매칭 {npp}", "전체"],
         default=f"광고 확정 {nm}", label_visibility="collapsed", key="ytm_cls")
     cmap = {f"광고 확정 {nm}": "youtube_ad_matched", f"광고 후보 {nc}": "youtube_ad_candidate",
-            f"소셜·PPL {npp}": "youtube_social_or_ppl"}
+            f"미매칭 {npp}": "not_matched"}
     want = cmap.get(pick or "")
-    rows = [c for c in candidates if (not want or c.get("classification") == want)]
+
+    def _st(c):
+        return c.get("match_status") or c.get("classification")
+    if want == "not_matched":
+        rows = [c for c in candidates if _st(c) in ("not_matched", "youtube_social_or_ppl")]
+    elif want:
+        rows = [c for c in candidates if _st(c) == want]
+    else:
+        rows = candidates
 
     if not rows:
         if not candidates:

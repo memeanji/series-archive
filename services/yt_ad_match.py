@@ -166,66 +166,111 @@ def hash_sim(h1: int | None, h2: int | None) -> float | None:
     return 1.0 - dist / 64.0
 
 
-def score(ctx: dict, video: dict) -> dict:
-    """광고 컨텍스트(ctx) ↔ YouTube 후보(video) 유사도.
-    ctx: {advertiser, display_brand, copies[], landing_urls[], thumb_hashes[], last_shown}
-    video: {title, description, channel_title, thumb_hash, published_at, ...}
-    """
-    cands = [c for c in brand_candidates(ctx.get("advertiser", ""),
-                                         ctx.get("display_brand", "")) if c]
-    text = _norm(f"{video.get('title','')} {video.get('description','')}")
-    chan = _norm(video.get("channel_title", ""))
+def _strip_hashtags(text: str) -> str:
+    """해시태그 토큰(#xxx) 제거 — '해시태그만 일치'를 본문 일치와 구분하기 위함."""
+    return re.sub(r"#\S+", " ", text or "")
 
-    brand_hit = any(_norm(c) and _norm(c) in text for c in cands)
-    channel_official = any(_norm(c) and _norm(c) in chan for c in cands)
+
+def score(ctx: dict, video: dict) -> dict:
+    """광고 컨텍스트(ctx) ↔ YouTube 후보(video) 매칭.
+    ctx: {advertiser(법인명), display_brand(브랜드명), copies[], landing_urls[],
+          thumb_hashes[], last_shown}
+    video: {title, description, channel_title, thumb_hash, published_at, ...}
+
+    핵심: 브랜드명=계정명=법인명 가정 안 함. 채널명이 달라도 랜딩/상품명/문구/썸네일이
+    일치하면 광고 후보로 본다. 법인명/계정명 일치는 약한 보조 신호일 뿐.
+    """
+    # 상품/브랜드 토큰(실제 브랜드 중심) — 법인명은 별도 약한 신호로만
+    brand_terms = [ctx.get("display_brand", "")] + [domain_root(u) for u in (ctx.get("landing_urls") or [])]
+    brand_terms = [t for t in brand_terms if t]
+    legal_terms = [strip_legal(ctx.get("advertiser", "")), ctx.get("advertiser", "")]
+    legal_terms = [t for t in legal_terms if t]
 
     title_desc = f"{video.get('title','')} {video.get('description','')}"
-    copy_sim = max([_ratio(cp, title_desc) for cp in (ctx.get("copies") or [])] or [0.0])
+    clean = _norm(_strip_hashtags(title_desc))     # 해시태그 제거 본문
+    full = _norm(title_desc)
+    chan = _norm(video.get("channel_title", ""))
+    desc_full = _norm(video.get("description", ""))
 
-    desc = _norm(video.get("description", ""))
+    # 상품/브랜드명: 본문(해시태그 외) 일치 vs 해시태그만 일치 구분
+    product_in_body = any(_norm(t) in clean for t in brand_terms)
+    product_any = any(_norm(t) in full for t in brand_terms)
+    hashtag_only = product_any and not product_in_body
+    channel_hit = any(_norm(t) in chan for t in brand_terms + legal_terms)
+    legal_hit = any(_norm(t) in clean for t in legal_terms)
+
+    # 문구 유사도는 해시태그 제외 본문 기준(해시태그 속 브랜드명이 유사도를 부풀리지 않게)
+    clean_td = _strip_hashtags(title_desc)
+    copy_sim = max([_ratio(cp, clean_td) for cp in (ctx.get("copies") or [])] or [0.0])
+
     roots = [domain_root(u) for u in (ctx.get("landing_urls") or [])]
-    landing_hit = any(r and _norm(r) in desc for r in roots)
+    landing_hit = any(r and _norm(r) in desc_full for r in roots)
 
     sims = [hash_sim(h, video.get("thumb_hash")) for h in (ctx.get("thumb_hashes") or [])]
     sims = [s for s in sims if s is not None]
     thumb_sim = max(sims) if sims else None
 
-    # 게재일 ↔ 업로드일 근접(±60일 내면 보너스)
     date_prox = 0.0
     try:
         from datetime import date
-        ls = (ctx.get("last_shown") or "")[:10]
-        pu = (video.get("published_at") or "")[:10]
-        if ls and pu:
-            dl = date.fromisoformat(ls)
-            dp = date.fromisoformat(pu)
-            if abs((dl - dp).days) <= 60:
-                date_prox = 1.0
+        ls, pu = (ctx.get("last_shown") or "")[:10], (video.get("published_at") or "")[:10]
+        if ls and pu and abs((date.fromisoformat(ls) - date.fromisoformat(pu)).days) <= 60:
+            date_prox = 1.0
     except Exception:  # noqa: BLE001
         pass
 
-    ms = (20 * brand_hit + 15 * channel_official + 30 * copy_sim
-          + 20 * landing_hit + 15 * (thumb_sim or 0) + 5 * date_prox)
-    signals = {
-        "brand_hit": bool(brand_hit), "channel_official": bool(channel_official),
+    sg = {
+        "product_in_body": product_in_body, "hashtag_only": hashtag_only,
+        "channel_hit": channel_hit, "legal_hit": legal_hit,
         "copy_sim": round(copy_sim, 3), "landing_hit": bool(landing_hit),
         "thumb_sim": round(thumb_sim, 3) if thumb_sim is not None else None,
         "date_prox": bool(date_prox),
     }
+    conf, status = classify(sg)
+    matched_by = _matched_by(sg)
+    ms = (25 * landing_hit + 25 * product_in_body + 30 * copy_sim
+          + 20 * (thumb_sim or 0) + 10 * channel_hit + 5 * legal_hit + 5 * date_prox)
     return {"matching_score": round(min(ms, 100.0), 1),
-            "classification": classify(signals), "signals": signals}
+            "matching_confidence": conf, "match_status": status,
+            "matched_by": matched_by, "signals": sg,
+            "classification": status}   # classification = match_status(하위호환)
 
 
-def classify(sg: dict) -> str:
-    """3분류. 광고 확정은 '창작물 수준 연결'(썸네일/문구/랜딩)이 있을 때만."""
-    strong = (sg.get("landing_hit")
-              or (sg.get("copy_sim") or 0) >= 0.5
-              or (sg.get("thumb_sim") is not None and sg["thumb_sim"] >= 0.85))
-    medium = (sg.get("channel_official")
-              or (sg.get("copy_sim") or 0) >= 0.3
-              or (sg.get("thumb_sim") is not None and sg["thumb_sim"] >= 0.7))
-    if sg.get("brand_hit") and strong:
-        return "youtube_ad_matched"
-    if sg.get("brand_hit") and medium:
-        return "youtube_ad_candidate"
-    return "youtube_social_or_ppl"
+def _matched_by(sg: dict) -> list:
+    """매칭 근거 리스트(저장/표시용)."""
+    by = []
+    if sg.get("landing_hit"):
+        by.append("랜딩 URL")
+    if sg.get("product_in_body"):
+        by.append("상품/브랜드명")
+    if (sg.get("copy_sim") or 0) >= 0.3:
+        by.append("광고 문구")
+    if sg.get("thumb_sim") is not None and sg["thumb_sim"] >= 0.7:
+        by.append("썸네일")
+    if sg.get("channel_hit"):
+        by.append("채널명")
+    if sg.get("legal_hit"):
+        by.append("법인명")
+    if sg.get("hashtag_only"):
+        by.append("해시태그")
+    return by
+
+
+def classify(sg: dict) -> tuple:
+    """(matching_confidence, match_status) 반환.
+    - high  : 랜딩 URL 일치 OR (상품명 본문일치 + 썸네일/문구 강일치)        → youtube_ad_matched
+    - medium: 상품/브랜드명·문구 일부만 일치(수동 검토)                      → youtube_ad_candidate
+    - low   : 계정명/해시태그/법인명만 일치                                  → not_matched
+    - none  : 근거 부족                                                      → not_matched
+    """
+    copy_sim = sg.get("copy_sim") or 0
+    thumb = sg.get("thumb_sim")
+    strong_creative = (copy_sim >= 0.5) or (thumb is not None and thumb >= 0.85)
+    if sg.get("landing_hit") or (sg.get("product_in_body") and strong_creative) \
+            or (thumb is not None and thumb >= 0.9):
+        return "high", "youtube_ad_matched"
+    if sg.get("product_in_body") or copy_sim >= 0.3 or (thumb is not None and thumb >= 0.7):
+        return "medium", "youtube_ad_candidate"
+    if sg.get("hashtag_only") or sg.get("channel_hit") or sg.get("legal_hit"):
+        return "low", "not_matched"
+    return "none", "not_matched"
