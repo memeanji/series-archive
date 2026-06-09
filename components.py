@@ -328,7 +328,8 @@ def render_sidebar(counts: list, total: int) -> str:
         mark = "▸ " if b == sel else ""
         extra = f"  ·  📺{r['approved']}" if r["approved"] else ""
         tip = f"승인 {r['approved']} · 검토필요 {r['needs']} · 제외 {r['rejected']}"
-        if sb.button(f"{mark}{b}  ·  {r['ad']}{extra}", key=f"b_{b}", help=tip):
+        if sb.button(f"{mark}{'🟢' if r['live'] else '⚪'} {b}  ·  {r['ad']}{extra}",
+                     key=f"b_{b}", help=tip):
             st.session_state.sa_brand = b
             st.session_state.sa_page = 1
             st.rerun()
