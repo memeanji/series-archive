@@ -328,8 +328,7 @@ def render_sidebar(counts: list, total: int) -> str:
         mark = "▸ " if b == sel else ""
         extra = f"  ·  📺{r['approved']}" if r["approved"] else ""
         tip = f"승인 {r['approved']} · 검토필요 {r['needs']} · 제외 {r['rejected']}"
-        if sb.button(f"{mark}{'🟢' if r['live'] else '⚪'} {b}  ·  {r['ad']}{extra}",
-                     key=f"b_{b}", help=tip):
+        if sb.button(f"{mark}{b}  ·  {r['ad']}{extra}", key=f"b_{b}", help=tip):
             st.session_state.sa_brand = b
             st.session_state.sa_page = 1
             st.rerun()
@@ -457,8 +456,9 @@ def render_ad_card(ad: dict, idx: int) -> None:
         badge = (f"<div class='sa-badge' style='background:{S.grade_color(grade)};font-size:14px'>"
                  f"{grade}급</div>")
     elif int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
-        eng = (f"<span title='이 광고 영상의 YouTube 공개 지표'>👁 {_fmt(ad.get('yt_views'))} "
-               f"❤ {_fmt(ad.get('yt_likes'))} 💬 {_fmt(ad.get('yt_comments'))}</span>")
+        eng = (f"<span title='연결된 유튜브 원본 영상의 공개 지표(YouTube API) · 광고 성과 아님'>"
+               f"👁 {_fmt(ad.get('yt_views'))} ❤ {_fmt(ad.get('yt_likes'))} "
+               f"<span style='color:{S.SUB}'>· YT영상</span></span>")
         badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
     else:
         eng = f"<span style='color:{S.SUB}'>게재 {str(_g(ad,'started_at','-'))[:10] or '-'}</span>"
@@ -467,7 +467,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
         st.markdown(
             f"<div class='{thumb_cls}'>{inner}{badge}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}</div>"
-            f"<div class='sa-brand'>{PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}{ab_chip}</div>"
+            f"<div class='sa-brand'>{_g(ad,'brand_name','-')}{ab_chip}</div>"
             f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','')[:40]}</div>"
             f"<div class='sa-copy'>{_g(ad,'ad_copy_short','')[:60]}</div>"
             f"<div class='sa-meta'><span>{eng}</span>"
@@ -731,8 +731,7 @@ def _render_video_script(ad: dict) -> None:
 def render_ad_detail(ad: dict) -> None:
     aid = ad.get("id")
     plat = ad.get("platform", "")
-    st.markdown(f"### {PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}",
-                unsafe_allow_html=True)
+    st.markdown(f"### {_g(ad,'brand_name','-')}", unsafe_allow_html=True)
 
     left, right = st.columns([2, 3], gap="medium")
     # ── 좌: 영상/썸네일 + 버튼 ──
@@ -785,7 +784,8 @@ def render_ad_detail(ad: dict) -> None:
             html += "</div>"
             st.markdown(html, unsafe_allow_html=True)
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            st.caption("이 광고 영상의 YouTube 공개 지표")   # 광고 ID·수집일 캡션과 동일 스타일
+            # 출처/신뢰도 명확화: 메타 라이브러리 지표가 아니라 연결된 유튜브 원본 영상의 공개 지표
+            st.caption("출처: 연결된 유튜브 원본 영상의 공개 지표(YouTube API) · 광고 성과 지표 아님(참고용)")
         elif plat == "meta":
             st.caption("ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 반응 지표를 제공하지 않습니다.")
         elif plat == "google":
