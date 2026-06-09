@@ -248,8 +248,8 @@ def render_add_brand() -> None:
                                    extra={"google_advertiser_name": gadv or (picked[0] if picked else "")})
                 st.session_state.ab_saved = name
                 st.session_state.sa_brand = name
-                st.cache_data.clear()
-                st.success(f"'{name}' 저장됨 (키워드 {len(kws)}개)")
+                st.cache_data.clear()   # 캐시 비워서 사이드바에 즉시 반영
+                st.rerun()
 
         # Step 5: 수집 실행(버튼 클릭 시에만)
         saved = st.session_state.get("ab_saved")
