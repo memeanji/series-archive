@@ -223,7 +223,7 @@ def fetch_videos_detailed(video_ids: list[str], api_key: str = "") -> list[dict]
         out.append({
             "video_id": vid, "id": f"yt_{vid}",
             "title": sn.get("title", ""), "description": (sn.get("description", "") or "")[:2000],
-            "channel_title": sn.get("channelTitle", ""),
+            "channel_title": sn.get("channelTitle", ""), "channel_id": sn.get("channelId", ""),
             "duration_sec": _iso_duration_sec(cd.get("duration", "")),
             "has_caption": 1 if cd.get("caption") == "true" else 0,
             "published_at": (sn.get("publishedAt", "") or "")[:10],

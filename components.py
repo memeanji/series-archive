@@ -157,7 +157,7 @@ def render_header(ads=None) -> dict:
         cc[2].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB};margin-top:6px'>"
                        f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
-    tabs = ["전체", "Meta", "Google", "유튜브", "북마크"]
+    tabs = ["전체", "Meta", "Google", "북마크"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
     return {"search": search, "tab": tab}

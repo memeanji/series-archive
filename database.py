@@ -976,6 +976,48 @@ def get_youtube_candidates(brand_name: str = "", classification: str = "") -> li
     return rows
 
 
+def add_youtube_seed(brand_name: str, url: str) -> dict:
+    """사용자가 아는 YouTube 광고 URL을 seed로 등록(자동매칭 보정용).
+    video_id 추출 → API로 메타데이터 수집 → 브랜드 연결 → match_status=manual_seed_matched."""
+    import json as _json
+
+    import services.youtube as YT
+    vid = YT.extract_video_id(url)
+    if not vid:
+        return {"ok": False, "msg": "유효한 YouTube URL/영상 ID가 아닙니다."}
+    if not YT.is_enabled():
+        return {"ok": False, "msg": "YOUTUBE_API_KEY가 없어 메타데이터를 가져올 수 없습니다."}
+    vids = YT.fetch_videos_detailed([vid])
+    if not vids:
+        return {"ok": False, "msg": "영상 정보를 가져오지 못했습니다(비공개/삭제/쿼터)."}
+    v = vids[0]
+    br = get_brand(brand_name) or {}
+    row = {**v, "brand_name": brand_name, "query": "(seed)",
+           "advertiser_legal_name": (br.get("google_advertiser_name") or ""),
+           "source_account_name": v.get("channel_title", ""),
+           "matching_score": 100.0, "matching_confidence": "high",
+           "match_status": "manual_seed_matched",
+           "matched_by": _json.dumps(["수동 시드"], ensure_ascii=False),
+           "classification": "manual_seed_matched",
+           "signals": _json.dumps({"seed": True}, ensure_ascii=False)}
+    ingest_youtube_candidates([row])
+    return {"ok": True, "msg": f"시드 등록: {v.get('title','')[:30]} · 채널 {v.get('channel_title','')}",
+            "title": v.get("title", ""), "channel": v.get("channel_title", "")}
+
+
+def brand_seed_channels(brand_name: str) -> list:
+    """브랜드의 seed 영상 채널명 목록 — 이후 매칭에서 '광고 채널' 강신호로 사용."""
+    if not brand_name:
+        return []
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT DISTINCT channel_title FROM youtube_ad_candidates "
+        "WHERE brand_name=? AND match_status='manual_seed_matched' AND channel_title<>''",
+        (brand_name,)).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
 def youtube_candidate_counts() -> dict:
     """상태별 후보 개수(match_status 기준)."""
     conn = get_conn()

@@ -149,15 +149,49 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
                     "preview_url": thumb, "media_url": "",
                     "landing_url": "", "transparency_url": turl or "",
                     "original_ad_url": turl or "", "status": "live",
-                    "raw_data": {"creative_id": cid, "fmt": fmt},
+                    "raw_data": {"creative_id": cid, "fmt": fmt}, "_href": href,
+                    "_iframe": bool(info.get("hasIframe")),
                 })
                 log["kept"] += 1
+
+            # 구글 영상광고는 safeframe iframe(=유튜브)로 렌더돼 분류가 image로 잡힘.
+            # iframe 있는 소재의 상세를 열어 중첩 frame의 youtube embed ID를 추출 → 찾으면 video로 재분류.
+            dp = ctx.new_page()
+            for adrow in ads:
+                if not adrow.get("_iframe") or not adrow.get("_href"):
+                    continue
+                vid = _youtube_id_from_creative(dp, adrow["_href"])
+                if vid:
+                    adrow["video_url"] = f"https://www.youtube.com/watch?v={vid}"
+                    adrow["ad_format"] = "video"
+                    adrow["media_type"] = "video"
+                    adrow["raw_data"]["youtube_id"] = vid
+                    log["youtube_linked"] = log.get("youtube_linked", 0) + 1
+            dp.close()
+            for adrow in ads:
+                adrow.pop("_href", None)
+                adrow.pop("_iframe", None)
+
             if shot:
                 Path("data").mkdir(exist_ok=True)
                 page.screenshot(path=f"data/_google_{brand}.png")
         finally:
             br.close()
     return ads, log
+
+
+def _youtube_id_from_creative(page, url: str) -> str:
+    """구글 소재 상세 페이지를 열어 중첩 frame URL에서 youtube embed 영상 ID 추출."""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(5000)
+        for f in page.frames:
+            m = re.search(r"youtube\.com/embed/([A-Za-z0-9_-]{11})", f.url or "")
+            if m:
+                return m.group(1)
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
 
 
 def fetch_advertiser_names(brand: str, region: str = "KR", limit: int = 6) -> list[str]:

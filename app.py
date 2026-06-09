@@ -85,11 +85,6 @@ def main() -> None:
     C.render_sidebar(counts, total=sum(r["ad"] for r in counts))
 
     tab = header["tab"]
-    if tab == "유튜브":
-        brand_sel = st.session_state.get("sa_brand", "전체")
-        C.render_youtube_ad_matches(brand_sel, _yt_candidates(brand_sel, ""), _yt_counts())
-        _footer(t0)
-        return
 
     # ── 광고 탭(전체/Meta/Google) — SQL 페이지 로딩 ──
     tabkey = TAB_KEY.get(tab, "all")

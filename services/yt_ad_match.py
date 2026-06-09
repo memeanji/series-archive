@@ -198,6 +198,9 @@ def score(ctx: dict, video: dict) -> dict:
     hashtag_only = product_any and not product_in_body
     channel_hit = any(_norm(t) in chan for t in brand_terms + legal_terms)
     legal_hit = any(_norm(t) in clean for t in legal_terms)
+    # seed로 확인된 '광고 채널'과 같은 채널이면 강신호(브랜드명과 달라도 광고 채널일 수 있음)
+    seed_channels = [_norm(c) for c in (ctx.get("seed_channels") or []) if c]
+    seed_channel_hit = bool(chan) and chan in seed_channels
 
     # 문구 유사도는 해시태그 제외 본문 기준(해시태그 속 브랜드명이 유사도를 부풀리지 않게)
     clean_td = _strip_hashtags(title_desc)
@@ -251,6 +254,8 @@ def _matched_by(sg: dict) -> list:
         by.append("채널명")
     if sg.get("legal_hit"):
         by.append("법인명")
+    if sg.get("seed_channel_hit"):
+        by.append("시드 채널")
     if sg.get("hashtag_only"):
         by.append("해시태그")
     return by
@@ -258,18 +263,22 @@ def _matched_by(sg: dict) -> list:
 
 def classify(sg: dict) -> tuple:
     """(matching_confidence, match_status) 반환.
-    - high  : 랜딩 URL 일치 OR (상품명 본문일치 + 썸네일/문구 강일치)        → youtube_ad_matched
-    - medium: 상품/브랜드명·문구 일부만 일치(수동 검토)                      → youtube_ad_candidate
+    - high  : 랜딩 URL 일치 OR (상품명 본문일치 + 썸네일/문구 강일치)
+              OR (seed 광고채널 + 창작물 신호)                              → youtube_ad_matched
+    - medium: 상품/브랜드명·문구 일부 일치, 또는 seed 광고채널               → youtube_ad_candidate
     - low   : 계정명/해시태그/법인명만 일치                                  → not_matched
     - none  : 근거 부족                                                      → not_matched
     """
     copy_sim = sg.get("copy_sim") or 0
     thumb = sg.get("thumb_sim")
     strong_creative = (copy_sim >= 0.5) or (thumb is not None and thumb >= 0.85)
+    seed = sg.get("seed_channel_hit")
+    creative_any = (sg.get("landing_hit") or sg.get("product_in_body")
+                    or copy_sim >= 0.3 or (thumb is not None and thumb >= 0.7))
     if sg.get("landing_hit") or (sg.get("product_in_body") and strong_creative) \
-            or (thumb is not None and thumb >= 0.9):
+            or (thumb is not None and thumb >= 0.9) or (seed and creative_any):
         return "high", "youtube_ad_matched"
-    if sg.get("product_in_body") or copy_sim >= 0.3 or (thumb is not None and thumb >= 0.7):
+    if seed or sg.get("product_in_body") or copy_sim >= 0.3 or (thumb is not None and thumb >= 0.7):
         return "medium", "youtube_ad_candidate"
     if sg.get("hashtag_only") or sg.get("channel_hit") or sg.get("legal_hit"):
         return "low", "not_matched"
