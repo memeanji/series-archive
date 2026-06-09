@@ -726,8 +726,16 @@ def render_ad_detail(ad: dict) -> None:
     # ── 좌: 영상/썸네일 + 버튼 ──
     with left:
         th = get_display_thumbnail(ad)
-        if ad.get("video_url"):
-            st.video(ad["video_url"])
+        vurl = ad.get("video_url") or ""
+        yt_vid = YT.extract_video_id(vurl) if "youtu" in vurl else None
+        if yt_vid:
+            # 유튜브 영상(구글 투명성센터 영상광고 등)은 임베드로 직접 재생
+            stc.html(f"<iframe width='100%' height='420' src='{YT.embed_url(yt_vid)}' "
+                     f"frameborder='0' style='border-radius:10px' allowfullscreen "
+                     f"allow='accelerometer;autoplay;clipboard-write;encrypted-media;"
+                     f"gyroscope;picture-in-picture'></iframe>", height=430)
+        elif vurl:
+            st.video(vurl)
         elif th["src"]:
             st.markdown(f"<img src='{th['src']}' style='width:100%;border-radius:10px'/>",
                         unsafe_allow_html=True)
