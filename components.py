@@ -876,6 +876,106 @@ def render_social_grid(vids: list[dict]) -> None:
                 _social_card(v)
 
 
+YT_CLS = {
+    "youtube_ad_matched": ("🎯 광고 확정", S.PRIMARY),
+    "youtube_ad_candidate": ("🟡 광고 후보", "#F59E0B"),
+    "youtube_social_or_ppl": ("💬 소셜·PPL", S.SUB),
+}
+
+
+def _run_yt_match(brand: str) -> None:
+    target = brand if brand and brand != "전체" else ""
+    args = [sys.executable, str(ROOT / "jobs" / "match_youtube_ads.py")]
+    if target:
+        args.append(target)
+    label = f"'{target}'" if target else "구글 광고 보유 브랜드 전체"
+    with st.spinner(f"{label} YouTube 광고 매칭 중… (검색→유사도→분류, 1~3분)"):
+        try:
+            r = subprocess.run(args, capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+            tail = [ln for ln in (r.stdout or "").splitlines() if "완료" in ln] or ["완료"]
+            st.success(f"매칭 완료 — {tail[-1]}")
+        except subprocess.TimeoutExpired:
+            st.error("시간 초과")
+        except Exception as e:  # noqa: BLE001
+            st.error(f"실패: {e}")
+
+
+def _yt_match_card(c: dict) -> None:
+    import json as _json
+    label, color = YT_CLS.get(c.get("classification"), ("?", S.SUB))
+    th = c.get("thumbnail_url") or ""
+    dur = int(c.get("duration_sec") or 0)
+    durtxt = f"{dur//60}:{dur%60:02d}" if dur else "-"
+    cap = "📝자막" if c.get("has_caption") else ""
+    sg = {}
+    try:
+        sg = _json.loads(c.get("signals") or "{}")
+    except Exception:  # noqa: BLE001
+        pass
+    why = []
+    if sg.get("landing_hit"):
+        why.append("랜딩일치")
+    if sg.get("thumb_sim") is not None and sg["thumb_sim"] >= 0.7:
+        why.append(f"썸네일{int(sg['thumb_sim']*100)}%")
+    if (sg.get("copy_sim") or 0) >= 0.3:
+        why.append(f"문구{int(sg['copy_sim']*100)}%")
+    if sg.get("channel_official"):
+        why.append("공식채널")
+    with st.container(border=True):
+        if th:
+            st.markdown(f"<div class='sa-thumb'><img src='{th}'/>"
+                        f"<div class='sa-badge' style='background:{color}'>{int(c.get('matching_score') or 0)}</div>"
+                        f"<div class='sa-media'>▶ {durtxt}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-weight:700;font-size:12px;color:{color};margin-top:6px'>{label}</div>"
+                    f"<div class='sa-title'>{(c.get('title') or '(제목 없음)')[:46]}</div>"
+                    f"<div class='sa-copy'>📺 {(c.get('channel_title') or '-')[:24]} · "
+                    f"{str(c.get('published_at') or '')[:10]} {cap}</div>",
+                    unsafe_allow_html=True)
+        if why:
+            st.caption("근거: " + " · ".join(why))
+        if is_valid_external_url(c.get("source_url")):
+            st.link_button("▶ YouTube에서 보기 ↗", c["source_url"], use_container_width=True)
+
+
+def render_youtube_ad_matches(brand: str, candidates: list, counts: dict) -> None:
+    """YouTube '광고' 매칭 뷰 — 광고 데이터 기반 후보를 3분류해 표시(전체 수집과 분리)."""
+    st.markdown(f"**🎯 YouTube 광고 매칭** <span style='font-size:12px;color:{S.SUB}'>"
+                f"· 광고주/문구/썸네일/랜딩 기준으로 광고 영상만 가려냄 (제품명·해시태그만 일치는 광고로 보지 않음)</span>",
+                unsafe_allow_html=True)
+    run = st.columns([1.4, 3])
+    btxt = brand if brand and brand != "전체" else "구글 광고 보유 브랜드 전체"
+    if run[0].button(f"🔎 '{btxt}' 매칭 실행", use_container_width=True, type="primary"):
+        _run_yt_match(brand)
+        st.cache_data.clear()
+        st.rerun()
+    run[1].caption("브랜드를 사이드바에서 고르면 그 브랜드만, '전체'면 구글 광고가 있는 브랜드 전부 매칭합니다.")
+
+    nm = counts.get("youtube_ad_matched", 0)
+    nc = counts.get("youtube_ad_candidate", 0)
+    npp = counts.get("youtube_social_or_ppl", 0)
+    pick = st.segmented_control(
+        "분류", [f"🎯 광고 확정 {nm}", f"🟡 후보 {nc}", f"💬 소셜·PPL {npp}", "전체"],
+        default=f"🎯 광고 확정 {nm}", label_visibility="collapsed", key="ytm_cls")
+    cmap = {f"🎯 광고 확정 {nm}": "youtube_ad_matched", f"🟡 후보 {nc}": "youtube_ad_candidate",
+            f"💬 소셜·PPL {npp}": "youtube_social_or_ppl"}
+    want = cmap.get(pick or "")
+    rows = [c for c in candidates if (not want or c.get("classification") == want)]
+
+    if not rows:
+        if not candidates:
+            render_empty_state("아직 매칭 결과가 없습니다 — 위 '매칭 실행'을 눌러주세요")
+            if not YT.is_enabled():
+                st.info("YouTube 광고 매칭은 **YOUTUBE_API_KEY**가 필요합니다.")
+        else:
+            render_empty_state("이 분류에 해당하는 영상이 없습니다")
+        return
+    for i in range(0, len(rows), 4):
+        cols = st.columns(4)
+        for col, c in zip(cols, rows[i:i + 4]):
+            with col:
+                _yt_match_card(c)
+
+
 @st.dialog("소셜 원본 영상", width="large")
 def render_social_detail(v: dict) -> None:
     st.info("아래 지표는 **광고 성과가 아니라 원본 소셜 영상(YouTube/TikTok/IG) 반응 기준**입니다.")

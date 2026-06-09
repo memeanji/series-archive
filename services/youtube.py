@@ -187,6 +187,53 @@ def _parse_item(it: dict) -> dict | None:
     }
 
 
+def _iso_duration_sec(iso: str) -> int:
+    """PT#H#M#S → 초. 파싱 실패 0."""
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso or "")
+    if not m:
+        return 0
+    h, mi, s = (int(x) if x else 0 for x in m.groups())
+    return h * 3600 + mi * 60 + s
+
+
+def fetch_videos_detailed(video_ids: list[str], api_key: str = "") -> list[dict]:
+    """videos.list (snippet,contentDetails,statistics) — 제목·설명·채널·길이·업로드일·자막여부·썸네일.
+    YouTube 광고 매칭 후보 메타데이터 수집용. 1유닛/호출."""
+    key = api_key or get_api_key()
+    ids = [v for v in video_ids if v][:50]
+    if not key or not ids:
+        return []
+    import requests
+    try:
+        r = requests.get("https://www.googleapis.com/youtube/v3/videos",
+                         params={"part": "snippet,contentDetails,statistics",
+                                 "id": ",".join(ids), "key": key}, timeout=30)
+        items = r.json().get("items", [])
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for it in items:
+        vid = it.get("id")
+        sn = it.get("snippet", {})
+        cd = it.get("contentDetails", {})
+        stt = it.get("statistics", {})
+        thumbs = sn.get("thumbnails", {})
+        thumb = (thumbs.get("high") or thumbs.get("medium")
+                 or thumbs.get("default") or {}).get("url", "")
+        out.append({
+            "video_id": vid, "id": f"yt_{vid}",
+            "title": sn.get("title", ""), "description": (sn.get("description", "") or "")[:2000],
+            "channel_title": sn.get("channelTitle", ""),
+            "duration_sec": _iso_duration_sec(cd.get("duration", "")),
+            "has_caption": 1 if cd.get("caption") == "true" else 0,
+            "published_at": (sn.get("publishedAt", "") or "")[:10],
+            "thumbnail_url": thumb, "source_url": watch_url(vid), "video_url": watch_url(vid),
+            "views": int(stt.get("viewCount") or 0), "likes": int(stt.get("likeCount") or 0),
+            "comments": int(stt.get("commentCount") or 0),
+        })
+    return out
+
+
 def fetch_video(video_id: str, api_key: str = "") -> dict | None:
     """videos.list 로 단일 영상 메타+통계 조회. 실패시 None."""
     import requests

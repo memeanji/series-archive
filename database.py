@@ -105,6 +105,15 @@ def init_db(seed_users: Optional[dict] = None) -> None:
         media_sim REAL, created_at TEXT,
         UNIQUE(ad_id, social_id)
     );
+    CREATE TABLE IF NOT EXISTS youtube_ad_candidates (
+        video_id TEXT PRIMARY KEY, brand_name TEXT, query TEXT,
+        title TEXT, description TEXT, channel_title TEXT,
+        duration_sec INTEGER, published_at TEXT, has_caption INTEGER,
+        thumbnail_url TEXT, source_url TEXT,
+        views INTEGER, likes INTEGER, comments INTEGER,
+        matching_score REAL, classification TEXT, signals TEXT,
+        matched_ad_id TEXT, collected_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE,
         password_hash TEXT, role TEXT DEFAULT 'member', created_at TEXT
@@ -883,6 +892,59 @@ def social_count() -> int:
     n = conn.execute("SELECT COUNT(*) FROM social_videos").fetchone()[0]
     conn.close()
     return n
+
+
+def ingest_youtube_candidates(rows: list[dict]) -> int:
+    """YouTube 광고 매칭 후보 적재(video_id 기준 upsert)."""
+    import json as _json
+    conn = get_conn()
+    n = 0
+    for r in rows:
+        vid = r.get("video_id")
+        if not vid:
+            continue
+        conn.execute(
+            "INSERT OR REPLACE INTO youtube_ad_candidates"
+            "(video_id,brand_name,query,title,description,channel_title,duration_sec,"
+            "published_at,has_caption,thumbnail_url,source_url,views,likes,comments,"
+            "matching_score,classification,signals,matched_ad_id,collected_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (vid, r.get("brand_name"), r.get("query"), r.get("title"), r.get("description"),
+             r.get("channel_title"), int(r.get("duration_sec") or 0), r.get("published_at"),
+             int(r.get("has_caption") or 0), r.get("thumbnail_url"), r.get("source_url"),
+             int(r.get("views") or 0), int(r.get("likes") or 0), int(r.get("comments") or 0),
+             float(r.get("matching_score") or 0), r.get("classification"),
+             _json.dumps(r.get("signals") or {}, ensure_ascii=False),
+             r.get("matched_ad_id") or "", _now()))
+        n += 1
+    conn.commit()
+    conn.close()
+    return n
+
+
+def get_youtube_candidates(brand_name: str = "", classification: str = "") -> list[dict]:
+    """YouTube 광고 매칭 후보 조회(브랜드/분류 필터). 점수 내림차순."""
+    w, p = ["1=1"], []
+    if brand_name and brand_name != "전체":
+        w.append("brand_name=?"); p.append(brand_name)
+    if classification:
+        w.append("classification=?"); p.append(classification)
+    conn = get_conn()
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT * FROM youtube_ad_candidates WHERE {' AND '.join(w)} "
+        "ORDER BY matching_score DESC, views DESC", p).fetchall()]
+    conn.close()
+    return rows
+
+
+def youtube_candidate_counts() -> dict:
+    """분류별 후보 개수."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT classification, COUNT(*) n FROM youtube_ad_candidates GROUP BY classification"
+    ).fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
 
 
 def brand_youtube_summary(brand_name: str) -> dict:
