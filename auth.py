@@ -80,17 +80,28 @@ def login() -> None:
       /* 가운데 로그인 카드 1개 */
       div[data-testid="stForm"] {
         background:#FFFFFF; border:1px solid #E7F3EC !important;
-        border-radius:34px; padding:48px 38px 42px;
+        border-radius:34px; padding:36px 40px;
         box-shadow:0 20px 50px rgba(16,24,40,.12);
-        width:100%; max-width:430px; margin:0 auto; box-sizing:border-box;
+        width:100%; max-width:440px; margin:0 auto; box-sizing:border-box;
       }
-      div[data-testid="stForm"] label { font-weight:700; color:#334155; font-size:13px; margin-bottom:2px; }
-      /* 입력칸: 동글동글 + 아래 안 잘리게 */
-      .stTextInput input { border-radius:26px !important; height:54px; border:1px solid #D1FAE5;
-        background:#F6FFFA; font-size:14.5px; padding:0 18px; line-height:54px; }
-      div[data-testid="stForm"] div[data-testid="stTextInput"] { margin-bottom:8px; }
-      .stTextInput input:focus { border-color:#03C75A !important;
-        box-shadow:0 0 0 3px rgba(3,199,90,.16) !important; }
+      div[data-testid="stForm"] label { font-weight:700; color:#334155; font-size:13px;
+        margin-bottom:6px; }
+      div[data-testid="stForm"] div[data-testid="stTextInput"] { margin-bottom:15px; }
+      /* ★ 입력 박스는 baseweb 컨테이너 기준으로 통일(아이디=비밀번호 동일 높이/너비) */
+      div[data-testid="stForm"] div[data-baseweb="input"] {
+        border-radius:22px !important; border:1px solid #D1FAE5 !important;
+        background:#F6FFFA !important; box-sizing:border-box; overflow:hidden;
+        width:100%; min-height:48px; }
+      div[data-testid="stForm"] div[data-baseweb="input"]:focus-within {
+        border-color:#03C75A !important; box-shadow:0 0 0 3px rgba(3,199,90,.16) !important; }
+      /* 실제 input: 세로중앙·잘림없음(고정 line-height 제거) */
+      div[data-testid="stForm"] div[data-baseweb="input"] > input {
+        height:46px !important; line-height:normal !important; font-size:14.5px !important;
+        padding:0 6px !important; background:transparent !important; color:#1E293B; }
+      /* 비밀번호 눈 아이콘: 컨테이너 안 우측에 자연스럽게(높이 안 깨뜨림) */
+      div[data-testid="stForm"] div[data-baseweb="input"] button {
+        background:transparent !important; border:none !important; color:#64748B !important;
+        height:46px !important; width:40px !important; }
       div[data-testid="stForm"] button {
         background:linear-gradient(135deg,#34D399 0%,#03C75A 100%) !important;
         color:#fff !important; border:none !important; border-radius:26px !important;

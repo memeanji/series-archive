@@ -767,6 +767,25 @@ def render_ad_detail(ad: dict) -> None:
         info[0].metric("상태", "라이브" if ad.get("status") == "live" else (ad.get("status") or "-"))
         info[1].metric("게재 시작", str(_g(ad, "started_at", "-"))[:10] or "-")
         info[2].metric("플랫폼", PLATFORM_LABEL.get(plat, plat or "-"))
+
+        # 대시보드형 지표(상태/게재/플랫폼 바로 아래) — 구글 영상=유튜브 공개 지표
+        yv, yl, yc = (int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0),
+                      int(ad.get("yt_comments") or 0))
+        if ad.get("video_url") and (yv or yl or yc):
+            cards = [("👁", "조회수", _fmt(yv), "#03C75A"),
+                     ("❤", "좋아요", _fmt(yl), "#EF4444"),
+                     ("💬", "댓글", _fmt(yc), "#0EA5E9")]
+            html = "<div style='display:flex;gap:10px;margin:10px 0 6px'>"
+            for icon, lab, val, col in cards:
+                html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};"
+                         f"border-radius:16px;padding:14px 8px;text-align:center'>"
+                         f"<div style='font-size:12px;color:{S.SUB};font-weight:700'>{icon} {lab}</div>"
+                         f"<div style='font-size:27px;font-weight:900;color:{col};"
+                         f"line-height:1.25;font-variant-numeric:tabular-nums'>{val}</div></div>")
+            html += "</div>"
+            st.markdown(html, unsafe_allow_html=True)
+            st.caption("이 광고 영상의 YouTube 공개 지표")
+
         d_plats = [p.strip() for p in (ad.get("platforms") or "").split(",") if p.strip()]
         if d_plats:
             chips = " ".join(f"<span style='background:{S.BG};border:1px solid {S.BORDER};"
@@ -789,16 +808,6 @@ def render_ad_detail(ad: dict) -> None:
                         f"[{ad['landing_url'][:54]}…]({ad['landing_url']})</span>",
                         unsafe_allow_html=True)
         st.caption(f"광고 ID {aid} · 수집일 {str(_g(ad,'collected_at','-'))[:10]}")
-
-        # 구글 영상광고 = 유튜브 광고 → 유튜브 공개 지표 표시(메타는 라이브러리가 미제공)
-        if ad.get("video_url") and (int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0)):
-            st.divider()
-            st.markdown("##### 유튜브 반응 <span style='font-size:11px;color:#64748B'>"
-                        "· 이 광고 영상의 YouTube 공개 지표</span>", unsafe_allow_html=True)
-            ym = st.columns(3)
-            ym[0].metric("조회수", _fmt(ad.get("yt_views")))
-            ym[1].metric("좋아요", _fmt(ad.get("yt_likes")))
-            ym[2].metric("댓글", _fmt(ad.get("yt_comments")))
 
         st.divider()
         st.markdown("##### 광고 카피")
