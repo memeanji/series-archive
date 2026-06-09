@@ -68,8 +68,16 @@ _JS_EXTRACT = r"""
     const vids = Array.from(card.querySelectorAll('video'))
         .map(v => v.src || (v.querySelector('source')||{}).src).filter(Boolean);
     const posters = Array.from(card.querySelectorAll('video')).map(v => v.poster).filter(Boolean);
-    const imgs = Array.from(card.querySelectorAll('img')).map(i => i.src)
-        .filter(s => s && !s.startsWith('data:'));
+    // 이미지 후보를 크기와 함께 수집 → 작은 '프로필/로고'는 제외하고 가장 큰 것을 소재로
+    const imgInfo = Array.from(card.querySelectorAll('img'))
+        .filter(i => i.src && !i.src.startsWith('data:'))
+        .map(i => ({ src: i.src,
+                     w: i.naturalWidth || i.width || i.clientWidth || 0,
+                     h: i.naturalHeight || i.height || i.clientHeight || 0 }));
+    imgInfo.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+    // 한 변이 80px 미만이면 프로필/아이콘으로 보고 제외(없으면 가장 큰 것 사용)
+    const bigImgs = imgInfo.filter(x => Math.min(x.w, x.h) >= 80);
+    const creativeImg = (bigImgs[0] || imgInfo[0] || {}).src || '';
     // background-image url 후보
     let bg = '';
     for (const e of card.querySelectorAll('*')) {
@@ -78,12 +86,33 @@ _JS_EXTRACT = r"""
       if (mm) { bg = mm[1]; break; }
     }
     const links = Array.from(card.querySelectorAll('a')).map(a => a.href).filter(Boolean);
-    // 우선순위: img → poster → bg
-    const thumb = imgs[0] || posters[0] || bg || '';
-    const src = imgs[0] ? 'img' : (posters[0] ? 'poster' : (bg ? 'bg' : 'none'));
+    // 영상이면 poster 우선(프로필 회피), 이미지면 가장 큰 소재 이미지 우선
+    let thumb = '', src = 'none';
+    if (vids.length) {
+      if (posters[0]) { thumb = posters[0]; src = 'poster'; }
+      else if (creativeImg) { thumb = creativeImg; src = 'img'; }
+      else if (bg) { thumb = bg; src = 'bg'; }
+    } else {
+      if (creativeImg) { thumb = creativeImg; src = 'img'; }
+      else if (bg) { thumb = bg; src = 'bg'; }
+      else if (posters[0]) { thumb = posters[0]; src = 'poster'; }
+    }
+    // 게재 플랫폼(Facebook/Instagram/Messenger/Audience Network) 추출 — aria-label/아이콘 src 기반
+    const platSet = ['Facebook', 'Instagram', 'Messenger', 'Audience Network', 'Threads'];
+    const plats = [];
+    for (const e of card.querySelectorAll('[aria-label]')) {
+      const al = e.getAttribute('aria-label') || '';
+      for (const pf of platSet) if (al.includes(pf) && !plats.includes(pf)) plats.push(pf);
+    }
+    for (const i of card.querySelectorAll('img')) {
+      const s = (i.src || '').toLowerCase();
+      if (s.includes('facebook') && !plats.includes('Facebook')) plats.push('Facebook');
+      if (s.includes('instagram') && !plats.includes('Instagram')) plats.push('Instagram');
+    }
     out.push({ library_id: id, has_video: vids.length > 0,
                video_url: vids[0] || '', thumbnail_url: thumb, thumb_src: src,
-               links: links.slice(0, 8), text: (card.innerText || '').trim().slice(0, 1200) });
+               platforms: plats, links: links.slice(0, 8),
+               text: (card.innerText || '').trim().slice(0, 1200) });
   }
   return out;
 }
@@ -221,7 +250,8 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     "status": "live", "first_seen": parsed["started"], "started_at": parsed["started"],
                     "cta": parsed.get("cta", ""),
                     "ad_variant_count": parsed.get("variant_count", 1),
-                    "platforms": "", "scrape_status": status, "error_message": err,
+                    "platforms": ", ".join(r.get("platforms") or []),
+                    "scrape_status": status, "error_message": err,
                     "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
                 })
         finally:

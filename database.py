@@ -240,7 +240,7 @@ _SUMMARY_COLS = (
     "a.id, a.brand_name, a.ad_title, substr(a.ad_copy,1,90) AS ad_copy_short, "
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
-    "a.scrape_status, a.error_message, "
+    "a.scrape_status, a.error_message, a.platforms, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
     "s.views AS social_views, s.likes AS social_likes, "

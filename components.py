@@ -19,6 +19,8 @@ from services.urls import is_valid_external_url, normalize_google_transparency_u
 ROOT = Path(__file__).resolve().parent
 
 PLATFORM_ICON = {"tiktok": "🎵", "meta": "📘", "google": "🔍", "naver": "🟢"}
+PLAT_ICON = {"Facebook": "📘", "Instagram": "📸", "Messenger": "💬",
+             "Audience Network": "📡", "Threads": "🧵"}
 PLATFORM_LABEL = {"meta": "Meta", "tiktok": "TikTok", "google": "Google", "naver": "Naver"}
 PAGE_SIZE = 12
 
@@ -428,6 +430,8 @@ def render_ad_card(ad: dict, idx: int) -> None:
                f"padding:1px 6px;border-radius:5px;margin-left:5px' "
                f"title='이 크리에이티브·문구를 사용하는 광고 {nab}개 (A/B 테스트)'>A/B {nab}</span>"
                if plat == "meta" and nab >= 2 else "")
+    plats = [p.strip() for p in (ad.get("platforms") or "").split(",") if p.strip()]
+    plat_chip = (" ".join(PLAT_ICON.get(p, "") for p in plats) + " ") if plats else ""
     play = "<div class='sa-play'>▶</div>" if is_video and thumb else ""
     if plat == "google":
         media_badge = "<div class='sa-media'>🔍 Google Preview</div>"
@@ -454,7 +458,8 @@ def render_ad_card(ad: dict, idx: int) -> None:
             f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','(제목 없음)')[:40]}</div>"
             f"<div class='sa-copy'>{_g(ad,'ad_copy_short','')[:60]}</div>"
             f"<div class='sa-meta'><span>{eng}</span>"
-            f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span></div>"
+            f"<span title='게재 플랫폼: {', '.join(plats) if plats else '-'}'>{plat_chip}"
+            f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span></span></div>"
             f"<div class='sa-meta'><span>📅 수집 {str(_g(ad,'collected_at','-'))[:10]}</span>"
             f"<span>{status_txt}</span></div>",
             unsafe_allow_html=True)
@@ -664,6 +669,12 @@ def render_ad_detail(ad: dict) -> None:
         info[0].metric("상태", "라이브" if ad.get("status") == "live" else (ad.get("status") or "-"))
         info[1].metric("게재 시작", str(_g(ad, "started_at", "-"))[:10] or "-")
         info[2].metric("플랫폼", PLATFORM_LABEL.get(plat, plat or "-"))
+        d_plats = [p.strip() for p in (ad.get("platforms") or "").split(",") if p.strip()]
+        if d_plats:
+            chips = " ".join(f"<span style='background:{S.BG};border:1px solid {S.BORDER};"
+                             f"padding:1px 8px;border-radius:6px;font-size:12px;margin-right:3px'>"
+                             f"{PLAT_ICON.get(p,'')} {p}</span>" for p in d_plats)
+            st.markdown(f"**게재 위치** {chips}", unsafe_allow_html=True)
         if ad.get("cta"):
             st.markdown(f"**CTA 버튼** <span style='background:{S.SOFT_MINT};color:{S.DEEP};"
                         f"padding:1px 8px;border-radius:6px;font-size:12px;font-weight:700'>"

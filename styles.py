@@ -88,7 +88,7 @@ def inject_css() -> None:
           box-shadow:0 1px 2px rgba(16,24,40,.04); transition:transform .15s, box-shadow .15s;}}
       div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
           transform:translateY(-3px); box-shadow:0 8px 22px rgba(16,24,40,.10);}}
-      .sa-thumb {{position:relative; aspect-ratio:4/3; border-radius:12px; overflow:hidden;
+      .sa-thumb {{position:relative; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
                   background:#0F172A;}}
       .sa-thumb img {{width:100%; height:100%; object-fit:cover;}}
       .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:800; font-size:12px;
