@@ -370,9 +370,12 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
         st.rerun()
     if not has_social:
         st.caption("ℹ️ 등급 필터는 소셜 영상 데이터가 있어야 활성화됩니다.")
-    show_hidden = st.checkbox("🔧 (개발용) 검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
-                              help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김. "
-                                   "켜면 그 광고들도 함께 표시(보통 끄는 게 깔끔)")
+    hc = st.columns([1, 1])
+    show_hidden = hc[0].checkbox("🔧 (개발용) 검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
+                                 help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김.")
+    only_unavail = hc[1].checkbox("⚠️ 상세 확인 불가 광고만 보기", value=False, key="f_unavail",
+                                  help="카드엔 보여도 상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고. "
+                                       "기본 목록에선 자동 제외되며, 여기서만 따로 확인.")
 
     # 탭 → 매체/북마크 매핑
     tab = header["tab"]
@@ -403,6 +406,7 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
         "period_days": {"7일": 7, "30일": 30, "90일": 90}.get(period),
         "only_bookmark": only_bm,
         "show_hidden": show_hidden,
+        "only_unavailable": only_unavail,
     }
 
 
@@ -415,7 +419,11 @@ def render_ad_card(ad: dict, idx: int) -> None:
     th = get_display_thumbnail(ad)
     thumb = th["src"]
 
-    if thumb:
+    if ad.get("detail_status") == "unavailable":
+        inner = ("<div class='sa-ph'><span class='i'>⚠️</span>상세 확인 불가"
+                 "<div style='font-size:10px;opacity:.7'>광고 라이브러리에 없음</div></div>")
+        thumb_cls = "sa-thumb sa-thumb-empty"
+    elif thumb:
         inner = f"<img src='{thumb}'/>"
         thumb_cls = "sa-thumb"
     elif ad.get("scrape_status") == "failed":
@@ -611,6 +619,11 @@ def _render_video_script(ad: dict) -> None:
     """모달을 닫지 않고(=튕김 없음) 세션 상태에 결과를 캐시해 즉시 갱신."""
     import services.script_gen as SG
     aid = ad.get("id")
+    if ad.get("detail_status") == "unavailable":
+        st.markdown("##### 영상 스크립트")
+        st.caption("⚠️ 이 광고는 광고 라이브러리 상세에 표시되지 않아(노출 미발생 등) "
+                   "영상/스크립트 수집 대상이 아닙니다.")
+        return
     src_ko = {"youtube_transcript": "YouTube 자막", "gemini_video": "Gemini 영상분석",
               "gemini_estimated": "Gemini 추정(카피 기반)", "manual": "직접 입력"}
     ovr = st.session_state.setdefault("_script_result", {})

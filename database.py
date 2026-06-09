@@ -35,7 +35,7 @@ AD_COLS = [
     "scrape_status", "error_message", "platforms", "local_thumbnail_path",
     "script_text", "script_source", "script_status", "script_error_message",
     "script_created_at", "script_updated_at", "cta", "ad_variant_count",
-    "yt_views", "yt_likes", "yt_comments",
+    "yt_views", "yt_likes", "yt_comments", "detail_status",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -149,7 +149,7 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("script_created_at", "TEXT"), ("script_updated_at", "TEXT"),
                  ("cta", "TEXT"), ("ad_variant_count", "INTEGER DEFAULT 1"),
                  ("yt_views", "INTEGER DEFAULT 0"), ("yt_likes", "INTEGER DEFAULT 0"),
-                 ("yt_comments", "INTEGER DEFAULT 0")):
+                 ("yt_comments", "INTEGER DEFAULT 0"), ("detail_status", "TEXT DEFAULT ''")):
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -222,6 +222,7 @@ def _migrate_legacy(conn: sqlite3.Connection) -> int:
             "script_text": "", "script_source": "", "script_status": "pending",
             "script_error_message": "", "script_created_at": "", "script_updated_at": "", "cta": "",
             "ad_variant_count": 1, "yt_views": 0, "yt_likes": 0, "yt_comments": 0,
+            "detail_status": "",
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -262,7 +263,7 @@ _SUMMARY_COLS = (
     "a.id, a.brand_name, a.ad_title, substr(a.ad_copy,1,90) AS ad_copy_short, "
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
-    "a.scrape_status, a.error_message, a.platforms, "
+    "a.scrape_status, a.error_message, a.platforms, a.detail_status, "
     "a.yt_views, a.yt_likes, a.yt_comments, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
@@ -288,9 +289,12 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
         w.append("s.final_grade IN ('S','A','B')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")  # placeholder 카드 제외
         w.append("a.ad_format NOT IN ('search_text','unknown')")
-    if not f.get("show_hidden"):
+    if f.get("only_unavailable"):
+        w.append("COALESCE(a.detail_status,'')='unavailable'")   # '상세 확인 불가'만 보기
+    elif not f.get("show_hidden"):
         w.append("a.ad_format NOT IN ('search_text','unknown')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")
+        w.append("COALESCE(a.detail_status,'')<>'unavailable'")   # 기본 목록에선 제외
     if f.get("brand") and f["brand"] != "전체":
         w.append("a.brand_name=?"); p.append(f["brand"])
     if f.get("platforms"):
@@ -723,6 +727,7 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "yt_views": int(a.get("yt_views") or (prev or {}).get("yt_views") or 0),
             "yt_likes": int(a.get("yt_likes") or (prev or {}).get("yt_likes") or 0),
             "yt_comments": int(a.get("yt_comments") or (prev or {}).get("yt_comments") or 0),
+            "detail_status": a.get("detail_status") or (prev or {}).get("detail_status") or "",
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))

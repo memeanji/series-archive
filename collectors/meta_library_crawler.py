@@ -308,6 +308,43 @@ def _drop_profile_thumbs(ads: list[dict], stats: dict) -> None:
                 stats["profile"] = stats.get("profile", 0) + 1
 
 
+_UNAVAILABLE_PHRASES = (
+    "광고가 광고 라이브러리에 없습니다",
+    "아직 노출이 발생하지 않았",
+    "검색 팁을 확인",
+    "isn't in the Ad Library",
+    "hasn't received any impressions",
+)
+
+
+def verify_available(ad_ids: list[str], headless: bool = True) -> dict:
+    """각 광고 permalink(?id=)를 열어 '광고 라이브러리에 없습니다' 류 문구를 감지.
+    반환 {ad_id: 'unavailable' | 'ok'}. 확인 실패는 'ok'(과도한 제외 방지)."""
+    from playwright.sync_api import sync_playwright
+    out: dict = {}
+    with sync_playwright() as p:
+        br = p.chromium.launch(headless=headless)
+        ctx = br.new_context(locale="ko-KR", user_agent=UA,
+                             viewport={"width": 1280, "height": 900})
+        page = ctx.new_page()
+        for aid in ad_ids:
+            status = "ok"
+            try:
+                page.goto(f"https://www.facebook.com/ads/library/?id={aid}",
+                          wait_until="domcontentloaded", timeout=40000)
+                page.wait_for_timeout(3500)
+                txt = page.inner_text("body") or ""
+                if any(ph in txt for ph in _UNAVAILABLE_PHRASES):
+                    # 라이브러리 ID가 본문에 있으면 정상(실제 광고 표시), 없고 문구만 있으면 unavailable
+                    if not re.search(r"라이브러리 ID|Library ID", txt):
+                        status = "unavailable"
+            except Exception:  # noqa: BLE001
+                status = "ok"
+            out[aid] = status
+        br.close()
+    return out
+
+
 def collect() -> list[dict]:
     """watchlist.json 의 모든 브랜드를 검색해 합친다."""
     wl = json.loads((config.DATA_DIR / "watchlist.json").read_text(encoding="utf-8"))
