@@ -77,10 +77,10 @@ def login() -> None:
       /* 깔끔한 연그린 그라데이션 배경(이미지 없음) */
       .stApp { background:linear-gradient(180deg,#F0FBF4 0%,#E3F6EC 55%,#D5F0E0 100%); }
       .block-container { padding-top:0 !important; max-width:1100px; }
-      /* 가운데 로그인 카드 1개 */
+      /* 가운데 로그인 카드 1개 (연회색 테두리) */
       div[data-testid="stForm"] {
-        background:#FFFFFF; border:1px solid #E7F3EC !important;
-        border-radius:34px; padding:36px 40px;
+        background:#FFFFFF; border:1px solid #E5E7EB !important;
+        border-radius:34px; padding:30px 40px 36px;
         box-shadow:0 20px 50px rgba(16,24,40,.12);
         width:100%; max-width:440px; margin:0 auto; box-sizing:border-box;
       }
@@ -90,8 +90,8 @@ def login() -> None:
       /* baseweb 기본 레이아웃(세로중앙·눈아이콘 내부배치)을 유지하고 '외형만' 입힘
          → 아이디=비밀번호 동일 크기, 텍스트 안 잘림, 눈 아이콘이 박스 크기 안 바꿈 */
       div[data-testid="stForm"] [data-baseweb="input"] {
-        border-radius:22px !important; border:1px solid #D1FAE5 !important;
-        background:#F6FFFA !important; box-sizing:border-box; }
+        border-radius:18px !important; border:1px solid #E5E7EB !important;
+        background:#FFFFFF !important; box-sizing:border-box; }
       div[data-testid="stForm"] [data-baseweb="input"]:focus-within {
         border-color:#03C75A !important; box-shadow:0 0 0 3px rgba(3,199,90,.16) !important; }
       /* ★ 컨테이너 내부 모든 요소(눈 아이콘 enhancer/button 포함)의 배경·그림자·테두리 제거
@@ -104,8 +104,11 @@ def login() -> None:
         background:transparent !important; background-color:transparent !important;
         box-shadow:none !important; outline:none !important; border:none !important; }
       div[data-testid="stForm"] [data-baseweb="input"] input { font-size:14.5px !important; }
+      /* 눈 아이콘: 세로 중앙으로(너무 아래 X) */
       div[data-testid="stForm"] [data-baseweb="input"] button {
-        border-radius:0 !important; color:#64748B !important; }
+        border-radius:0 !important; color:#64748B !important;
+        display:flex !important; align-items:center !important; justify-content:center !important;
+        align-self:center !important; height:auto !important; padding:0 6px !important; }
       div[data-testid="stForm"] button {
         background:linear-gradient(135deg,#34D399 0%,#03C75A 100%) !important;
         color:#fff !important; border:none !important; border-radius:26px !important;
@@ -121,6 +124,13 @@ def login() -> None:
     with mid:
         st.markdown("<div style='height:23vh'></div>", unsafe_allow_html=True)
         with st.form("login", border=True):
+            # 맥북 느낌 신호등 3개
+            st.markdown(
+                "<div style='display:flex;gap:8px;margin-bottom:18px'>"
+                "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;background:#FF5F57'></span>"
+                "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;background:#FEBC2E'></span>"
+                "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;background:#28C840'></span>"
+                "</div>", unsafe_allow_html=True)
             st.markdown(
                 "<div style='text-align:center;font-size:38px;font-weight:900;color:#03C75A;"
                 "letter-spacing:-1px;line-height:1.1;margin-bottom:24px'>Repurely</div>",
