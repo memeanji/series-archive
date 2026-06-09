@@ -160,6 +160,47 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
     return ads, log
 
 
+def fetch_advertiser_names(brand: str, region: str = "KR", limit: int = 6) -> list[str]:
+    """투명성센터 검색창에 브랜드명을 입력해 자동완성에 뜨는 '광고주(법인)명' 후보를 반환.
+    사용자가 법인명을 몰라도 브랜드명만으로 '주식회사 OOO' 후보를 제안하기 위함."""
+    from playwright.sync_api import sync_playwright
+
+    names: list[str] = []
+    seen: set = set()
+    with sync_playwright() as p:
+        br = p.chromium.launch(headless=True)
+        ctx = br.new_context(locale="ko-KR", user_agent=UA,
+                             viewport={"width": 1440, "height": 1000})
+        page = ctx.new_page()
+        try:
+            page.goto(f"https://adstransparency.google.com/?region={region}",
+                      wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(4000)
+            for sel in ('input[aria-label]', 'input[type="text"]', 'input'):
+                el = page.query_selector(sel)
+                if el and el.is_visible():
+                    el.click()
+                    el.fill(brand)
+                    page.wait_for_timeout(3500)
+                    break
+            for o in page.query_selector_all('[role="option"]'):
+                try:
+                    t = (o.inner_text() or "").strip().split("\n")[0].strip()
+                except Exception:  # noqa: BLE001
+                    continue
+                # 자동완성 안내 문구/검색 옵션은 제외
+                if not t or "검색" in t or t.lower() == brand.lower():
+                    continue
+                if t not in seen:
+                    seen.add(t)
+                    names.append(t)
+                if len(names) >= limit:
+                    break
+        finally:
+            br.close()
+    return names
+
+
 def collect() -> list[dict]:
     wl = json.loads((config.DATA_DIR / "watchlist.json").read_text(encoding="utf-8"))
     out = []

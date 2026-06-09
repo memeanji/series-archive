@@ -86,6 +86,46 @@ def fetch_transcript(video_id: str, languages=("ko", "en")) -> str:
         return ""
 
 
+def fetch_transcript_segments(video_id: str, languages=("ko", "en")) -> list[dict]:
+    """타임스탬프가 있는 자막 구간 목록 [{start, dur, text}]. 자막 없으면 []."""
+    if not video_id:
+        return []
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        api = YouTubeTranscriptApi()
+        fetched = api.fetch(video_id, languages=list(languages) + ["a.ko", "a.en"])
+        return [{"start": float(s.start), "dur": float(s.duration), "text": (s.text or "").strip()}
+                for s in fetched if (s.text or "").strip()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _fmt_ts(sec: float) -> str:
+    m, s = divmod(int(sec), 60)
+    return f"{m:02d}:{s:02d}"
+
+
+def format_segments(segs: list[dict], min_chunk: float = 4.0) -> str:
+    """짧은 자막 조각들을 ~min_chunk초 단위로 묶어 'MM:SS–MM:SS  대사' 줄로 포맷(스니핏 스타일)."""
+    if not segs:
+        return ""
+    lines, buf, b_start = [], [], None
+    for sg in segs:
+        if b_start is None:
+            b_start = sg["start"]
+        buf.append(sg["text"])
+        b_end = sg["start"] + sg["dur"]
+        txt = " ".join(buf).strip()
+        # 4초 이상 모였거나 문장이 끝나면 한 구간으로 확정
+        if (b_end - b_start) >= min_chunk or txt.endswith((".", "?", "!", "다", "요", "죠", "까")):
+            lines.append(f"{_fmt_ts(b_start)}–{_fmt_ts(b_end)}  {txt}")
+            buf, b_start = [], None
+    if buf and b_start is not None:
+        lines.append(f"{_fmt_ts(b_start)}–{_fmt_ts(segs[-1]['start'] + segs[-1]['dur'])}  "
+                     f"{' '.join(buf).strip()}")
+    return "\n".join(lines)
+
+
 def search_video_ids(query: str, max_results: int = 5, api_key: str = "") -> list[str]:
     """search.list 로 키워드(브랜드명) 관련 영상 id 목록. quota 100유닛/호출."""
     import requests

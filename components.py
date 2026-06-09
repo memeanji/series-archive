@@ -194,13 +194,32 @@ def _run_collect(display: str) -> None:
             st.error(f"수집 실패: {e}")
 
 
+def _suggest_advertisers(brand: str) -> list:
+    """구글 투명성센터 자동완성에서 법인명 후보를 subprocess 로 가져온다."""
+    import json as _json
+    try:
+        r = subprocess.run([sys.executable, str(ROOT / "jobs" / "google_advertisers.py"), brand],
+                           capture_output=True, text=True, timeout=120, cwd=str(ROOT))
+        for ln in (r.stdout or "").splitlines():
+            if ln.startswith("ADVJSON:"):
+                return _json.loads(ln[len("ADVJSON:"):])
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
 def render_add_brand() -> None:
     """브랜드 추가 위저드: 입력 → 후보 찾기 → 선택 → 저장 → 수집(버튼 클릭 시에만)."""
     with st.sidebar.expander("➕ 브랜드 추가", expanded=False):
+        # 자동완성으로 받은 법인명 제안을 위젯 생성 전에 반영(위젯 생성 후 수정 불가)
+        if "ab_gadv_pending" in st.session_state:
+            st.session_state["ab_gadv"] = st.session_state.pop("ab_gadv_pending")
+
         name = st.text_input("브랜드명", key="ab_name", placeholder="예: 리바엔").strip()
         gadv = st.text_input("구글 광고주명(법인명)", key="ab_gadv",
-                             placeholder="예: 주식회사 어센트원",
-                             help="구글 투명성센터는 브랜드명이 아니라 '주식회사 OOO' 법인명으로 검색해야 잘 잡힙니다.").strip()
+                             placeholder="브랜드명만 넣고 '후보 찾기'를 누르면 자동으로 채워집니다",
+                             help="구글 투명성센터는 '주식회사 OOO' 법인명으로 검색해야 잘 잡힙니다. "
+                                  "비워두면 후보 찾기가 자동완성에서 법인명을 가져와 채웁니다.").strip()
         domain = st.text_input("공식몰 도메인(선택)", key="ab_domain", placeholder="rivan.co.kr").strip()
         kw_raw = st.text_input("검색 키워드(쉼표 구분)", key="ab_kw", placeholder="리바엔, RIVAN, 리바엔 공식몰")
         cat = st.text_input("카테고리(선택)", key="ab_cat").strip()
@@ -217,6 +236,14 @@ def render_add_brand() -> None:
                     st.info("이미 등록된 브랜드 — 저장 시 법인명/도메인/키워드가 갱신됩니다.")
                 st.session_state.ab_cands = database.find_brand_candidates(name, domain, keywords)
                 st.session_state.ab_searched = True
+                # 법인명이 비어 있으면 구글 자동완성에서 후보를 가져와 채운다
+                if not gadv:
+                    with st.spinner("구글 투명성센터에서 법인명 자동 검색 중… (~20초)"):
+                        advs = _suggest_advertisers(name)
+                    st.session_state.ab_adv_cands = advs
+                    if advs:
+                        st.session_state.ab_gadv_pending = advs[0]
+                st.rerun()
 
         # Step 3: 후보 확인 + Step 4: 저장
         if st.session_state.get("ab_searched"):
@@ -240,6 +267,19 @@ def render_add_brand() -> None:
                 if not keywords:
                     st.caption("⚠️ 수동 추가는 검색 키워드 최소 1개 필요")
 
+            # 구글 자동완성 법인명 후보 — 클릭하면 위 '구글 광고주명' 칸에 적용
+            advs = st.session_state.get("ab_adv_cands", [])
+            if advs:
+                cur_g = st.session_state.get("ab_gadv", "")
+                st.caption("🏢 구글 법인명 후보(자동완성) — 클릭해 적용")
+                for j, a in enumerate(advs[:6]):
+                    mark = "✓ " if a == cur_g else ""
+                    if st.button(f"{mark}{a}", key=f"ab_adv_{j}", use_container_width=True):
+                        st.session_state.ab_gadv_pending = a
+                        st.rerun()
+            elif st.session_state.get("ab_searched") and not gadv:
+                st.caption("자동완성에 법인명이 없어요 — 직접 입력하거나 메타만 수집됩니다.")
+
             can_save = bool(name) and (bool(cands) or bool(keywords))
             if st.button("💾 브랜드 저장", key="ab_save", type="primary",
                          disabled=not can_save, use_container_width=True):
@@ -258,7 +298,7 @@ def render_add_brand() -> None:
             st.caption(f"상태: {stt['status'] if stt else '대기'}")
             if st.button(f"📥 '{saved}' 지금 수집", key="ab_collect", use_container_width=True):
                 _run_collect(saved)
-                for k in ("ab_saved", "ab_searched", "ab_cands"):
+                for k in ("ab_saved", "ab_searched", "ab_cands", "ab_adv_cands"):
                     st.session_state.pop(k, None)
                 st.cache_data.clear()
                 st.rerun()
@@ -455,6 +495,41 @@ def _greybox(text: str) -> str:
             f"line-height:1.5;max-height:340px;overflow:auto'>{_h.escape(text)}</div>")
 
 
+_TS_RE = re.compile(r"^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–~]?\s*"
+                    r"(\d{1,2}:\d{2}(?::\d{2})?)?\s*(.*)$")
+
+
+def _render_script_body(text: str) -> str:
+    """스니핏 스타일: 'MM:SS–MM:SS 대사' 줄은 [시간칩 | 대사] 타임라인 행으로 렌더."""
+    import html as _h
+    rows = []
+    for raw in (text or "").splitlines():
+        ln = raw.rstrip()
+        if not ln.strip():
+            continue
+        if ln.strip().startswith("[") and ln.strip().endswith("]"):
+            rows.append(f"<div style='font-weight:800;color:{S.TEXT};font-size:12px;"
+                        f"margin:10px 0 4px'>{_h.escape(ln.strip()[1:-1])}</div>")
+            continue
+        m = _TS_RE.match(ln)
+        if m and m.group(1) and m.group(3) is not None and m.group(3) != "":
+            t0, t1, body = m.group(1), m.group(2), m.group(3)
+            chip = t0 + (f"–{t1}" if t1 else "")
+            rows.append(
+                f"<div style='display:flex;gap:8px;align-items:flex-start;padding:5px 0;"
+                f"border-bottom:1px solid {S.BORDER}'>"
+                f"<span style='flex:0 0 auto;background:{S.MINT}1A;color:#0F766E;"
+                f"font-weight:700;font-size:11px;padding:2px 7px;border-radius:6px;"
+                f"font-variant-numeric:tabular-nums;white-space:nowrap'>{_h.escape(chip)}</span>"
+                f"<span style='font-size:13px;color:{S.TEXT};line-height:1.5'>{_h.escape(body)}</span>"
+                f"</div>")
+        else:
+            rows.append(f"<div style='font-size:13px;color:{S.TEXT};line-height:1.5;"
+                        f"padding:3px 0'>{_h.escape(ln)}</div>")
+    return (f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
+            f"padding:10px 12px;max-height:360px;overflow:auto'>{''.join(rows)}</div>")
+
+
 def _render_social_reaction(ad: dict) -> None:
     st.markdown(f"##### 📊 소셜 원본 반응 <span style='font-size:11px;color:{S.SUB}'>"
                 f"· 매칭된 원본 영상 기준</span>", unsafe_allow_html=True)
@@ -527,7 +602,7 @@ def _render_video_script(ad: dict) -> None:
     if completed and not edit:
         st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}"
                    + (" · ⚠️ 영상 미확인 추정" if cur["source"] == "gemini_estimated" else ""))
-        st.markdown(_greybox(cur["text"]), unsafe_allow_html=True)
+        st.markdown(_render_script_body(cur["text"]), unsafe_allow_html=True)
     elif completed and edit:
         new = st.text_area("스크립트 편집", value=cur["text"], height=260, key=f"scredit_{aid}",
                            label_visibility="collapsed")

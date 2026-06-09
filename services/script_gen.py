@@ -19,9 +19,11 @@ PROMPT = """너는 퍼포먼스 마케팅 광고 분석가다.
 반드시 아래 형식으로 출력해줘.
 
 [영상 스크립트]
-- 영상에서 들리는 말 또는 화면 자막을 최대한 실제 순서대로 정리
-- 화자 멘트와 화면 자막을 구분하지 않아도 됨
-- 광고 흐름이 보이도록 자연스럽게 문단화
+- 영상을 시간 순서대로 구간을 나눠, 각 줄을 "MM:SS–MM:SS  대사/자막" 형식으로 적어줘 (스니핏 스타일)
+- 예시) 00:00–00:03  당신의 피부, 요즘 괜찮으세요?
+        00:03–00:08  매일 쓰는 클렌저가 문제일 수 있습니다
+- 들리는 멘트와 화면 자막을 시간 순서대로, 한 구간은 3~8초 정도
+- 시간을 정확히 알 수 없으면 영상 흐름에 맞춰 합리적으로 추정
 
 [광고 구조]
 1. 후킹:
@@ -82,8 +84,13 @@ def generate(ad: dict) -> dict:
     vid = (YT.extract_video_id(ad.get("social_source_url") or "")
            or YT.extract_video_id(ad.get("video_url") or ""))
 
-    # ① YouTube 자막
+    # ① YouTube 자막 (타임스탬프 구간 — 스니핏 스타일)
     if vid:
+        segs = YT.fetch_transcript_segments(vid)
+        if segs:
+            body = YT.format_segments(segs)
+            return {"text": "[영상 스크립트]\n" + body, "source": "youtube_transcript",
+                    "status": "completed", "error": "", "input_type": "transcript"}
         tr = YT.fetch_transcript(vid)
         if tr:
             return {"text": tr, "source": "youtube_transcript", "status": "completed",
