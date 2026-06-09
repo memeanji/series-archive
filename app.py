@@ -60,7 +60,8 @@ def _apify_status():
 
 
 def main() -> None:
-    st.set_page_config(page_title="Series Archive", page_icon="📚", layout="wide")
+    st.set_page_config(page_title="Series Archive", page_icon="📚", layout="wide",
+                       initial_sidebar_state="expanded")
     styles.inject_css()
     database.init_db(seed_users=auth.get_secret_users())
 
