@@ -509,8 +509,69 @@ _TS_RE = re.compile(r"^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–~]?\s*"
                     r"(\d{1,2}:\d{2}(?::\d{2})?)?\s*(.*)$")
 
 
+def _render_script_segments(text: str):
+    """Gemini 구간 JSON([{start,end,script,visual_summary,on_screen_text}])이면 리치 타임라인으로,
+    아니면 None(일반 텍스트 렌더로 폴백)."""
+    import html as _h
+    import json as _json
+    t = (text or "").strip()
+    if not (t.startswith("[") and t.endswith("]")):
+        return None
+    try:
+        segs = _json.loads(t)
+        if not isinstance(segs, list) or not segs or not isinstance(segs[0], dict):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    rows = []
+    for s in segs:
+        chip = f"{s.get('start','')}–{s.get('end','')}".strip("–")
+        script = _h.escape(s.get("script") or "")
+        vis = _h.escape(s.get("visual_summary") or "")
+        ost = _h.escape(s.get("on_screen_text") or "")
+        ost_badge = (f"<span style='background:{S.MINT}1A;color:#0F766E;font-size:10.5px;"
+                     f"padding:1px 6px;border-radius:5px;margin-left:6px'>화면: {ost}</span>"
+                     if ost else "")
+        rows.append(
+            f"<div style='display:flex;gap:9px;align-items:flex-start;padding:7px 0;"
+            f"border-bottom:1px solid {S.BORDER}'>"
+            f"<span style='flex:0 0 auto;background:{S.MINT}1A;color:#0F766E;font-weight:700;"
+            f"font-size:11px;padding:2px 7px;border-radius:6px;font-variant-numeric:tabular-nums;"
+            f"white-space:nowrap'>{_h.escape(chip)}</span>"
+            f"<span style='flex:1'>"
+            f"<span style='font-size:13px;color:{S.TEXT};line-height:1.5;font-weight:600'>"
+            f"{script or '<span style=\"color:#94A3B8\">(대사 없음)</span>'}</span>{ost_badge}"
+            + (f"<div style='font-size:11.5px;color:{S.SUB};margin-top:2px'>🎬 {vis}</div>" if vis else "")
+            + "</span></div>")
+    return (f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
+            f"padding:10px 12px;max-height:380px;overflow:auto'>{''.join(rows)}</div>")
+
+
+def _render_thumb_analysis(text: str) -> str:
+    """이미지 소재 썸네일 분석 JSON({thumbnail_text,visual_summary,main_subject,hook_type,ad_angle})을 카드로."""
+    import html as _h
+    import json as _json
+    try:
+        o = _json.loads(text or "{}")
+    except Exception:  # noqa: BLE001
+        return _greybox(text or "")
+    rows = [("화면 문구", o.get("thumbnail_text")), ("장면 요약", o.get("visual_summary")),
+            ("핵심 피사체", o.get("main_subject")), ("후킹 유형", o.get("hook_type")),
+            ("소구 포인트", o.get("ad_angle"))]
+    inner = "".join(
+        f"<div style='display:flex;gap:8px;padding:5px 0;border-bottom:1px solid {S.BORDER}'>"
+        f"<span style='flex:0 0 84px;color:{S.SUB};font-size:11.5px;font-weight:700'>{k}</span>"
+        f"<span style='flex:1;color:{S.TEXT};font-size:13px'>{_h.escape(str(v or '-'))}</span></div>"
+        for k, v in rows)
+    return (f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
+            f"padding:10px 12px'>{inner}</div>")
+
+
 def _render_script_body(text: str) -> str:
-    """스니핏 스타일: 'MM:SS–MM:SS 대사' 줄은 [시간칩 | 대사] 타임라인 행으로 렌더."""
+    """Gemini 구간 JSON이면 리치 타임라인, 아니면 'MM:SS–MM:SS 대사' 줄 타임라인."""
+    rich = _render_script_segments(text)
+    if rich is not None:
+        return rich
     import html as _h
     rows = []
     for raw in (text or "").splitlines():
@@ -560,41 +621,72 @@ def _render_video_script(ad: dict) -> None:
                            "source": ad.get("script_source") or "",
                            "error": ad.get("script_error_message") or ""}
 
+    has_video = bool((ad.get("video_url") or ad.get("media_url") or "").startswith("http"))
+
     # 상세 진입 시 자동 생성 — 무료(YouTube 자막)만. Gemini 는 버튼 클릭 시에만(키 절약)
     if cur["status"] == "pending" and aid not in ovr:
         done = st.session_state.setdefault("_autogen_done", set())
         if aid not in done:
             done.add(aid)
-            with st.spinner("🎬 자막 확인 중…"):
+            with st.spinner("자막 확인 중…"):
                 r = SG.transcript_only(ad)
             if r:
                 database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
                 ovr[aid] = r
-            else:
+            elif has_video:
                 ovr[aid] = {"text": "", "status": "needs_ai", "source": "", "error": ""}
+            else:
+                ovr[aid] = {"text": "", "status": "thumbnail_only", "source": "", "error": ""}
             cur = ovr[aid]
 
+    status = cur["status"]
     head = st.columns([3, 1, 1])
-    head[0].markdown("##### 영상 스크립트")
-    completed = bool(cur["text"]) and cur["status"] == "completed"
 
-    # 버튼 — Gemini 는 클릭 시에만 호출(키 절약). 자막 있으면 '재생성', 없으면 'AI 생성'
+    # ── 이미지 소재: 썸네일 분석(후킹/소구/화면문구) ──
+    if not has_video:
+        head[0].markdown("##### 소재 분석 (이미지)")
+        thumb_done = bool(cur["text"]) and status == "thumbnail_only"
+        run = head[1].button("재분석" if thumb_done else "썸네일 분석", key=f"thb_{aid}",
+                             use_container_width=True,
+                             help="Gemini Vision으로 썸네일의 후킹/소구/화면문구를 추출합니다.")
+        if run:
+            with st.spinner("Gemini가 썸네일을 분석 중…"):
+                r = SG.analyze_thumbnail(ad)
+            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+            ovr[aid] = r
+            cur = r
+            thumb_done = bool(cur["text"]) and cur["status"] == "thumbnail_only"
+        if thumb_done:
+            st.caption("🖼 이미지 소재 · Gemini 분석 결과는 추정이며 실제와 다를 수 있습니다.")
+            st.markdown(_render_thumb_analysis(cur["text"]), unsafe_allow_html=True)
+        elif cur.get("error"):
+            st.caption(f"⚠️ {cur['error']}")
+        else:
+            st.caption("이미지 소재입니다. **썸네일 분석**을 누르면 후킹·소구·화면문구를 추출합니다.")
+        return
+
+    # ── 영상 소재: 3초 구간 스크립트 ──
+    head[0].markdown("##### 영상 스크립트")
+    completed = bool(cur["text"]) and status == "completed"
     if completed:
         regen = head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True)
         edit = head[2].toggle("편집", key=f"edit_{aid}")
     else:
-        regen = head[1].button("🤖 AI 생성", key=f"rgen2_{aid}", use_container_width=True,
-                               help="자막이 없어 Gemini로 영상을 분석해 구간별 대본을 만듭니다(API 사용).")
+        regen = head[1].button("AI 생성", key=f"rgen2_{aid}", use_container_width=True,
+                               help="Gemini가 이 영상을 분석해 3초 구간별 대본(대사·화면문구·장면)을 만듭니다.")
         edit = False
     if regen:
-        _gen("🤖 Gemini가 영상을 분석해 구간별 대본 작성 중… (최대 2분)")
+        _gen("Gemini가 영상을 분석해 구간별 대본 작성 중… (최대 2분)")
         cur = ovr[aid]
-        completed = bool(cur["text"]) and cur["status"] == "completed"
+        status = cur["status"]
+        completed = bool(cur["text"]) and status == "completed"
         edit = False
 
     if completed and not edit:
-        st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}"
-                   + (" · ⚠️ 영상 미확인 추정" if cur["source"] == "gemini_estimated" else ""))
+        if cur["source"] == "gemini_video":
+            st.caption("🤖 Gemini가 영상을 분석한 추정 대본 — 실제 대사와 다를 수 있습니다.")
+        else:
+            st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}")
         st.markdown(_render_script_body(cur["text"]), unsafe_allow_html=True)
     elif completed and edit:
         new = st.text_area("스크립트 편집", value=cur["text"], height=260, key=f"scredit_{aid}",
@@ -603,10 +695,12 @@ def _render_video_script(ad: dict) -> None:
             database.update_ad_script(aid, new, "manual", "completed", "")
             ovr[aid] = {"text": new, "status": "completed", "source": "manual", "error": ""}
     else:
-        if cur["error"]:
-            st.caption(f"⚠️ 생성 실패: {cur['error']} — 'AI 생성'을 눌러 다시 시도하세요.")
+        if status == "video_too_long":
+            st.caption(f"⏱ {cur['error']}")
+        elif cur.get("error"):
+            st.caption(f"⚠️ {cur['error']}")
         else:
-            st.caption("자막이 없는 영상입니다. **🤖 AI 생성**을 누르면 Gemini가 구간별 대본을 만듭니다.")
+            st.caption("**AI 생성**을 누르면 Gemini가 이 영상을 3초 구간별 대본으로 분석합니다.")
         with st.popover("✍️ 직접 입력"):
             man = st.text_area("스크립트", key=f"scman_{aid}", height=160,
                                label_visibility="collapsed", placeholder="스크립트를 직접 붙여넣기")
@@ -870,20 +964,25 @@ def _run_yt_match(brand: str) -> None:
             "SELECT DISTINCT brand_name FROM ad_library_ads WHERE platform='google' "
             "AND brand_name<>''").fetchall()]
         conn.close()
+    if not brands:
+        st.warning("구글 광고를 가진 브랜드가 없습니다. 먼저 구글 투명성센터 광고를 수집하세요.")
+        return
     before = sum(database.youtube_candidate_counts().values())
     tot = {"matched": 0, "candidate": 0, "ppl": 0}
-    with st.spinner(f"{'·'.join(brands)} YouTube 광고 매칭 중… (검색→유사도→분류)"):
+    with st.spinner(f"{len(brands)}개 브랜드 YouTube 광고 매칭 중… (검색→유사도→분류)"):
         for b in brands:
             try:
                 r = MJ.match_brand(b)
                 for k in tot:
                     tot[k] += r.get(k, 0)
             except Exception as e:  # noqa: BLE001
-                st.warning(f"{b}: {e}")
+                st.warning(f"{b}: {type(e).__name__} {e}")
     after = sum(database.youtube_candidate_counts().values())
     added = after - before
-    st.success(f"매칭 완료 — 광고확정 {tot['matched']} · 후보 {tot['candidate']} · "
-               f"소셜·PPL {tot['ppl']} (신규 {max(added,0)}건)")
+    st.success(f"매칭 완료 — 대상 {len(brands)}개 브랜드 · 광고확정 {tot['matched']} · "
+               f"후보 {tot['candidate']} · 미매칭 {tot['ppl']} (신규 {max(added,0)}건)")
+    if tot["matched"] + tot["candidate"] + tot["ppl"] == 0:
+        st.info("후보 영상이 0건입니다. YouTube 검색 결과가 없거나 API 키/쿼터 문제일 수 있습니다.")
 
 
 def _yt_match_card(c: dict) -> None:
@@ -899,19 +998,40 @@ def _yt_match_card(c: dict) -> None:
         why = _json.loads(c.get("matched_by") or "[]")
     except Exception:  # noqa: BLE001
         why = []
+    try:
+        sg = _json.loads(c.get("signals") or "{}")
+    except Exception:  # noqa: BLE001
+        sg = {}
     chan = c.get("source_account_name") or c.get("channel_title") or "-"
+    legal = c.get("advertiser_legal_name") or "-"
     with st.container(border=True):
         if th:
             st.markdown(f"<div class='sa-thumb'><img src='{th}'/>"
                         f"<div class='sa-badge' style='background:{color}'>{int(c.get('matching_score') or 0)}</div>"
                         f"<div class='sa-media'>{durtxt}</div></div>", unsafe_allow_html=True)
         st.markdown(f"<div style='font-weight:700;font-size:12px;color:{color};margin-top:6px'>{label}"
-                    f"<span style='color:{S.SUB};font-weight:500'> · {conf}</span></div>"
+                    f"<span style='color:{S.SUB};font-weight:500'> · 신뢰도 {conf}</span></div>"
                     f"<div class='sa-title'>{(c.get('title') or '(제목 없음)')[:46]}</div>"
                     f"<div class='sa-copy'>채널 {chan[:22]} · {str(c.get('published_at') or '')[:10]} {cap}</div>",
                     unsafe_allow_html=True)
         if why:
             st.caption("근거: " + " · ".join(why))
+        # 왜 이 분류인지 — 5개 신호 상세(특히 후보 검토용)
+        def _mk(ok):
+            return ("✓" if ok else "·")
+        cs = int((sg.get("copy_sim") or 0) * 100)
+        ts = sg.get("thumb_sim")
+        tstxt = f"{int(ts*100)}%" if ts is not None else "—"
+        with st.expander("근거 상세", expanded=(status == "youtube_ad_candidate")):
+            st.markdown(
+                f"<div style='font-size:11.5px;line-height:1.7;color:{S.TEXT}'>"
+                f"법인명: <b>{legal}</b> · 채널: <b>{chan}</b><br>"
+                f"랜딩 URL 일치 <b>{_mk(sg.get('landing_hit'))}</b> · "
+                f"브랜드/상품명 일치 <b>{_mk(sg.get('product_in_body'))}</b> · "
+                f"채널명 일치 <b>{_mk(sg.get('channel_hit'))}</b><br>"
+                f"문구 유사도 <b>{cs}%</b> · 썸네일 유사도 <b>{tstxt}</b> · "
+                f"해시태그만 {_mk(sg.get('hashtag_only'))}</div>",
+                unsafe_allow_html=True)
         if is_valid_external_url(c.get("source_url")):
             st.link_button("YouTube에서 보기", c["source_url"], use_container_width=True)
 

@@ -13,35 +13,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config  # noqa: E402
 import services.youtube as YT  # noqa: E402
 
-PROMPT = """너는 퍼포먼스 마케팅 광고 분석가다.
-아래 영상/광고 정보를 바탕으로 광고 스크립트를 한국어로 정리해줘.
+# 영상을 3초 구간으로 나눠 대사(STT)+화면문구(OCR)+장면요약을 한 번에 JSON으로 받는다.
+PROMPT = """이 광고 영상을 처음부터 끝까지 3초 단위 구간으로 나눠 분석하고, JSON 배열로만 출력해줘.
+설명 문장이나 ```코드블록``` 없이 순수 JSON 배열만 출력해.
 
-반드시 아래 형식으로 출력해줘.
+각 원소는 다음 형식:
+{"start":"M:SS","end":"M:SS","script":"그 구간에 들리는 음성 대사(없으면 빈 문자열)","visual_summary":"그 구간 화면에서 일어나는 일 한 줄","on_screen_text":"화면에 보이는 자막/텍스트(없으면 빈 문자열)"}
 
-[영상 스크립트]
-- 영상을 시간 순서대로 구간을 나눠, 각 줄을 "MM:SS–MM:SS  대사/자막" 형식으로 적어줘 (스니핏 스타일)
-- 예시) 00:00–00:03  당신의 피부, 요즘 괜찮으세요?
-        00:03–00:08  매일 쓰는 클렌저가 문제일 수 있습니다
-- 들리는 멘트와 화면 자막을 시간 순서대로, 한 구간은 3~8초 정도
-- 시간을 정확히 알 수 없으면 영상 흐름에 맞춰 합리적으로 추정
-
-[광고 구조]
-1. 후킹:
-2. 문제 제기:
-3. 제품/혜택 제시:
-4. 신뢰 요소:
-5. CTA:
-
-[핵심 소구]
-- 이 광고가 강조하는 소비자 pain point
-- 이 광고가 사용하는 후킹 방식
-- 구매를 유도하는 주요 문장
-
-주의:
-- 영상에 없는 내용을 과하게 만들어내지 말 것
-- 영상 확인이 불완전하면 "추정"이라고 표시할 것
-- 광고 카피와 영상 내용이 다르면 둘을 구분해서 적을 것
-"""
+규칙:
+- 영상 길이에 맞춰 0:00부터 끝까지 3초 간격으로 연속 구간을 만들 것
+- script(음성 대사)와 on_screen_text(화면 텍스트)는 다를 수 있으니 각각 적을 것
+- 한국어로, 영상에 실제로 있는 내용만. 없는 내용을 지어내지 말 것"""
 
 
 def _ctx(ad: dict) -> str:
@@ -49,34 +31,119 @@ def _ctx(ad: dict) -> str:
             f"광고 카피:\n{ad.get('ad_copy','') or '(없음)'}\nCTA: {ad.get('cta','') or '-'}")
 
 
-def _gemini(parts: list) -> str:
+def _parse_segments(raw: str) -> str:
+    """Gemini 응답에서 JSON 배열만 추출해 정규화된 JSON 문자열로. 실패 시 원문 반환."""
+    import json
+    import re
+    if not raw:
+        return ""
+    txt = raw.strip()
+    txt = re.sub(r"^```(?:json)?|```$", "", txt, flags=re.MULTILINE).strip()
+    m = re.search(r"\[.*\]", txt, flags=re.DOTALL)
+    if not m:
+        return raw
+    try:
+        arr = json.loads(m.group(0))
+        segs = [{"start": s.get("start", ""), "end": s.get("end", ""),
+                 "script": s.get("script", ""), "visual_summary": s.get("visual_summary", ""),
+                 "on_screen_text": s.get("on_screen_text", "")}
+                for s in arr if isinstance(s, dict)]
+        return json.dumps(segs, ensure_ascii=False) if segs else raw
+    except Exception:  # noqa: BLE001
+        return raw
+
+
+def _gemini(parts: list, retries: int = 3) -> str:
+    """Gemini 호출. 503(과부하)/429는 백오프 재시도. 실패 시 '' (앱 멈춤 방지)."""
+    import time
+
     import requests
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}")
-    try:
-        r = requests.post(url, json={"contents": [{"parts": parts}]}, timeout=150)
-        j = r.json()
-        if "error" in j:
+    body = {
+        "contents": [{"parts": parts}],
+        # 2.5-flash는 thinking이 출력 토큰을 소진해 본문이 빌 수 있음 → thinking 끄고 출력 상향
+        "generationConfig": {"maxOutputTokens": 8192, "temperature": 0.2,
+                             "thinkingConfig": {"thinkingBudget": 0}},
+    }
+    for attempt in range(retries + 1):
+        try:
+            r = requests.post(url, json=body, timeout=180)
+            j = r.json()
+            if "error" in j:
+                code = j["error"].get("code")
+                if code in (503, 429) and attempt < retries:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                return ""
+            cand = (j.get("candidates") or [{}])[0]
+            return " ".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
+        except Exception:  # noqa: BLE001
+            if attempt < retries:
+                time.sleep(2 * (attempt + 1))
+                continue
             return ""
-        return " ".join(p.get("text", "") for p in j["candidates"][0]["content"]["parts"]).strip()
+    return ""
+
+
+def _mp4_duration(content: bytes) -> float:
+    """ffmpeg 없이 mp4 'mvhd' 박스에서 영상 길이(초) 추출. 실패 시 0."""
+    try:
+        i = content.find(b"mvhd")
+        if i < 0:
+            return 0.0
+        import struct
+        ver = content[i + 4]
+        if ver == 1:
+            timescale = struct.unpack(">I", content[i + 24:i + 28])[0]
+            duration = struct.unpack(">Q", content[i + 28:i + 36])[0]
+        else:
+            timescale = struct.unpack(">I", content[i + 16:i + 20])[0]
+            duration = struct.unpack(">I", content[i + 20:i + 24])[0]
+        return duration / timescale if timescale else 0.0
     except Exception:  # noqa: BLE001
-        return ""
+        return 0.0
 
 
-def _gemini_video_file(url: str, ad: dict) -> str:
-    """Meta(fbcdn) 등 영상 URL을 다운로드해 inline_data(base64)로 Gemini에 전달.
-    URL 텍스트만 넘기면 Gemini가 접근 못 하므로 파일을 직접 업로드."""
+MAX_DURATION_SEC = 60   # 60초 초과 영상은 생성 제한(확인 필요)
+
+
+def _gemini_video_file(url: str, ad: dict) -> tuple:
+    """Meta(fbcdn) 등 mp4를 다운로드 → 해시 캐시 확인 → 길이 게이트 → Gemini 분석.
+    반환 (status, text, source, error). status ∈ completed/video_unavailable/video_too_long."""
     import base64
+    import hashlib
+
+    import database
     import requests
     try:
         r = requests.get(url, timeout=90, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200 or not r.content or len(r.content) > 20 * 1024 * 1024:
-            return ""
-        b64 = base64.b64encode(r.content).decode()
-    except Exception:  # noqa: BLE001
-        return ""
-    return _gemini([{"inline_data": {"mime_type": "video/mp4", "data": b64}},
-                    {"text": PROMPT + _ctx(ad)}])
+        if r.status_code != 200 or not r.content:
+            return "video_unavailable", "", "", f"영상 다운로드 실패(HTTP {r.status_code}, 만료 가능)"
+        content = r.content
+    except Exception as e:  # noqa: BLE001
+        return "video_unavailable", "", "", f"영상 다운로드 오류: {str(e)[:80]}"
+
+    # 중복 제거: 같은 영상(내용 해시)이면 캐시 재사용 → Gemini 재호출 안 함
+    vhash = "vid:" + hashlib.sha1(content).hexdigest()
+    cached = database.get_script_cache(vhash)
+    if cached:
+        return "completed", cached["text"], cached["source"], ""
+
+    if len(content) > 20 * 1024 * 1024:
+        return "video_unavailable", "", "", "영상이 20MB를 초과해 분석 불가"
+    dur = _mp4_duration(content)
+    if dur and dur > MAX_DURATION_SEC:
+        return "video_too_long", "", "", f"{int(dur)}초 영상 — 60초 초과(생성 제한, 확인 필요)"
+
+    b64 = base64.b64encode(content).decode()
+    g = _gemini([{"inline_data": {"mime_type": "video/mp4", "data": b64}},
+                 {"text": PROMPT + _ctx(ad)}])
+    seg = _parse_segments(g)
+    if seg:
+        database.put_script_cache(vhash, seg, "gemini_video")
+        return "completed", seg, "gemini_video", ""
+    return "video_unavailable", "", "", "Gemini 영상 분석 실패(과부하/응답 없음) — 잠시 후 재시도"
 
 
 def transcript_only(ad: dict) -> dict | None:
@@ -108,30 +175,118 @@ def generate(ad: dict) -> dict:
     if free:
         return free
 
+    # 영상(mp4/YouTube)이 실제로 있어야 분석 — 썸네일만 있는 소재는 thumbnail_only
+    vurl = ad.get("video_url") or ad.get("media_url") or ""
+    has_video = bool(vid) or vurl.startswith("http")
+    if not has_video:
+        return {"text": "", "source": "", "status": "thumbnail_only",
+                "error": "영상 없음(이미지 소재) — '썸네일 분석'을 사용하세요", "input_type": "none"}
+
     if not config.GEMINI_API_KEY:
         return {"text": "", "source": "manual", "status": "failed",
-                "error": "자막 없음 + GEMINI_API_KEY 미설정", "input_type": "none"}
+                "error": "GEMINI_API_KEY 미설정", "input_type": "none"}
 
-    # ② Gemini 영상 분석(YouTube URL 직접)
+    # ② Gemini 영상 분석(YouTube URL 직접) → 구간 JSON (video_id 캐시)
     if vid:
-        g = _gemini([{"file_data": {"file_uri": YT.watch_url(vid)}}, {"text": PROMPT + _ctx(ad)}])
-        if g:
-            return {"text": g, "source": "gemini_video", "status": "completed",
+        import database
+        cached = database.get_script_cache("yt:" + vid)
+        if cached:
+            return {"text": cached["text"], "source": cached["source"], "status": "completed",
                     "error": "", "input_type": "video_url"}
+        g = _gemini([{"file_data": {"file_uri": YT.watch_url(vid)}}, {"text": PROMPT + _ctx(ad)}])
+        seg = _parse_segments(g)
+        if seg:
+            database.put_script_cache("yt:" + vid, seg, "gemini_video")
+            return {"text": seg, "source": "gemini_video", "status": "completed",
+                    "error": "", "input_type": "video_url"}
+        return {"text": "", "source": "", "status": "video_unavailable",
+                "error": "Gemini 응답 없음(과부하) — 잠시 후 재시도", "input_type": "none"}
 
-    # ③ Meta/기타 영상 파일 다운로드 → Gemini inline 분석
-    vurl = ad.get("video_url") or ad.get("media_url") or ""
-    if vurl.startswith("http"):
-        g = _gemini_video_file(vurl, ad)
-        if g:
-            return {"text": g, "source": "gemini_video", "status": "completed",
-                    "error": "", "input_type": "video_file"}
+    # ③ Meta/IG 등 mp4 다운로드 → 캐시확인 → 길이게이트 → Gemini Vision(STT+화면문구+장면, 1콜)
+    status, text, source, err = _gemini_video_file(vurl, ad)
+    return {"text": text, "source": source, "status": status, "error": err,
+            "input_type": "video_file"}
 
-    # ④ Gemini 추정(영상 접근 불가 → 썸네일/카피 기반 추정)
-    est = _gemini([{"text": PROMPT + "\n\n※ 영상 직접 확인 불가 → 아래 정보 기반 '추정' 스크립트."
-                    + _ctx(ad)}])
-    if est:
-        return {"text": est, "source": "gemini_estimated", "status": "completed",
-                "error": "", "input_type": "thumbnail_adcopy"}
-    return {"text": "", "source": "gemini", "status": "failed",
-            "error": "Gemini 응답 없음/오류", "input_type": "none"}
+
+THUMB_PROMPT = """이미지 광고 소재(썸네일)를 보고 아래 JSON 객체 하나만 출력해줘. 설명/코드블록 없이 JSON만.
+{"thumbnail_text":"화면에 보이는 문구(없으면 \\"\\")","visual_summary":"썸네일 장면 요약 한 줄",
+"main_subject":"인물/제품/피부/패키지 등 핵심 피사체","hook_type":"문제제기/전후비교/후기/혜택/정보전달 중 하나",
+"ad_angle":"이 소재의 소구 포인트","script_available":false,"reason":"thumbnail_only"}
+한국어로, 이미지에 실제로 보이는 것만. 추측 최소화."""
+
+
+def _thumb_bytes(ad: dict) -> tuple:
+    """광고 썸네일 이미지 바이트 확보(로컬 파일 우선, 없으면 http). 반환 (bytes, mime)."""
+    import requests
+    from pathlib import Path
+    src = ad.get("local_thumbnail_path") or ad.get("thumbnail_url") or ad.get("preview_url") or ""
+    if not src:
+        return b"", ""
+    try:
+        if src.startswith("http"):
+            r = requests.get(src, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code == 200 and r.content:
+                return r.content, (r.headers.get("content-type") or "image/jpeg").split(";")[0]
+        else:
+            p = src[4:] if src.startswith("app/") else src   # 'app/static/..' → 'static/..'
+            fp = config.ROOT / p
+            if fp.exists():
+                mime = "image/png" if fp.suffix.lower() == ".png" else "image/jpeg"
+                return fp.read_bytes(), mime
+    except Exception:  # noqa: BLE001
+        pass
+    return b"", ""
+
+
+def analyze_thumbnail(ad: dict) -> dict:
+    """이미지 소재 썸네일을 Gemini Vision으로 분석 → 후킹/소구 등 JSON 객체. (버튼 클릭 시에만)"""
+    import base64
+    import hashlib
+
+    import database
+    if not config.GEMINI_API_KEY:
+        return {"text": "", "source": "", "status": "thumbnail_only",
+                "error": "GEMINI_API_KEY 미설정", "input_type": "none"}
+    content, mime = _thumb_bytes(ad)
+    if not content:
+        return {"text": "", "source": "", "status": "thumbnail_only",
+                "error": "썸네일 이미지를 불러올 수 없습니다", "input_type": "none"}
+    ihash = "img:" + hashlib.sha1(content).hexdigest()
+    cached = database.get_script_cache(ihash)
+    if cached:
+        return {"text": cached["text"], "source": "gemini_thumbnail", "status": "thumbnail_only",
+                "error": "", "input_type": "thumbnail"}
+    b64 = base64.b64encode(content).decode()
+    g = _gemini([{"inline_data": {"mime_type": mime or "image/jpeg", "data": b64}},
+                 {"text": THUMB_PROMPT + _ctx(ad)}])
+    obj = _parse_thumb(g)
+    if obj:
+        database.put_script_cache(ihash, obj, "gemini_thumbnail")
+        return {"text": obj, "source": "gemini_thumbnail", "status": "thumbnail_only",
+                "error": "", "input_type": "thumbnail"}
+    return {"text": "", "source": "", "status": "thumbnail_only",
+            "error": "Gemini 썸네일 분석 실패(과부하) — 잠시 후 재시도", "input_type": "none"}
+
+
+def _parse_thumb(raw: str) -> str:
+    """Gemini 응답에서 JSON 객체만 추출해 정규화. 실패 시 ''."""
+    import json
+    import re
+    if not raw:
+        return ""
+    txt = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    m = re.search(r"\{.*\}", txt, flags=re.DOTALL)
+    if not m:
+        return ""
+    try:
+        o = json.loads(m.group(0))
+        return json.dumps({
+            "thumbnail_text": o.get("thumbnail_text", ""),
+            "visual_summary": o.get("visual_summary", ""),
+            "main_subject": o.get("main_subject", ""),
+            "hook_type": o.get("hook_type", ""),
+            "ad_angle": o.get("ad_angle", ""),
+            "script_available": False, "reason": "thumbnail_only",
+        }, ensure_ascii=False)
+    except Exception:  # noqa: BLE001
+        return ""

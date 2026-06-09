@@ -116,6 +116,9 @@ def init_db(seed_users: Optional[dict] = None) -> None:
         matched_by TEXT, classification TEXT, signals TEXT,
         matched_ad_id TEXT, collected_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS video_script_cache (
+        cache_key TEXT PRIMARY KEY, segments_json TEXT, source TEXT, created_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE,
         password_hash TEXT, role TEXT DEFAULT 'member', created_at TEXT
@@ -899,6 +902,27 @@ def social_count() -> int:
     n = conn.execute("SELECT COUNT(*) FROM social_videos").fetchone()[0]
     conn.close()
     return n
+
+
+def get_script_cache(cache_key: str) -> Optional[dict]:
+    """영상 해시/URL 기준 스크립트 캐시 조회 → 같은 영상 재호출 방지."""
+    if not cache_key:
+        return None
+    conn = get_conn()
+    r = conn.execute("SELECT segments_json, source FROM video_script_cache WHERE cache_key=?",
+                     (cache_key,)).fetchone()
+    conn.close()
+    return {"text": r[0], "source": r[1]} if r and r[0] else None
+
+
+def put_script_cache(cache_key: str, segments_json: str, source: str) -> None:
+    if not cache_key or not segments_json:
+        return
+    conn = get_conn()
+    conn.execute("INSERT OR REPLACE INTO video_script_cache(cache_key,segments_json,source,created_at)"
+                 " VALUES(?,?,?,?)", (cache_key, segments_json, source, _now()))
+    conn.commit()
+    conn.close()
 
 
 def ingest_youtube_candidates(rows: list[dict]) -> int:
