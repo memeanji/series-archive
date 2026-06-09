@@ -88,16 +88,15 @@ _JS_EXTRACT = r"""
       if (mm) { bg = mm[1]; break; }
     }
     const links = Array.from(card.querySelectorAll('a')).map(a => a.href).filter(Boolean);
-    // 영상이면 poster 우선(프로필 회피), 이미지면 가장 큰 소재 이미지 우선
+    // 영상 광고: poster만 사용(없으면 비워 둬서 Python 스크린샷 폴백 → 프로필 img 회피)
+    // 이미지 광고: 가장 큰 소재 이미지 우선
     let thumb = '', src = 'none';
     if (vids.length) {
       if (posters[0]) { thumb = posters[0]; src = 'poster'; }
-      else if (creativeImg) { thumb = creativeImg; src = 'img'; }
-      else if (bg) { thumb = bg; src = 'bg'; }
+      // poster 없으면 thumb 비움 → Python에서 카드 screenshot 폴백(프로필 img 안 씀)
     } else {
       if (creativeImg) { thumb = creativeImg; src = 'img'; }
       else if (bg) { thumb = bg; src = 'bg'; }
-      else if (posters[0]) { thumb = posters[0]; src = 'poster'; }
     }
     // 게재 플랫폼(Facebook/Instagram/Messenger/Audience Network) 추출 — aria-label/아이콘 src 기반
     const platSet = ['Facebook', 'Instagram', 'Messenger', 'Audience Network', 'Threads'];

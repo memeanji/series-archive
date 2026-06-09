@@ -87,13 +87,7 @@ def main() -> None:
     tab = header["tab"]
     if tab == "유튜브":
         brand_sel = st.session_state.get("sa_brand", "전체")
-        sub = st.segmented_control("유튜브 보기", ["🎯 광고 매칭", "📺 수집 영상"],
-                                   default="🎯 광고 매칭", key="yt_sub",
-                                   label_visibility="collapsed") or "🎯 광고 매칭"
-        if sub == "📺 수집 영상":
-            C.render_social_grid(_social())
-        else:
-            C.render_youtube_ad_matches(brand_sel, _yt_candidates(brand_sel, ""), _yt_counts())
+        C.render_youtube_ad_matches(brand_sel, _yt_candidates(brand_sel, ""), _yt_counts())
         _footer(t0)
         return
 

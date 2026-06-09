@@ -540,33 +540,6 @@ def _render_script_body(text: str) -> str:
             f"padding:10px 12px;max-height:360px;overflow:auto'>{''.join(rows)}</div>")
 
 
-def _render_social_reaction(ad: dict) -> None:
-    """이 광고를 돌리는 브랜드가 '유튜브에도' 광고/영상을 돌리는지 — 브랜드 단위 참고.
-    (특정 광고↔영상 1:1 매칭은 정확도가 낮아 제거. '원본 영상 보기' 링크 없음.)"""
-    brand = ad.get("brand_name") or ""
-    yt = database.brand_youtube_summary(brand)
-    st.markdown(f"##### 📺 이 브랜드의 유튜브 <span style='font-size:11px;color:{S.SUB}'>"
-                f"· 브랜드 단위 참고(이 광고 영상과 1:1 아님)</span>", unsafe_allow_html=True)
-    if not yt["count"]:
-        st.info(f"'{brand}'의 유튜브 영상은 아직 없습니다. (유튜브 탭에서 수집 시 표시)")
-        return
-    st.caption(f"**{brand}**는 유튜브에도 영상 **{yt['count']}개**가 수집됐습니다. "
-               "아래 수치는 광고 성과가 아니라 **유튜브 원본 영상의 반응**입니다.")
-    top = yt["top"] or {}
-    m = st.columns(3)
-    m[0].metric("유튜브 영상 수", f"{yt['count']}개")
-    m[1].metric("최고 조회수", _fmt(yt["max_views"]))
-    m[2].metric("최고 영상 등급",
-                f"{top.get('final_grade')}급" if top.get("final_grade") else "-")
-    for v in yt["videos"][:4]:
-        title = (v.get("title") or "(제목 없음)")[:42]
-        line = (f"👁 {_fmt(v.get('views'))} · ❤ {_fmt(v.get('likes'))} · {title}")
-        if is_valid_external_url(v.get("source_url")):
-            st.markdown(f"- [{line} ↗]({v['source_url']})")
-        else:
-            st.markdown(f"- {line}")
-
-
 def _render_video_script(ad: dict) -> None:
     """모달을 닫지 않고(=튕김 없음) 세션 상태에 결과를 캐시해 즉시 갱신."""
     import services.script_gen as SG
@@ -602,7 +575,7 @@ def _render_video_script(ad: dict) -> None:
             cur = ovr[aid]
 
     head = st.columns([3, 1, 1])
-    head[0].markdown("##### 🎬 영상 스크립트")
+    head[0].markdown("##### 영상 스크립트")
     completed = bool(cur["text"]) and cur["status"] == "completed"
 
     # 버튼 — Gemini 는 클릭 시에만 호출(키 절약). 자막 있으면 '재생성', 없으면 'AI 생성'
@@ -696,10 +669,7 @@ def render_ad_detail(ad: dict) -> None:
         st.caption(f"광고 ID {aid} · 수집일 {str(_g(ad,'collected_at','-'))[:10]}")
 
         st.divider()
-        _render_social_reaction(ad)
-
-        st.divider()
-        st.markdown("##### 📝 광고 카피")
+        st.markdown("##### 광고 카피")
         if ad.get("ad_copy"):
             st.markdown(_greybox(ad["ad_copy"]), unsafe_allow_html=True)
         else:
@@ -710,7 +680,7 @@ def render_ad_detail(ad: dict) -> None:
 
     # ── 분석 메모(스크립트와 분리) ──
     st.divider()
-    st.markdown("##### 📒 분석 메모")
+    st.markdown("##### 분석 메모")
     memo = st.text_area("메모", value=ad.get("memo") or "", label_visibility="collapsed",
                         key=f"memo_{aid}", placeholder="이 레퍼런스의 후킹/구조/인사이트 메모…")
     cc = st.columns([1, 1, 2])
@@ -877,27 +847,41 @@ def render_social_grid(vids: list[dict]) -> None:
 
 
 YT_CLS = {
-    "youtube_ad_matched": ("🎯 광고 확정", S.PRIMARY),
-    "youtube_ad_candidate": ("🟡 광고 후보", "#F59E0B"),
-    "youtube_social_or_ppl": ("💬 소셜·PPL", S.SUB),
+    "youtube_ad_matched": ("광고 확정", S.PRIMARY),
+    "youtube_ad_candidate": ("광고 후보", "#F59E0B"),
+    "youtube_social_or_ppl": ("소셜·PPL", S.SUB),
 }
 
 
 def _run_yt_match(brand: str) -> None:
+    """인라인 실행 — subprocess는 Streamlit secrets(YOUTUBE_API_KEY)를 못 읽으므로 직접 호출."""
+    if not YT.is_enabled():
+        st.error("YOUTUBE_API_KEY가 설정되지 않아 매칭할 수 없습니다. (배포 시 secrets에 등록 필요)")
+        return
+    import jobs.match_youtube_ads as MJ
     target = brand if brand and brand != "전체" else ""
-    args = [sys.executable, str(ROOT / "jobs" / "match_youtube_ads.py")]
     if target:
-        args.append(target)
-    label = f"'{target}'" if target else "구글 광고 보유 브랜드 전체"
-    with st.spinner(f"{label} YouTube 광고 매칭 중… (검색→유사도→분류, 1~3분)"):
-        try:
-            r = subprocess.run(args, capture_output=True, text=True, timeout=600, cwd=str(ROOT))
-            tail = [ln for ln in (r.stdout or "").splitlines() if "완료" in ln] or ["완료"]
-            st.success(f"매칭 완료 — {tail[-1]}")
-        except subprocess.TimeoutExpired:
-            st.error("시간 초과")
-        except Exception as e:  # noqa: BLE001
-            st.error(f"실패: {e}")
+        brands = [target]
+    else:
+        conn = database.get_conn()
+        brands = [r[0] for r in conn.execute(
+            "SELECT DISTINCT brand_name FROM ad_library_ads WHERE platform='google' "
+            "AND brand_name<>''").fetchall()]
+        conn.close()
+    before = sum(database.youtube_candidate_counts().values())
+    tot = {"matched": 0, "candidate": 0, "ppl": 0}
+    with st.spinner(f"{'·'.join(brands)} YouTube 광고 매칭 중… (검색→유사도→분류)"):
+        for b in brands:
+            try:
+                r = MJ.match_brand(b)
+                for k in tot:
+                    tot[k] += r.get(k, 0)
+            except Exception as e:  # noqa: BLE001
+                st.warning(f"{b}: {e}")
+    after = sum(database.youtube_candidate_counts().values())
+    added = after - before
+    st.success(f"매칭 완료 — 광고확정 {tot['matched']} · 후보 {tot['candidate']} · "
+               f"소셜·PPL {tot['ppl']} (신규 {max(added,0)}건)")
 
 
 def _yt_match_card(c: dict) -> None:
@@ -906,7 +890,7 @@ def _yt_match_card(c: dict) -> None:
     th = c.get("thumbnail_url") or ""
     dur = int(c.get("duration_sec") or 0)
     durtxt = f"{dur//60}:{dur%60:02d}" if dur else "-"
-    cap = "📝자막" if c.get("has_caption") else ""
+    cap = "· 자막" if c.get("has_caption") else ""
     sg = {}
     try:
         sg = _json.loads(c.get("signals") or "{}")
@@ -925,39 +909,39 @@ def _yt_match_card(c: dict) -> None:
         if th:
             st.markdown(f"<div class='sa-thumb'><img src='{th}'/>"
                         f"<div class='sa-badge' style='background:{color}'>{int(c.get('matching_score') or 0)}</div>"
-                        f"<div class='sa-media'>▶ {durtxt}</div></div>", unsafe_allow_html=True)
+                        f"<div class='sa-media'>{durtxt}</div></div>", unsafe_allow_html=True)
         st.markdown(f"<div style='font-weight:700;font-size:12px;color:{color};margin-top:6px'>{label}</div>"
                     f"<div class='sa-title'>{(c.get('title') or '(제목 없음)')[:46]}</div>"
-                    f"<div class='sa-copy'>📺 {(c.get('channel_title') or '-')[:24]} · "
+                    f"<div class='sa-copy'>{(c.get('channel_title') or '-')[:24]} · "
                     f"{str(c.get('published_at') or '')[:10]} {cap}</div>",
                     unsafe_allow_html=True)
         if why:
             st.caption("근거: " + " · ".join(why))
         if is_valid_external_url(c.get("source_url")):
-            st.link_button("▶ YouTube에서 보기 ↗", c["source_url"], use_container_width=True)
+            st.link_button("YouTube에서 보기", c["source_url"], use_container_width=True)
 
 
 def render_youtube_ad_matches(brand: str, candidates: list, counts: dict) -> None:
     """YouTube '광고' 매칭 뷰 — 광고 데이터 기반 후보를 3분류해 표시(전체 수집과 분리)."""
-    st.markdown(f"**🎯 YouTube 광고 매칭** <span style='font-size:12px;color:{S.SUB}'>"
-                f"· 광고주/문구/썸네일/랜딩 기준으로 광고 영상만 가려냄 (제품명·해시태그만 일치는 광고로 보지 않음)</span>",
+    st.markdown(f"**YouTube 광고 매칭** <span style='font-size:12px;color:{S.SUB}'>"
+                f"· 광고주·문구·썸네일·랜딩 기준으로 광고 영상만 가려냅니다 (제품명·해시태그만 일치는 광고로 보지 않음)</span>",
                 unsafe_allow_html=True)
     run = st.columns([1.4, 3])
     btxt = brand if brand and brand != "전체" else "구글 광고 보유 브랜드 전체"
-    if run[0].button(f"🔎 '{btxt}' 매칭 실행", use_container_width=True, type="primary"):
+    if run[0].button(f"'{btxt}' 매칭 실행", use_container_width=True, type="primary"):
         _run_yt_match(brand)
         st.cache_data.clear()
         st.rerun()
-    run[1].caption("브랜드를 사이드바에서 고르면 그 브랜드만, '전체'면 구글 광고가 있는 브랜드 전부 매칭합니다.")
+    run[1].caption("사이드바에서 브랜드를 고르면 그 브랜드만, '전체'면 구글 광고가 있는 브랜드 전부 매칭합니다.")
 
     nm = counts.get("youtube_ad_matched", 0)
     nc = counts.get("youtube_ad_candidate", 0)
     npp = counts.get("youtube_social_or_ppl", 0)
     pick = st.segmented_control(
-        "분류", [f"🎯 광고 확정 {nm}", f"🟡 후보 {nc}", f"💬 소셜·PPL {npp}", "전체"],
-        default=f"🎯 광고 확정 {nm}", label_visibility="collapsed", key="ytm_cls")
-    cmap = {f"🎯 광고 확정 {nm}": "youtube_ad_matched", f"🟡 후보 {nc}": "youtube_ad_candidate",
-            f"💬 소셜·PPL {npp}": "youtube_social_or_ppl"}
+        "분류", [f"광고 확정 {nm}", f"광고 후보 {nc}", f"소셜·PPL {npp}", "전체"],
+        default=f"광고 확정 {nm}", label_visibility="collapsed", key="ytm_cls")
+    cmap = {f"광고 확정 {nm}": "youtube_ad_matched", f"광고 후보 {nc}": "youtube_ad_candidate",
+            f"소셜·PPL {npp}": "youtube_social_or_ppl"}
     want = cmap.get(pick or "")
     rows = [c for c in candidates if (not want or c.get("classification") == want)]
 
