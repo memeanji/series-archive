@@ -60,7 +60,14 @@ def inject_css() -> None:
       div[data-testid="stSegmentedControl"] button[aria-checked="true"],
       div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}
-      #MainMenu, footer, header {{visibility:hidden;}}
+      #MainMenu, footer {{visibility:hidden;}}
+      /* header(상단 툴바)는 숨기지 않음 — 사이드바 펼치는 '>' 버튼이 여기 들어있다.
+         배경만 투명 처리해 깔끔하게, 펼침/접기 컨트롤은 항상 보이도록 강제. */
+      header[data-testid="stHeader"] {{background:transparent;}}
+      [data-testid="stSidebarCollapseButton"],
+      [data-testid="stSidebarCollapsedControl"],
+      [data-testid="collapsedControl"] {{
+          visibility:visible !important; display:flex !important; opacity:1 !important;}}
       .stApp {{background:{BG};}}
       .block-container {{padding-top:1rem; padding-bottom:2.5rem; max-width:1560px;}}
 
