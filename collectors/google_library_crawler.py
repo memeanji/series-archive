@@ -159,15 +159,24 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
             dp = ctx.new_page()
             for adrow in ads:
                 if not adrow.get("_iframe") or not adrow.get("_href"):
+                    adrow["raw_data"]["collection_status"] = "thumbnail_only"
                     continue
-                vid = _youtube_id_from_creative(dp, adrow["_href"])
-                if vid:
+                res = _extract_google_video(dp, adrow["_href"])
+                adrow["raw_data"].update({
+                    "variant_count": res["variant_count"],
+                    "selected_variant_index": res["variant_index"],
+                    "is_youtube_embedded": bool(res["youtube_id"]),
+                    "collection_status": "playable_video" if res["youtube_id"] else "thumbnail_only",
+                })
+                adrow["google_ad_url"] = adrow.get("transparency_url", "")
+                if res["youtube_id"]:
+                    vid = res["youtube_id"]
                     adrow["video_url"] = f"https://www.youtube.com/watch?v={vid}"
                     adrow["ad_format"] = "video"
                     adrow["media_type"] = "video"
                     adrow["raw_data"]["youtube_id"] = vid
                     log["youtube_linked"] = log.get("youtube_linked", 0) + 1
-                    # 구글 영상광고=유튜브 영상이므로 유튜브 공개 지표(조회수/좋아요/댓글) 수집
+                    # 구글 영상광고=유튜브 영상 → 유튜브 공개 지표(조회수/좋아요/댓글) 수집
                     try:
                         import services.youtube as _YT
                         if _YT.is_enabled():
@@ -191,18 +200,45 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
     return ads, log
 
 
-def _youtube_id_from_creative(page, url: str) -> str:
-    """구글 소재 상세 페이지를 열어 중첩 frame URL에서 youtube embed 영상 ID 추출."""
+def _scan_youtube(page) -> str:
+    for f in page.frames:
+        m = re.search(r"youtube\.com/embed/([A-Za-z0-9_-]{11})", f.url or "")
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _extract_google_video(page, url: str) -> dict:
+    """구글 소재 상세를 열고 '대안(variation) carousel'을 끝까지 순회하며 유튜브 영상을 찾는다.
+    첫 화면은 썸네일이어도 대안 4/5·5/5 등 뒤쪽에 실제 재생 영상이 있는 경우를 잡는다.
+    반환 {youtube_id, variant_index(1-base), variant_count}."""
+    out = {"youtube_id": "", "variant_index": 0, "variant_count": 1}
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=45000)
-        page.wait_for_timeout(5000)
-        for f in page.frames:
-            m = re.search(r"youtube\.com/embed/([A-Za-z0-9_-]{11})", f.url or "")
-            if m:
-                return m.group(1)
+        page.wait_for_timeout(4500)
+        body = page.inner_text("body") or ""
+        m = re.search(r"\b(\d+)\s*/\s*(\d+)\b", body)
+        if m:
+            out["variant_count"] = min(int(m.group(2)), 12)   # 안전 상한
+        n = out["variant_count"] or 1
+        for i in range(n):
+            vid = _scan_youtube(page)
+            if vid:
+                out["youtube_id"] = vid
+                out["variant_index"] = i + 1
+                return out
+            if i < n - 1:   # 다음 대안으로
+                btn = page.query_selector("button.variation-right-arrow, .variation-right-arrow")
+                if not btn:
+                    break
+                try:
+                    btn.click(timeout=3000)
+                except Exception:  # noqa: BLE001
+                    break
+                page.wait_for_timeout(2500)
     except Exception:  # noqa: BLE001
         pass
-    return ""
+    return out
 
 
 def fetch_advertiser_names(brand: str, region: str = "KR", limit: int = 6) -> list[str]:
