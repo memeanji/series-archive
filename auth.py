@@ -80,12 +80,13 @@ def login() -> None:
       /* 배경: 왼쪽 캐릭터 이미지(위) + 하늘→잔디 그라데이션(뒤 폴백) */
       .stApp {{ background:{img_layer}linear-gradient(180deg,#BCE8FF 0%,#CFEFD8 52%,#A7E3C0 100%);
                 background-color:#A7E3C0; }}
-      .block-container {{ padding-top:0 !important; max-width:1240px; }}
+      .block-container {{ padding-top:0 !important; padding-right:2rem !important; max-width:1240px; }}
       /* 오른쪽 실제 로그인 카드 1개 (불투명 흰색 → 왼쪽 이미지와 겹쳐 보이지 않음) */
       div[data-testid="stForm"] {{
         background:rgba(255,255,255,0.97); border:none !important; border-radius:34px;
-        padding:40px 34px 30px; box-shadow:0 26px 70px rgba(16,24,40,.30);
-        max-width:470px; min-width:330px; margin:0 0 0 auto;
+        padding:38px 30px 28px; box-shadow:0 26px 70px rgba(16,24,40,.30);
+        width:100%; max-width:440px; margin:0 auto;   /* 컬럼 안 중앙 정렬 → 잘림 방지 */
+        box-sizing:border-box;
       }}
       div[data-testid="stForm"] label {{ font-weight:700; color:#334155; font-size:13px; }}
       .stTextInput input {{ border-radius:20px !important; height:50px; border:1px solid #D1FAE5;
@@ -107,8 +108,8 @@ def login() -> None:
     </style>
     """, unsafe_allow_html=True)
 
-    # 왼쪽 55%(캐릭터) : 오른쪽 45%(카드) — 카드는 오른쪽 세로 중앙
-    _, right = st.columns([1.25, 1])
+    # 왼쪽(캐릭터) : 오른쪽(카드) — 오른쪽에 카드+여백 충분히
+    _, right = st.columns([1, 1])
     with right:
         st.markdown("<div style='height:14vh'></div>", unsafe_allow_html=True)
         with st.form("login", border=True):
