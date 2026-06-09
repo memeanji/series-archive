@@ -19,12 +19,34 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 
+def _deep_find(mapping, key: str):
+    """st.secrets에서 key를 top-level 우선, 없으면 중첩 섹션까지 재귀 탐색.
+    (secrets.toml에서 키가 [auth] 등 섹션 아래에 들어가도 찾을 수 있게)"""
+    try:
+        if key in mapping:
+            return mapping[key]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        for k in list(mapping.keys()):
+            v = mapping[k]
+            if hasattr(v, "keys"):
+                found = _deep_find(v, key)
+                if found is not None:
+                    return found
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def secret(key: str, default: str = "") -> str:
-    """1순위 st.secrets(Streamlit Cloud) → 2순위 .env/환경변수. 토큰값은 로그에 찍지 않음."""
+    """1순위 st.secrets(Streamlit Cloud, 중첩 섹션 포함) → 2순위 .env/환경변수.
+    토큰값은 로그에 찍지 않음."""
     try:
         import streamlit as st  # 비-streamlit 컨텍스트에선 예외 → env 폴백
-        if key in st.secrets:
-            return str(st.secrets[key]).strip()
+        v = _deep_find(st.secrets, key)
+        if v is not None and not hasattr(v, "keys"):
+            return str(v).strip()
     except Exception:  # noqa: BLE001
         pass
     return os.getenv(key, default).strip()
