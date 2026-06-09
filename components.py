@@ -784,7 +784,8 @@ def render_ad_detail(ad: dict) -> None:
                          f"line-height:1.25;font-variant-numeric:tabular-nums'>{val}</div></div>")
             html += "</div>"
             st.markdown(html, unsafe_allow_html=True)
-            st.caption("이 광고 영상의 YouTube 공개 지표")
+            st.markdown("<div style='color:#94A3B8;font-size:12px;margin:8px 0 14px'>"
+                        "이 광고 영상의 YouTube 공개 지표</div>", unsafe_allow_html=True)
         elif plat == "meta":
             st.caption("ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 반응 지표를 제공하지 않습니다.")
         elif plat == "google":
