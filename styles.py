@@ -88,7 +88,7 @@ def inject_css() -> None:
           box-shadow:0 1px 2px rgba(16,24,40,.04); transition:transform .15s, box-shadow .15s;}}
       div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
           transform:translateY(-3px); box-shadow:0 8px 22px rgba(16,24,40,.10);}}
-      .sa-thumb {{position:relative; aspect-ratio:16/10; border-radius:12px; overflow:hidden;
+      .sa-thumb {{position:relative; aspect-ratio:16/9; border-radius:12px; overflow:hidden;
                   background:#0F172A;}}
       .sa-thumb img {{width:100%; height:100%; object-fit:cover;}}
       .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:800; font-size:12px;
@@ -107,7 +107,7 @@ def inject_css() -> None:
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
       .sa-title {{font-size:14.5px; color:{TEXT}; font-weight:700; margin-top:1px; line-height:1.25;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
-      .sa-copy {{font-size:12px; color:{SUB}; line-height:1.3; margin-top:2px; min-height:30px;
+      .sa-copy {{font-size:12px; color:{SUB}; line-height:1.3; margin-top:2px;
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
       .sa-meta {{font-size:13px; color:{SUB}; margin-top:5px; display:flex; justify-content:space-between;}}
       .sa-pbadge {{font-size:11.5px; font-weight:700; color:{SUB}; background:{BG};

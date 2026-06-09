@@ -45,6 +45,15 @@ def _num(v, suffix="") -> str:
     return f"{v}{suffix}"
 
 
+def _full(n) -> str:
+    """전체 숫자(개 단위, 천단위 콤마). 예: 1,234,567"""
+    try:
+        n = int(n or 0)
+    except (TypeError, ValueError):
+        return "-"
+    return f"{n:,}" if n > 0 else "-"
+
+
 def _g(ad: dict, key: str, default=""):
     v = ad.get(key)
     return default if v in (None, "") else v
@@ -457,20 +466,22 @@ def render_ad_card(ad: dict, idx: int) -> None:
         badge = (f"<div class='sa-badge' style='background:{S.grade_color(grade)};font-size:14px'>"
                  f"{grade}급</div>")
     elif int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
-        eng = (f"<span title='연결된 유튜브 원본 영상의 공개 지표(YouTube API) · 광고 성과 아님'>"
-               f"👁 {_fmt(ad.get('yt_views'))} ❤ {_fmt(ad.get('yt_likes'))} "
-               f"<span style='color:{S.SUB}'>· YT영상</span></span>")
+        eng = (f"<span title='연결된 유튜브 원본 영상의 공개 지표 · 광고 성과 아님'>"
+               f"👁 {_full(ad.get('yt_views'))} ❤ {_full(ad.get('yt_likes'))}</span>")
         badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
     else:
         eng = f"<span style='color:{S.SUB}'>게재 {str(_g(ad,'started_at','-'))[:10] or '-'}</span>"
         badge = f"<div class='sa-badge' style='background:{S.score_color(score)}'>{score}</div>"
+    _title = (_g(ad, "ad_title", "") or "")[:40]            # 실제 제목만(없으면 공백 div 생략)
+    _copy = (_g(ad, "ad_copy_short", "") or "")[:60]
     with st.container(border=True):
         st.markdown(
             f"<div class='{thumb_cls}'>{inner}{badge}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}</div>"
             f"<div class='sa-brand'>{_g(ad,'brand_name','-')}{ab_chip}</div>"
-            f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','')[:40]}</div>"
-            f"<div class='sa-copy'>{_g(ad,'ad_copy_short','')[:60]}</div>"
+            + (f"<div class='sa-title'>{_title}</div>" if _title else "")
+            + (f"<div class='sa-copy'>{_copy}</div>" if _copy else "")
+            +
             f"<div class='sa-meta'><span>{eng}</span>"
             f"<span title='게재 플랫폼: {', '.join(plats) if plats else '-'}'>{plat_chip}"
             f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span></span></div>"
@@ -772,9 +783,9 @@ def render_ad_detail(ad: dict) -> None:
         yv, yl, yc = (int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0),
                       int(ad.get("yt_comments") or 0))
         if ad.get("video_url") and (yv or yl or yc):
-            cards = [("👁", "조회수", _fmt(yv), "#03C75A"),
-                     ("❤", "좋아요", _fmt(yl), "#EF4444"),
-                     ("💬", "댓글", _fmt(yc), "#0EA5E9")]
+            cards = [("👁", "조회수", _full(yv), "#03C75A"),
+                     ("❤", "좋아요", _full(yl), "#EF4444"),
+                     ("💬", "댓글", _full(yc), "#0EA5E9")]
             html = "<div style='display:flex;gap:10px;margin:10px 0 6px'>"
             for icon, lab, val, col in cards:
                 html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};"
