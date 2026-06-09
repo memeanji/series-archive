@@ -468,7 +468,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
             f"<div class='{thumb_cls}'>{inner}{badge}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}</div>"
             f"<div class='sa-brand'>{PLATFORM_ICON.get(plat,'')} {_g(ad,'brand_name','-')}{ab_chip}</div>"
-            f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','(제목 없음)')[:40]}</div>"
+            f"<div class='sa-title'>{_g(ad,'ad_title') or _g(ad,'ad_copy_short','')[:40]}</div>"
             f"<div class='sa-copy'>{_g(ad,'ad_copy_short','')[:60]}</div>"
             f"<div class='sa-meta'><span>{eng}</span>"
             f"<span title='게재 플랫폼: {', '.join(plats) if plats else '-'}'>{plat_chip}"

@@ -103,14 +103,14 @@ def inject_css() -> None:
       .sa-ph {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                text-align:center; color:{OFF_GRAY}; font-size:13px; font-weight:600;}}
       .sa-ph .i {{display:block; font-size:30px; margin-bottom:2px; opacity:.7;}}
-      .sa-brand {{font-weight:800; font-size:13px; color:{PRIMARY}; margin-top:7px;
+      .sa-brand {{font-weight:800; font-size:15.5px; color:{PRIMARY}; margin-top:7px;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
       .sa-title {{font-size:14.5px; color:{TEXT}; font-weight:700; margin-top:1px; line-height:1.25;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
       .sa-copy {{font-size:12px; color:{SUB}; line-height:1.3; margin-top:2px; min-height:30px;
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
-      .sa-meta {{font-size:11.5px; color:{SUB}; margin-top:4px; display:flex; justify-content:space-between;}}
-      .sa-pbadge {{font-size:10.5px; font-weight:700; color:{SUB}; background:{BG};
+      .sa-meta {{font-size:13px; color:{SUB}; margin-top:5px; display:flex; justify-content:space-between;}}
+      .sa-pbadge {{font-size:11.5px; font-weight:700; color:{SUB}; background:{BG};
                    border:1px solid {BORDER}; padding:1px 7px; border-radius:6px;}}
 
       /* ── 버튼 ── */
