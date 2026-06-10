@@ -77,17 +77,20 @@ def inject_css() -> None:
       header[data-testid="stHeader"] [data-testid="stToolbar"] * {{pointer-events:none !important;}}
       header[data-testid="stHeader"] button,
       header[data-testid="stHeader"] a {{pointer-events:auto !important;}}
+      /* 사이드바 펼치기(>>) 버튼 — position+최상위 z-index로 상단 탭 위에 올려 클릭 보장 */
+      [data-testid="stExpandSidebarButton"],
       [data-testid="stSidebarCollapseButton"],
       [data-testid="stSidebarCollapsedControl"],
-      [data-testid="stExpandSidebarButton"],
       [data-testid="collapsedControl"] {{
           visibility:visible !important; display:flex !important; opacity:1 !important;
-          pointer-events:auto !important; z-index:1000 !important;}}
-      /* 펼치기/접기 컨트롤 내부 버튼·아이콘까지 클릭 통과 보장(헤더 pointer-events:none 무시) */
+          position:relative !important; pointer-events:auto !important; z-index:2147483000 !important;}}
+      [data-testid="stExpandSidebarButton"] *,
       [data-testid="stSidebarCollapseButton"] *,
       [data-testid="stSidebarCollapsedControl"] *,
-      [data-testid="stExpandSidebarButton"] *,
       [data-testid="collapsedControl"] * {{pointer-events:auto !important;}}
+      /* 펼치기 버튼 히트 영역 넉넉히(작아서 안 눌리는 문제 방지) */
+      [data-testid="stExpandSidebarButton"] button,
+      [data-testid="stExpandSidebarButton"] {{min-width:2.4rem; min-height:2.4rem;}}
       .stApp {{background:{BG};}}
       .block-container {{padding-top:0.2rem; padding-bottom:2.5rem; max-width:1560px;}}
 
