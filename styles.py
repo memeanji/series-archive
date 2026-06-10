@@ -195,11 +195,12 @@ def inject_css() -> None:
       section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{padding-top:0 !important;}}
       section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > div:first-child {{
           padding-top:0 !important;}}
-      /* Series Archive — << 행 바로 아래 sticky 헤더(겹침 없음·구분선 없음·브랜드 리스트만 스크롤) */
+      /* Series Archive — << 버튼 옆/위로 끌어올린 sticky 헤더(<<는 최상위 z-index라 클릭 유지).
+         좌측 패딩으로 << 버튼을 피해 텍스트가 그 오른쪽에서 시작. 구분선 없음·리스트만 스크롤 */
       section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sa-sb-head) {{
           position:sticky; top:0; z-index:4; background:{CARD};
-          margin:0 !important; padding:.1rem 0 .5rem !important;}}
-      .sa-sb-head {{margin:0;}}
+          margin:-2.1rem 0 0 !important; padding:.1rem 0 .5rem 2.6rem !important;}}
+      .sa-sb-head {{margin:0; padding-top:.1rem;}}
       section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
       /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */
