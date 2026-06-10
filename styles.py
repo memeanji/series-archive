@@ -199,8 +199,8 @@ def inject_css() -> None:
          좌측 패딩으로 << 버튼을 피해 텍스트가 그 오른쪽에서 시작. 구분선 없음·리스트만 스크롤 */
       section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sa-sb-head) {{
           position:sticky; top:0; z-index:4; background:{CARD};
-          margin:-2.1rem 0 0 !important; padding:.1rem 0 .5rem 2.6rem !important;}}
-      .sa-sb-head {{margin:0; padding-top:.1rem;}}
+          margin:-.35rem 0 0 !important; padding:.1rem 0 .45rem 0 !important;}}
+      .sa-sb-head {{margin:0; padding-top:0;}}
       section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
       /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */
