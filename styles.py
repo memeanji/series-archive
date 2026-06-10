@@ -57,15 +57,17 @@ def inject_css() -> None:
           font-weight:600; margin-bottom:1px !important;}}
       div[data-testid="stCheckbox"] label {{font-size:11.5px; color:{OFF_GRAY};}}
 
-      /* 메인 내비 탭 — 깔끔한 SaaS 탭(실제 DOM: stButtonGroup + stBaseButton-segmented_control) */
-      div[data-testid="stButtonGroup"] {{gap:5px !important;}}
-      button[data-testid^="stBaseButton-segmented_control"] {{border-radius:8px !important;
-          font-size:14px !important; font-weight:500; border:1px solid {BORDER} !important;
-          padding:8px 16px !important; min-height:36px; box-sizing:border-box; line-height:1;
-          color:{TEXT} !important;}}
+      /* 메인 내비 탭 — 앱 주요 내비게이션 pill(실제 DOM: stButtonGroup + stBaseButton-segmented_control) */
+      div[data-testid="stButtonGroup"] {{gap:8px !important;}}
+      button[data-testid^="stBaseButton-segmented_control"] {{border-radius:11px !important;
+          font-size:14px !important; font-weight:600; border:1px solid {BORDER} !important;
+          padding:10px 18px !important; min-height:40px; box-sizing:border-box; line-height:1;
+          background:#fff !important; color:{SUB} !important; transition:all .12s;}}
+      button[data-testid^="stBaseButton-segmented_control"]:hover {{
+          border-color:{PRIMARY} !important; color:{TEXT} !important;}}
       button[data-testid="stBaseButton-segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{PRIMARY} !important;
-          border-color:{PRIMARY} !important; font-weight:600 !important;}}
+          border-color:{PRIMARY} !important; font-weight:800 !important;}}
       #MainMenu, footer {{visibility:hidden;}}
       /* header(상단 툴바)는 숨기지 않음 — 사이드바 펼치는 '>' 버튼이 여기 들어있다.
          배경만 투명 처리해 깔끔하게, 펼침/접기 컨트롤은 항상 보이도록 강제. */
@@ -173,6 +175,12 @@ def inject_css() -> None:
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
       section[data-testid="stSidebar"] .block-container {{padding:0 18px 1rem !important;}}
+      /* Series Archive — 사이드바 최상단 sticky 헤더(브랜드 리스트만 아래로 스크롤) */
+      section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sa-sb-head) {{
+          position:sticky; top:0; z-index:6; background:{CARD};
+          margin:0 !important; padding:.55rem 0 .6rem !important;
+          border-bottom:1px solid {BORDER};}}
+      .sa-sb-head {{margin:0;}}
       section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
       /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */

@@ -401,8 +401,8 @@ def render_add_brand() -> None:
 def render_sidebar(counts: list, total: int) -> str:
     """counts: [{name, ad, approved, needs, rejected, live}, ...] (캐시). 상위 20개 + 검색."""
     sb = st.sidebar
-    # 앱 타이틀(상단 헤더에서 이동)
-    sb.markdown(f"<div style='margin:0 0 .9rem'>"
+    # 앱 타이틀(사이드바 최상단 sticky 헤더)
+    sb.markdown(f"<div class='sa-sb-head'>"
                 f"<div class='sa-logo'>Series Archive</div>"
                 f"<div class='sa-sub'>Ad Reference Library</div></div>", unsafe_allow_html=True)
     sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
@@ -1119,8 +1119,9 @@ def _krw(n) -> str:
 
 def _rep_win_badge(label: str) -> str:
     c = _REP_WIN.get(label, "#94A3B8")
-    return (f"<span style='background:{c}1A;color:{c};border:1px solid {c}66;font-size:10.5px;"
-            f"font-weight:700;padding:1px 8px;border-radius:999px'>{label}</span>")
+    return (f"<span style='display:inline-flex;align-items:center;line-height:1;"
+            f"background:{c}1A;color:{c};border:1px solid {c}66;font-size:10.5px;"
+            f"font-weight:700;padding:4px 9px;border-radius:999px'>{label}</span>")
 
 
 @st.dialog("repurely 소재 상세", width="large")
@@ -1128,28 +1129,45 @@ def _repurely_detail(r: dict) -> None:
     import html as _h
     plat = r.get("platform", "")
     pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
-    # ── 헤더: 브랜드(크게) ──
+    # ── 헤더: 브랜드(크게) — 소재명은 영상 위에 표기하지 않음(우측 메타 정보에 표시) ──
     st.markdown(f"<div style='font-size:22px;font-weight:800;color:{S.PRIMARY}'>repurely</div>"
-                f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};margin-top:1px'>"
-                f"{_h.escape(r.get('creative_name') or '-')}</div>", unsafe_allow_html=True)
+                f"<div style='font-size:13px;font-weight:600;color:{S.SUB};margin-top:1px'>"
+                f"{plat} · 내부 소재 성과</div>", unsafe_allow_html=True)
 
     left, right = st.columns([2, 3], gap="medium")
-    # ── 좌: 소재 영상/썸네일 + 원본 링크 ──
+    # ── 좌: 소재 영상(인앱 재생)/이미지 + 원본 링크 ──
     with left:
         _th = r.get("thumbnail_url") or ""
-        if _th.startswith("http"):
-            _play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
+        _vid = r.get("video_id") or ""
+        permalink = ""
+        if _vid:   # Meta 영상 → 페이스북 비디오 플러그인으로 인앱 재생
+            try:
+                import repurely.meta_api as MAPI
+                vi = MAPI.video_info(_vid)
+                permalink = vi.get("permalink", "")
+                _th = vi.get("thumbnail") or _th
+            except Exception:  # noqa: BLE001
+                permalink = ""
+        if permalink:
+            from urllib.parse import quote
+            src = (f"https://www.facebook.com/plugins/video.php?href={quote(permalink, safe='')}"
+                   f"&show_text=0&width=320")
+            stc.html(f"<iframe src='{src}' width='100%' height='430' style='border:none;"
+                     f"border-radius:10px;overflow:hidden' scrolling='no' frameborder='0' "
+                     f"allow='autoplay; clipboard-write; encrypted-media; picture-in-picture; "
+                     f"web-share' allowfullscreen></iframe>", height=440)
+        elif _th.startswith("http"):   # 이미지 소재 또는 영상 썸네일
             st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
-                        f"aspect-ratio:9/16;max-height:420px;background:#0F172A'>"
-                        f"<img src='{_th}' style='width:100%;height:100%;object-fit:contain'/>{_play}</div>",
+                        f"aspect-ratio:9/16;max-height:430px;background:#0F172A'>"
+                        f"<img src='{_th}' style='width:100%;height:100%;object-fit:contain'/></div>",
                         unsafe_allow_html=True)
         else:
             st.markdown(f"<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:9/16'>"
                         f"<div class='sa-ph'><span class='i'>🎬</span>소재 미리보기 없음</div></div>",
                         unsafe_allow_html=True)
         pills = []
-        if (r.get("original_ad_url") or "").startswith("http"):
-            pills.append(f"<a href='{r['original_ad_url']}' target='_blank' style='font-size:12px;"
+        if permalink:
+            pills.append(f"<a href='{permalink}' target='_blank' style='font-size:12px;"
                          f"color:{S.SUB};border:1px solid {S.BORDER};border-radius:8px;padding:4px 11px;"
                          f"text-decoration:none'>▶ Facebook에서 보기 ↗</a>")
         if (r.get("landing") or "").startswith("http"):
@@ -1159,7 +1177,6 @@ def _repurely_detail(r: dict) -> None:
         if pills:
             st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:9px'>"
                         + "".join(pills) + "</div>", unsafe_allow_html=True)
-        st.caption("영상 인앱 재생은 Meta 제약(원본 mp4 미제공)으로 'Facebook에서 보기'로 확인하세요.")
 
     # ── 우: 배지 → 지표 → 보조정보 → 상태요약 ──
     with right:
@@ -1199,7 +1216,28 @@ def _repurely_detail(r: dict) -> None:
         st.markdown(f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:10px;"
                     f"padding:11px 13px;font-size:13px;color:{S.TEXT};line-height:1.6;margin-top:10px'>"
                     f"🤖 {_h.escape(r.get('status_text',''))}</div>", unsafe_allow_html=True)
-        st.caption("📈 날짜별 추이는 매일 스냅샷이 누적되면 표시됩니다(시트는 현재 누적 합계).")
+        st.markdown(f"<div style='font-size:12px;color:{S.OFF_GRAY};line-height:1.7;"
+                    f"margin:18px 0 6px'>날짜별 추이는 매일 스냅샷이 누적되면 표시됩니다. "
+                    f"현재 시트 값은 누적 합계 기준입니다.</div>", unsafe_allow_html=True)
+
+    # ── AI 소재 분석(전체 폭) ──
+    st.divider()
+    import services.ai_insight as AI
+    ac = st.columns([5, 1.4], vertical_alignment="center")
+    ac[0].markdown(f"<div style='font-size:15px;font-weight:800;color:{S.TEXT}'>🤖 AI 소재 분석</div>"
+                   f"<div style='font-size:11.5px;color:{S.SUB};margin-top:1px'>"
+                   f"{'Gemini' if AI.enabled() else '규칙 기반'} · 성과 지표 기반 진단·추천</div>",
+                   unsafe_allow_html=True)
+    aikey = f"_repai_{plat}_{r.get('creative_name','')}"
+    cache = st.session_state.setdefault("_repai_cache", {})
+    if ac[1].button("AI 분석 실행", key=f"aibtn_{aikey}", use_container_width=True, type="primary"):
+        with st.spinner("소재 성과를 분석하는 중…"):
+            cache[aikey] = AI.analyze(r)
+    if cache.get(aikey):
+        with st.container(border=True):
+            st.markdown(cache[aikey])   # 마크다운(진단/근거/액션) 렌더
+    else:
+        st.caption("‘AI 분석 실행’을 누르면 이 소재의 진단·근거·다음 액션을 제안합니다.")
 
     # ── 분석 메모(전체 폭) ──
     st.divider()
@@ -1221,10 +1259,11 @@ def _repurely_card(r: dict, key: str) -> None:
               ("⚠️ 피로도 의심" if r.get("is_fatigue") else "🟢 운영중"))
     th = r.get("thumbnail_url") or ""
     with st.container(border=True):
-        if th.startswith("http"):   # 매칭된 Meta 소재 썸네일/영상
+        if th.startswith("http"):   # 매칭된 소재 썸네일/영상
             play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
+            ar = "3/4" if plat == "Meta" else "16/9"   # Meta=세로 숏폼, 그 외=가로
             st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
-                        f"aspect-ratio:16/9;background:#0F172A;margin-bottom:8px'>"
+                        f"aspect-ratio:{ar};background:#0F172A;margin-bottom:8px'>"
                         f"<img src='{th}' style='width:100%;height:100%;object-fit:cover'/>{play}</div>",
                         unsafe_allow_html=True)
         st.markdown(
@@ -1254,7 +1293,7 @@ def _repurely_card(r: dict, key: str) -> None:
 
 
 def render_repurely_insights(rows: list[dict]) -> None:
-    """repurely 내부 소재 분석 탭 — 요약 카드 + 섹션별 소재 카드."""
+    """repurely 내부 소재 분석 탭 — 매체별(Meta/TikTok/Naver GFA) 섹션별 소재 카드."""
     import repurely.insights as RI
     # 동기화 실패(빈 결과) 시 마지막 정상 데이터 유지
     if rows:
@@ -1271,7 +1310,6 @@ def render_repurely_insights(rows: list[dict]) -> None:
                     f"확인해주세요.</div></div>", unsafe_allow_html=True)
         return
     rows, av = RI.enrich(rows)
-    s = RI.summary(rows)
 
     # ── 헤더 + 동기화 상태 + 새로고침 ──
     last_sync = max((r.get("collected_at", "") for r in rows), default="-")
@@ -1291,40 +1329,13 @@ def render_repurely_insights(rows: list[dict]) -> None:
         st.rerun()
     if stale:
         st.warning("Meta 시트 동기화 실패 · 마지막 정상 데이터 표시 중", icon="⚠️")
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-    # ── 요약 + 매체별 비교 (아코디언 — 메인 아님, 기본 접힘) ──
-    with st.expander("📊 내부 소재 성과 요약 · 매체별 비교", expanded=False):
-        cards = [("총 광고비", _krw(s["spend"])), ("총 매출", _krw(s["revenue"])),
-                 ("총 구매", f"{int(s['conversions'])}건"), ("평균 ROAS", f"{s['roas']:.0f}"),
-                 ("평균 CPC", f"{int(s['cpc']):,}원"), ("평균 CPM", f"{int(s['cpm']):,}원"),
-                 ("평균 CTR", f"{s['ctr']:.2f}%"), ("운영 소재", f"{s['n']}개"),
-                 ("OFF 후보", f"{s['off']}개"), ("위닝 후보", f"{s['winning']}개")]
-        cols = st.columns(5)
-        for i, (lab, val) in enumerate(cards):
-            with cols[i % 5]:
-                st.markdown(f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
-                            f"padding:9px 8px;text-align:center;margin-bottom:7px'>"
-                            f"<div style='font-size:10.5px;color:{S.SUB};font-weight:600'>{lab}</div>"
-                            f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin-top:2px'>"
-                            f"{val}</div></div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size:12px;font-weight:700;color:{S.SUB};margin:6px 0 4px'>"
-                    f"매체별 성과 비교</div>", unsafe_allow_html=True)
-        pc = st.columns(len(RI.by_platform(rows)) or 1)
-        for i, p in enumerate(RI.by_platform(rows)):
-            col, _bg = _REP_PLAT.get(p["platform"], ("#6B7280", "#F1F5F9"))
-            pc[i].markdown(f"<div style='border:1px solid {S.BORDER};border-radius:10px;padding:10px;"
-                           f"border-top:3px solid {col}'>"
-                           f"<div style='font-weight:800;color:{col};font-size:13px'>{p['platform']}</div>"
-                           f"<div style='font-size:11.5px;color:{S.SUB};margin-top:4px'>소재 {p['n']}개 · "
-                           f"광고비 {_krw(p['spend'])}<br>매출 {_krw(p['revenue'])} · "
-                           f"<b>ROAS {p['roas']:.0f}</b></div></div>", unsafe_allow_html=True)
-
-    # ── 매체 선택(매체별로 각각 보기) ──
-    plats = ["전체"] + [p["platform"] for p in RI.by_platform(rows)]
-    sel_p = st.segmented_control("매체", plats, default="전체", key="rep_plat",
-                                 label_visibility="collapsed") or "전체"
-    view = rows if sel_p == "전체" else [r for r in rows if r.get("platform") == sel_p]
+    # ── 매체 선택(매체별로 독립적으로 보기, 전체 없음 · 기본 Meta) ──
+    plats = ["Meta", "TikTok", "Naver GFA"]
+    sel_p = st.segmented_control("매체", plats, default="Meta", key="rep_plat",
+                                 label_visibility="collapsed") or "Meta"
+    view = [r for r in rows if r.get("platform") == sel_p]
 
     # ── 섹션별 소재 (선택 매체) ──
     sections = [

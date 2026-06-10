@@ -8,21 +8,43 @@ from __future__ import annotations
 
 def load_all() -> list[dict]:
     """GFA + Meta + TikTok 통합(공통 스키마). 소스 하나 실패해도 나머지는 반환.
-    Meta 행은 Marketing API 소재(썸네일/영상/상태/랜딩)를 소재명·UTM으로 매칭해 결합."""
+    Meta 행은 Marketing API 소재(썸네일/영상/이미지/랜딩/상태)를 소재명·UTM으로 매칭해 결합.
+    (API 호출 1회 — 호출부에서 세션 캐시로 1시간 보관)"""
     import repurely.gfa_sheet as gfa
     import repurely.meta_sheet as meta
     import repurely.tiktok_sheet as tiktok
+    import repurely.meta_api as MAPI
     from concurrent.futures import ThreadPoolExecutor
 
-    def _safe(mod):
+    def _safe(fn):
         try:
-            return mod.load()
+            return fn()
         except Exception:  # noqa: BLE001
             return []
     rows: list[dict] = []
-    with ThreadPoolExecutor(max_workers=3) as ex:   # 3개 시트 동시 fetch(속도↑)
-        for res in ex.map(_safe, (gfa, meta, tiktok)):
-            rows += res
+    # 3개 시트 + Meta API 소재를 동시에 fetch(속도↑)
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_gfa = ex.submit(_safe, gfa.load)
+        f_meta = ex.submit(_safe, meta.load)
+        f_tik = ex.submit(_safe, tiktok.load)
+        f_api = ex.submit(_safe, MAPI.load_ads)
+        rows = f_gfa.result() + f_meta.result() + f_tik.result()
+        idx = MAPI.index_by_name(f_api.result())
+
+    # Meta 행에 API 소재(썸네일/영상/이미지/랜딩/상태) 매칭 — 소재명 또는 UTM 기준
+    if idx:
+        for r in rows:
+            if r.get("platform") != "Meta":
+                continue
+            for key in (r.get("utm_value"), r.get("creative_name")):
+                a = idx.get((key or "").strip().lower())
+                if a:
+                    r["thumbnail_url"] = a.get("thumbnail_url") or ""
+                    r["video_id"] = a.get("video_id") or ""
+                    r["landing"] = a.get("landing") or ""
+                    r["media_type"] = "video" if a.get("video_id") else "image"
+                    r["meta_status"] = a.get("status") or ""
+                    break
     return rows
 
 

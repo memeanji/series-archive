@@ -55,12 +55,35 @@ def _landing(cr: dict) -> str:
         return ""
 
 
+_CACHE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "repurely_meta_ads.json")
+
+
+def _save_cache(ads: list[dict]) -> None:
+    import json
+    try:
+        os.makedirs(os.path.dirname(_CACHE_PATH), exist_ok=True)
+        with open(_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(ads, f, ensure_ascii=False)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _load_cache() -> list[dict]:
+    import json
+    try:
+        with open(_CACHE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def load_ads() -> list[dict]:
-    """계정의 모든 광고 → [{ad_name,status,thumbnail_url,video_id,landing,campaign,adset}]. 실패 시 []."""
+    """계정의 모든 광고 → [{ad_name,status,thumbnail_url,video_id,landing,campaign,adset}].
+    성공 시 디스크 캐시에 저장. 인증 없음/호출한도(rate limit)/실패 시 마지막 정상 캐시로 폴백."""
     import requests
     tok, acct = _creds()
     if not (tok and acct):
-        return []
+        return _load_cache()
     acct_id = acct if acct.startswith("act_") else f"act_{acct}"
     # 매칭/카드용 경량 필드(깊은 object_story_spec 제외) → limit 높여 요청 수↓·속도↑.
     # landing은 상세에서 video_info로 on-demand 조회.
@@ -68,11 +91,13 @@ def load_ads() -> list[dict]:
     out: list[dict] = []
     url = f"{GRAPH}/{acct_id}/ads"
     params = {"fields": fields, "limit": 200, "access_token": tok}
+    ok = False
     try:
         for _ in range(20):
             r = requests.get(url, params=params, timeout=30)
             if r.status_code != 200:
-                break
+                break   # 호출한도/오류 → 루프 종료(아래에서 캐시 폴백)
+            ok = True
             j = r.json()
             for a in j.get("data", []):
                 cr = a.get("creative", {}) or {}
@@ -90,8 +115,11 @@ def load_ads() -> list[dict]:
                 break
             url, params = nxt, None
     except Exception:  # noqa: BLE001
+        pass
+    if ok and out:        # 정상 응답 → 캐시 갱신 후 반환
+        _save_cache(out)
         return out
-    return out
+    return _load_cache()  # 한도/실패 → 마지막 정상 소재로 폴백
 
 
 def video_permalink(video_id: str) -> str:
