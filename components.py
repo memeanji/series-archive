@@ -899,8 +899,8 @@ def _render_trend_section(ad: dict, aid: str) -> None:
     st.markdown(
         f"<div style='margin:18px 0 4px'>"
         f"<span style='font-size:12px;font-weight:700;color:#6B7280'>📈 조회수 추이 · 소재 상태</span>"
-        f"<span style='background:{fat['color']}1A;color:{fat['color']};border:1px solid {fat['color']}66;"
-        f"font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:8px'>"
+        f"<span style='background:{fat['color']}22;color:{fat['color']};border:1px solid {fat['color']}88;"
+        f"font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:8px'>"
         f"{fat['emoji']} {fat['label']}</span></div>", unsafe_allow_html=True)
     st.caption(fat["reason"])
     if len(snaps) < 2:
