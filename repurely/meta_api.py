@@ -1,0 +1,100 @@
+"""Meta Marketing API — repurely 광고 계정의 소재를 직접 조회(이름·상태·썸네일·영상·랜딩).
+
+소재명(예: f_v_b_o_l_0609_6)이 Meta 대시보드 시트의 UTM/조인소스와 동일 → 정확 매칭.
+토큰/계정: 이 프로젝트 secrets(META_ACCESS_TOKEN·META_AD_ACCOUNT_ID) 우선,
+없으면 meta-ads-automation/.env 폴백(로컬 편의). 읽기 전용(GET).
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import config  # noqa: E402
+
+GRAPH = "https://graph.facebook.com/v21.0"
+
+
+def _creds() -> tuple[str, str]:
+    # 1) 메타 자동화 프로젝트 .env(로컬, 활성·신선한 토큰 우선)
+    tok = acct = ""
+    try:
+        p = os.path.join(os.path.expanduser("~"), "meta-ads-automation", ".env")
+        for line in open(p, encoding="utf-8"):
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                v = v.strip().strip('"').strip("'")
+                if k.strip() == "META_ACCESS_TOKEN":
+                    tok = v
+                elif k.strip() == "META_AD_ACCOUNT_ID":
+                    acct = v
+    except Exception:  # noqa: BLE001
+        pass
+    # 2) 이 프로젝트 secrets(클라우드 배포 시)
+    tok = tok or (config.secret("META_ACCESS_TOKEN") or "")
+    acct = acct or (config.secret("META_AD_ACCOUNT_ID") or "")
+    return tok, acct
+
+
+def enabled() -> bool:
+    t, a = _creds()
+    return bool(t and a)
+
+
+def _landing(cr: dict) -> str:
+    oss = cr.get("object_story_spec", {}) or {}
+    ld = oss.get("link_data", {}) or {}
+    if ld.get("link"):
+        return ld["link"]
+    try:
+        return oss["video_data"]["call_to_action"]["value"]["link"]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def load_ads() -> list[dict]:
+    """계정의 모든 광고 → [{ad_name,status,thumbnail_url,video_id,landing,campaign,adset}]. 실패 시 []."""
+    import requests
+    tok, acct = _creds()
+    if not (tok and acct):
+        return []
+    acct_id = acct if acct.startswith("act_") else f"act_{acct}"
+    fields = ("name,effective_status,creative{thumbnail_url,image_url,video_id,"
+              "object_story_spec{link_data{link},video_data{call_to_action{value{link}}}}},"
+              "adset{name},campaign{name}")
+    out: list[dict] = []
+    url = f"{GRAPH}/{acct_id}/ads"
+    # limit 낮게(깊은 필드라 너무 크면 'reduce data' 500). 페이지네이션으로 전체 수집.
+    params = {"fields": fields, "limit": 40, "access_token": tok}
+    try:
+        for _ in range(20):
+            r = requests.get(url, params=params, timeout=30)
+            if r.status_code != 200:
+                break
+            j = r.json()
+            for a in j.get("data", []):
+                cr = a.get("creative", {}) or {}
+                out.append({
+                    "ad_name": (a.get("name") or "").strip(),
+                    "status": a.get("effective_status", ""),
+                    "thumbnail_url": cr.get("thumbnail_url") or cr.get("image_url") or "",
+                    "video_id": cr.get("video_id") or "",
+                    "landing": _landing(cr),
+                    "campaign": (a.get("campaign") or {}).get("name", ""),
+                    "adset": (a.get("adset") or {}).get("name", ""),
+                })
+            nxt = (j.get("paging", {}) or {}).get("next")
+            if not nxt:
+                break
+            url, params = nxt, None
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+def index_by_name(ads: list[dict]) -> dict:
+    """소재명(소문자) → ad. 매칭용. f_v_b_o_l_0609_6 == 시트 UTM/조인소스."""
+    return {a["ad_name"].strip().lower(): a for a in ads if a.get("ad_name")}

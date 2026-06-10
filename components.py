@@ -1144,6 +1144,18 @@ def _repurely_detail(r: dict) -> None:
                 f"padding:3px 11px;border-radius:999px'>"
                 f"{'🔴 OFF 후보' if r.get('is_off') else '🟢 운영중'}</span></div>",
                 unsafe_allow_html=True)
+    # 매칭된 소재 썸네일/영상(Meta API) + 랜딩
+    _th = r.get("thumbnail_url") or ""
+    if _th.startswith("http"):
+        _play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
+        st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;max-width:340px;"
+                    f"aspect-ratio:16/9;background:#0F172A;margin:10px 0 6px'>"
+                    f"<img src='{_th}' style='width:100%;height:100%;object-fit:cover'/>{_play}</div>",
+                    unsafe_allow_html=True)
+    if (r.get("landing") or "").startswith("http"):
+        st.markdown(f"<div style='font-size:11.5px;margin:2px 0 6px'>🔗 "
+                    f"<a href='{r['landing']}' target='_blank' style='color:{S.SUB}'>"
+                    f"{_h.escape(r['landing'][:60])}…</a></div>", unsafe_allow_html=True)
     # 캠페인/그룹/소재/UTM
     meta = [("캠페인", r.get("campaign_name")), ("광고그룹", r.get("ad_group_name")),
             ("소재명", r.get("creative_name")), ("UTM", r.get("utm_value"))]
@@ -1189,7 +1201,14 @@ def _repurely_card(r: dict, key: str) -> None:
     pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
     status = ("🔴 OFF 후보" if r.get("is_off") else
               ("⚠️ 피로도 의심" if r.get("is_fatigue") else "🟢 운영중"))
+    th = r.get("thumbnail_url") or ""
     with st.container(border=True):
+        if th.startswith("http"):   # 매칭된 Meta 소재 썸네일/영상
+            play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
+            st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
+                        f"aspect-ratio:16/9;background:#0F172A;margin-bottom:8px'>"
+                        f"<img src='{th}' style='width:100%;height:100%;object-fit:cover'/>{play}</div>",
+                        unsafe_allow_html=True)
         st.markdown(
             f"<div style='display:flex;justify-content:space-between;align-items:center;gap:4px'>"
             f"<span style='font-weight:800;color:{S.PRIMARY};font-size:13.5px'>repurely</span>"
