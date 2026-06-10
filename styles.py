@@ -154,7 +154,8 @@ def inject_css() -> None:
       section[data-testid="stSidebar"] {{background:{CARD}; border-right:1px solid {BORDER};
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
-      section[data-testid="stSidebar"] .block-container {{padding:0.1rem 18px 1rem !important;}}
+      section[data-testid="stSidebar"] .block-container {{padding:0 18px 1rem !important;}}
+      section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
       /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */
       section[data-testid="stSidebar"] div[data-testid="stButton"] button {{
