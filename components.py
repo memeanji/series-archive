@@ -246,7 +246,7 @@ def render_header(ads=None) -> dict:
     tc = st.columns([5, 1], vertical_alignment="center")
     with tc[0]:
         tabs = ["전체", "Meta", "Google", "Insight", "북마크"]
-        tab = st.segmented_control("메뉴", tabs, default="전체",
+        tab = st.segmented_control("메뉴", tabs, default="전체", key="nav_tab",
                                    label_visibility="collapsed") or "전체"
     user = st.session_state.get("username", "guest")
     tc[1].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
