@@ -59,7 +59,8 @@ def inject_css() -> None:
 
       /* segmented control(탭/필터) → 작은 pill */
       div[data-testid="stSegmentedControl"] button {{border-radius:9px !important;
-          font-size:12.5px; font-weight:600; border:1px solid {BORDER}; padding:3px 12px;}}
+          font-size:12.5px; font-weight:600; border:1px solid {BORDER}; padding:5px 14px;
+          min-height:34px; box-sizing:border-box; line-height:1;}}
       div[data-testid="stSegmentedControl"] button[aria-checked="true"],
       div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}
@@ -76,8 +77,9 @@ def inject_css() -> None:
 
       /* ── 헤더 ── */
       .sa-header {{display:flex; align-items:center; gap:12px;}}
-      .sa-logo {{font-size:18px; font-weight:800; color:{PRIMARY}; line-height:1.1; white-space:nowrap;}}
-      .sa-sub {{font-size:11px; color:{SUB}; margin-top:1px;}}
+      .sa-logo {{font-size:21px; font-weight:800; color:{PRIMARY}; line-height:1.25;
+                 white-space:nowrap; margin:0;}}
+      .sa-sub {{font-size:12px; color:{SUB}; line-height:1.3; margin:0;}}
       .sa-info {{color:{SUB}; font-size:12.5px; margin:.2rem 0 .6rem;}}
       .sa-info b {{color:{TEXT};}}
 

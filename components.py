@@ -242,21 +242,23 @@ def render_script_section(social_id: str, video_id: str = "") -> None:
 
 # ════════════════════════════════════════════════════════════
 def render_header(ads=None) -> dict:
-    h = st.columns([5, 1.4])
+    h = st.columns([5, 1.4], vertical_alignment="center")
     with h[0]:
         st.markdown(
-            f"<div class='sa-header'><div><div class='sa-logo'>Series Archive</div>"
-            f"<div class='sa-sub'>Ad Reference Library</div></div></div>",
+            "<div style='display:flex;flex-direction:column;gap:3px;margin:2px 0 14px'>"
+            "<div class='sa-logo'>Series Archive</div>"
+            "<div class='sa-sub'>Ad Reference Library</div></div>",
             unsafe_allow_html=True)
     search = ""   # 통합 검색 제거(사이드바 브랜드 검색만 사용)
     with h[1]:
         user = st.session_state.get("username", "guest")
-        st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB};margin-top:10px'>"
+        st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
                     f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
     tabs = ["전체", "Meta", "Google", "북마크"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
     return {"search": search, "tab": tab}
 
 
@@ -647,10 +649,10 @@ def _render_source_buttons(ad: dict) -> None:
             f"<a href='{u}' target='_blank' style='font-size:12px;color:{S.SUB};text-decoration:none;"
             f"border:1px solid {S.BORDER};border-radius:8px;padding:4px 11px;background:{S.CARD};"
             f"white-space:nowrap;transition:all .15s'>{lbl} ↗</a>" for lbl, u in links)
-        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:9px'>{pills}</div>",
+        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:18px'>{pills}</div>",
                     unsafe_allow_html=True)
     else:
-        st.markdown(f"<div style='font-size:11.5px;color:{S.OFF_GRAY};margin-top:9px'>"
+        st.markdown(f"<div style='font-size:11.5px;color:{S.OFF_GRAY};margin-top:18px'>"
                     f"원본·랜딩 URL 정보 없음</div>", unsafe_allow_html=True)
 
 
@@ -889,7 +891,7 @@ def _render_trend_section(ad: dict, aid: str) -> None:
     snaps = database.get_ad_snapshots(aid, days=120)
     fat = TR.classify_fatigue(snaps, ad.get("status"))
     st.markdown(
-        f"<div style='margin:16px 0 4px'>"
+        f"<div style='margin:28px 0 4px'>"
         f"<span style='font-size:12px;font-weight:700;color:#64748B'>📈 조회수 추이 · 소재 상태</span>"
         f"<span style='background:{fat['color']}1A;color:{fat['color']};border:1px solid {fat['color']}66;"
         f"font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:8px'>"
