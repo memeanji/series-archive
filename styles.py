@@ -102,6 +102,9 @@ def inject_css() -> None:
       div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
           transform:translateY(-2px); box-shadow:0 10px 26px rgba(16,24,40,.09);
           border-color:{BORDER} !important;}}
+      /* 필터 toolbar 카드(소재유형 multiselect 포함)는 hover lift 제거 */
+      div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMultiSelect"]):hover {{
+          transform:none; box-shadow:0 1px 2px rgba(16,24,40,.03);}}
       /* 썸네일: 16:9 통일 + 영상 전체가 보이도록 contain + 뒤에 블러 배경(레터박스/세로영상 자연스럽게) */
       .sa-thumb {{position:relative; aspect-ratio:16/9; border-radius:12px; overflow:hidden;
                   background:#0F172A; background-size:cover; background-position:center;}}

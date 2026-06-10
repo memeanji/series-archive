@@ -114,6 +114,30 @@ def video_permalink(video_id: str) -> str:
     return ""
 
 
+def video_info(video_id: str) -> dict:
+    """영상 permalink + 고해상도 썸네일(1080급). {permalink, thumbnail}."""
+    import requests
+    tok, _ = _creds()
+    if not (tok and video_id):
+        return {"permalink": "", "thumbnail": ""}
+    try:
+        r = requests.get(f"{GRAPH}/{video_id}", timeout=20,
+                         params={"fields": "permalink_url,thumbnails{uri,width,is_preferred}",
+                                 "access_token": tok})
+        if r.status_code == 200:
+            j = r.json()
+            pl = j.get("permalink_url", "") or ""
+            if pl.startswith("/"):
+                pl = "https://www.facebook.com" + pl
+            ths = (j.get("thumbnails", {}) or {}).get("data", [])
+            pref = [t for t in ths if t.get("is_preferred")]
+            pool = pref or sorted(ths, key=lambda t: -(t.get("width") or 0))
+            return {"permalink": pl, "thumbnail": pool[0].get("uri", "") if pool else ""}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"permalink": "", "thumbnail": ""}
+
+
 def index_by_name(ads: list[dict]) -> dict:
     """소재명(소문자) → ad. 매칭용. f_v_b_o_l_0609_6 == 시트 UTM/조인소스."""
     return {a["ad_name"].strip().lower(): a for a in ads if a.get("ad_name")}

@@ -30,14 +30,16 @@ def main() -> None:
     for r in meta:
         cname = r.get("creative_name") or ""
         aid = "rep_" + cname
-        local = _save_thumb(r["thumbnail_url"], aid) or r["thumbnail_url"]  # 로컬 저장(실패 시 원본URL)
         vid = r.get("video_id") or ""
-        perm = API.video_permalink(vid) if vid else ""
+        info = API.video_info(vid) if vid else {"permalink": "", "thumbnail": ""}
+        thumb_src = info.get("thumbnail") or r.get("thumbnail_url", "")   # 고해상도 우선
+        local = _save_thumb(thumb_src, aid) or thumb_src
         ads.append({
             "platform_ad_id": aid, "brand_name": "repurely", "platform": "meta",
-            "ad_title": cname, "ad_copy": r.get("campaign_name", ""),
+            "ad_title": cname,
+            "ad_copy": cname,   # 소재명(고유) → 카드 dedup이 캠페인명으로 합치지 않게
             "thumbnail_url": local, "video_url": "",
-            "original_ad_url": perm,   # 영상 원본(Facebook) — 클릭 시 보기
+            "original_ad_url": info.get("permalink", ""),   # 영상 원본(Facebook)
             "landing_url": r.get("landing", ""),
             "media_type": "video" if vid else "image",
             "status": "live" if r.get("status") == "live" else "ended",

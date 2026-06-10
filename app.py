@@ -62,7 +62,7 @@ def _yt_counts():
     return database.youtube_candidate_counts()
 
 
-@st.cache_data(ttl=1800, show_spinner="repurely 시트 불러오는 중…")   # 30분 캐시(시트 30분 갱신)
+@st.cache_data(ttl=3600, show_spinner="repurely 시트 불러오는 중…")   # 1시간 캐시
 def _repurely_rows():
     import repurely.insights as RI
     return RI.load_all()

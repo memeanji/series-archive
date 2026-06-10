@@ -466,33 +466,27 @@ def render_sidebar(counts: list, total: int) -> str:
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
     grade = "전체"   # 등급 기능 제거
-    # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 (하단 정렬로 높이 맞춤) ──
-    c = st.columns([1.1, 1.7, 1.2, 0.55], vertical_alignment="bottom")
-    media = c[0].multiselect("소재 유형", ["video", "image"],
-                             default=st.session_state.get("f_media", []),
-                             format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
-                             key="f_media")
-    if header["tab"] == "📈 조회수":
-        sort = c[1].selectbox("정렬", ["조회수 높은순", "좋아요 높은순", "급성장순", "피로도 의심순"],
-                              key="f_sort_v")
-    else:
+    # ── 필터 toolbar(얇은 카드): 소재 유형 · 정렬 · 기간 · 초기화 + 고급필터 ──
+    with st.container(border=True):
+        c = st.columns([1.1, 1.7, 1.2, 0.55], vertical_alignment="bottom")
+        media = c[0].multiselect("소재 유형", ["video", "image"],
+                                 default=st.session_state.get("f_media", []),
+                                 format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
+                                 key="f_media")
         sort = c[1].selectbox("정렬",
                               ["최근 수집순", "오래된순", "조회수 높은순", "게재기간 긴순",
-                               "게재기간 짧은순", "저장 많은순"],
-                              index=0, key="f_sort")
-    period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
-    if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
-        for k in ("f_media", "f_status", "f_sort", "f_period", "f_devhidden", "f_unavail"):
-            st.session_state.pop(k, None)
-        st.rerun()
-
-    # ── 고급 필터(접힘): 상태 · 미디어 없는 광고 · 상세 확인 불가 ──
-    with st.expander("⚙ 고급 필터"):
-        status = st.selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
-        show_hidden = st.checkbox("검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
-                                  help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김(개발·디버그용).")
-        only_unavail = st.checkbox("상세 확인 불가 광고만 보기", value=False, key="f_unavail",
-                                   help="카드엔 보여도 상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고만 모아 봅니다.")
+                               "게재기간 짧은순", "저장 많은순"], index=0, key="f_sort")
+        period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
+        if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
+            for k in ("f_media", "f_status", "f_sort", "f_period", "f_devhidden", "f_unavail"):
+                st.session_state.pop(k, None)
+            st.rerun()
+        with st.expander("⚙ 고급 필터"):
+            status = st.selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
+            show_hidden = st.checkbox("검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
+                                      help="구글 텍스트/검색광고·썸네일 없는 광고는 기본 숨김(개발·디버그용).")
+            only_unavail = st.checkbox("상세 확인 불가 광고만 보기", value=False, key="f_unavail",
+                                       help="상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고만 모아 봅니다.")
 
     # 탭 → 매체/북마크 매핑
     tab = header["tab"]
@@ -1132,65 +1126,87 @@ def _repurely_detail(r: dict) -> None:
     import html as _h
     plat = r.get("platform", "")
     pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
-    st.markdown(f"<div style='font-size:21px;font-weight:800;color:{S.PRIMARY}'>repurely</div>"
-                f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};margin-top:2px'>"
+    # ── 헤더: 브랜드(크게) ──
+    st.markdown(f"<div style='font-size:22px;font-weight:800;color:{S.PRIMARY}'>repurely</div>"
+                f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};margin-top:1px'>"
                 f"{_h.escape(r.get('creative_name') or '-')}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px'>"
-                f"<span style='background:{pb};color:{pc};font-size:12px;font-weight:700;"
-                f"padding:3px 11px;border-radius:999px'>{plat}</span>"
-                f"{_rep_win_badge(r.get('winning_label','-'))}"
-                f"<span style='background:{'#FEF2F2' if r.get('is_off') else '#ECFDF5'};"
-                f"color:{'#EF4444' if r.get('is_off') else '#10B981'};font-size:12px;font-weight:700;"
-                f"padding:3px 11px;border-radius:999px'>"
-                f"{'🔴 OFF 후보' if r.get('is_off') else '🟢 운영중'}</span></div>",
-                unsafe_allow_html=True)
-    # 매칭된 소재 썸네일/영상(Meta API) + 랜딩
-    _th = r.get("thumbnail_url") or ""
-    if _th.startswith("http"):
-        _play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
-        st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;max-width:340px;"
-                    f"aspect-ratio:16/9;background:#0F172A;margin:10px 0 6px'>"
-                    f"<img src='{_th}' style='width:100%;height:100%;object-fit:cover'/>{_play}</div>",
-                    unsafe_allow_html=True)
-    if (r.get("landing") or "").startswith("http"):
-        st.markdown(f"<div style='font-size:11.5px;margin:2px 0 6px'>🔗 "
-                    f"<a href='{r['landing']}' target='_blank' style='color:{S.SUB}'>"
-                    f"{_h.escape(r['landing'][:60])}…</a></div>", unsafe_allow_html=True)
-    # 캠페인/그룹/소재/UTM
-    meta = [("캠페인", r.get("campaign_name")), ("광고그룹", r.get("ad_group_name")),
-            ("소재명", r.get("creative_name")), ("UTM", r.get("utm_value"))]
-    st.markdown("".join(
-        f"<div style='display:flex;gap:8px;padding:3px 0;font-size:12.5px'>"
-        f"<span style='flex:0 0 70px;color:{S.SUB};font-weight:600'>{k}</span>"
-        f"<span style='color:{S.TEXT}'>{_h.escape(str(v or '-'))}</span></div>" for k, v in meta),
-        unsafe_allow_html=True)
-    # 지표 카드
-    cards = [("광고비", _krw(r.get("spend")), "#03C75A"), ("매출", _krw(r.get("revenue")), "#EF4444"),
-             ("구매", f"{int(r.get('conversions',0))}건", "#0EA5E9"), ("ROAS", f"{r.get('roas',0):.0f}", "#10B981")]
-    html = "<div style='display:flex;gap:8px;margin:12px 0 6px'>"
-    for lab, val, col in cards:
-        html += (f"<div style='flex:1;background:{S.BG};border:1px solid {S.BORDER};border-radius:12px;"
-                 f"padding:11px 6px;text-align:center'><div style='font-size:11px;color:{S.SUB};"
-                 f"font-weight:600'>{lab}</div><div style='font-size:18px;font-weight:800;color:{col};"
-                 f"line-height:1.3'>{val}</div></div>")
-    st.markdown(html + "</div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='font-size:12.5px;color:{S.SUB};margin:2px 0 8px'>"
-                f"CTR {r.get('ctr',0)}% · CPC {int(r.get('cpc',0)):,}원 · CPM {int(r.get('cpm',0)):,}원</div>",
-                unsafe_allow_html=True)
-    # 자동 상태 요약
-    st.markdown(f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:10px;"
-                f"padding:11px 13px;font-size:13px;color:{S.TEXT};line-height:1.6'>"
-                f"🤖 {_h.escape(r.get('status_text',''))}</div>", unsafe_allow_html=True)
-    # 일별 추이 안내(시트엔 날짜 없음 → 스냅샷 누적 필요)
-    st.caption("📈 날짜별 광고비·매출·ROAS·CTR/CPC/CPM 추이는 매일 스냅샷이 누적되면 표시됩니다(시트는 현재 누적 합계).")
+
+    left, right = st.columns([2, 3], gap="medium")
+    # ── 좌: 소재 영상/썸네일 + 원본 링크 ──
+    with left:
+        _th = r.get("thumbnail_url") or ""
+        if _th.startswith("http"):
+            _play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
+            st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
+                        f"aspect-ratio:9/16;max-height:420px;background:#0F172A'>"
+                        f"<img src='{_th}' style='width:100%;height:100%;object-fit:contain'/>{_play}</div>",
+                        unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:9/16'>"
+                        f"<div class='sa-ph'><span class='i'>🎬</span>소재 미리보기 없음</div></div>",
+                        unsafe_allow_html=True)
+        pills = []
+        if (r.get("original_ad_url") or "").startswith("http"):
+            pills.append(f"<a href='{r['original_ad_url']}' target='_blank' style='font-size:12px;"
+                         f"color:{S.SUB};border:1px solid {S.BORDER};border-radius:8px;padding:4px 11px;"
+                         f"text-decoration:none'>▶ Facebook에서 보기 ↗</a>")
+        if (r.get("landing") or "").startswith("http"):
+            pills.append(f"<a href='{r['landing']}' target='_blank' style='font-size:12px;"
+                         f"color:{S.SUB};border:1px solid {S.BORDER};border-radius:8px;padding:4px 11px;"
+                         f"text-decoration:none'>🛒 랜딩 ↗</a>")
+        if pills:
+            st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:9px'>"
+                        + "".join(pills) + "</div>", unsafe_allow_html=True)
+        st.caption("영상 인앱 재생은 Meta 제약(원본 mp4 미제공)으로 'Facebook에서 보기'로 확인하세요.")
+
+    # ── 우: 배지 → 지표 → 보조정보 → 상태요약 ──
+    with right:
+        st.markdown(f"<div style='display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 12px'>"
+                    f"<span style='background:{pb};color:{pc};font-size:12px;font-weight:700;"
+                    f"padding:3px 11px;border-radius:999px'>{plat}</span>"
+                    f"<span style='background:#EEF2FF;color:#4F46E5;font-size:12px;font-weight:700;"
+                    f"padding:3px 11px;border-radius:999px'>내부 데이터</span>"
+                    f"{_rep_win_badge(r.get('winning_label','-'))}"
+                    f"<span style='background:{'#FEF2F2' if r.get('is_off') else '#ECFDF5'};"
+                    f"color:{'#EF4444' if r.get('is_off') else '#10B981'};font-size:12px;font-weight:700;"
+                    f"padding:3px 11px;border-radius:999px'>"
+                    f"{'🔴 OFF 후보' if r.get('is_off') else '🟢 운영중'}</span></div>", unsafe_allow_html=True)
+        # 지표 카드
+        cards = [("광고비", _krw(r.get("spend")), "#03C75A"), ("매출", _krw(r.get("revenue")), "#EF4444"),
+                 ("구매", f"{int(r.get('conversions',0))}건", "#0EA5E9"),
+                 ("ROAS", f"{r.get('roas',0):.0f}", "#10B981")]
+        html = "<div style='display:flex;gap:8px;margin:2px 0 6px'>"
+        for lab, val, col in cards:
+            html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};border-radius:12px;"
+                     f"padding:11px 6px;text-align:center'><div style='font-size:11px;color:{S.SUB};"
+                     f"font-weight:700'>{lab}</div><div style='font-size:19px;font-weight:900;color:{col};"
+                     f"line-height:1.3'>{val}</div></div>")
+        st.markdown(html + "</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:13px;color:{S.SUB};margin:4px 0 12px'>"
+                    f"CTR {r.get('ctr',0)}% · CPC {int(r.get('cpc',0)):,}원 · "
+                    f"CPM {int(r.get('cpm',0)):,}원</div>", unsafe_allow_html=True)
+        # 캠페인/그룹/소재/UTM
+        meta = [("캠페인", r.get("campaign_name")), ("광고그룹", r.get("ad_group_name")),
+                ("소재명", r.get("creative_name")), ("UTM", r.get("utm_value"))]
+        st.markdown("".join(
+            f"<div style='display:flex;gap:8px;padding:3px 0;font-size:12.5px'>"
+            f"<span style='flex:0 0 64px;color:{S.SUB};font-weight:600'>{k}</span>"
+            f"<span style='color:{S.TEXT};word-break:break-all'>{_h.escape(str(v or '-'))}</span></div>"
+            for k, v in meta), unsafe_allow_html=True)
+        # 자동 상태 요약
+        st.markdown(f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:10px;"
+                    f"padding:11px 13px;font-size:13px;color:{S.TEXT};line-height:1.6;margin-top:10px'>"
+                    f"🤖 {_h.escape(r.get('status_text',''))}</div>", unsafe_allow_html=True)
+        st.caption("📈 날짜별 추이는 매일 스냅샷이 누적되면 표시됩니다(시트는 현재 누적 합계).")
+
+    # ── 분석 메모(전체 폭) ──
     st.divider()
     st.markdown("##### 📝 분석 메모")
     mkey = f"repmemo_{plat}_{r.get('creative_name','')}"
     st.text_area("메모", key=mkey, label_visibility="collapsed",
                  placeholder="이 소재의 후킹/카피/구성 포인트, 운영 판단을 기록하세요",
                  value=st.session_state.get("_repmemo", {}).get(mkey, ""))
-    ac = st.columns([1, 1])
-    if ac[0].button("💾 메모 저장", key=f"repsave_{mkey}", use_container_width=True):
+    if st.button("💾 메모 저장", key=f"repsave_{mkey}"):
         st.session_state.setdefault("_repmemo", {})[mkey] = st.session_state[mkey]
         st.toast("메모 저장됨(세션)")
 
@@ -1274,40 +1290,46 @@ def render_repurely_insights(rows: list[dict]) -> None:
         st.warning("Meta 시트 동기화 실패 · 마지막 정상 데이터 표시 중", icon="⚠️")
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    cards = [("총 광고비", _krw(s["spend"])), ("총 매출", _krw(s["revenue"])),
-             ("총 구매", f"{int(s['conversions'])}건"), ("평균 ROAS", f"{s['roas']:.0f}"),
-             ("평균 CPC", f"{int(s['cpc']):,}원"), ("평균 CPM", f"{int(s['cpm']):,}원"),
-             ("평균 CTR", f"{s['ctr']:.2f}%"), ("운영 소재", f"{s['n']}개"),
-             ("OFF 후보", f"{s['off']}개"), ("위닝 후보", f"{s['winning']}개")]
-    cols = st.columns(5)
-    for i, (lab, val) in enumerate(cards):
-        with cols[i % 5]:
-            st.markdown(f"<div style='background:{S.CARD};border:1px solid {S.BORDER};border-radius:12px;"
-                        f"padding:12px 10px;text-align:center;margin-bottom:8px'>"
-                        f"<div style='font-size:11px;color:{S.SUB};font-weight:600'>{lab}</div>"
-                        f"<div style='font-size:18px;font-weight:800;color:{S.TEXT};margin-top:2px'>"
-                        f"{val}</div></div>", unsafe_allow_html=True)
-
-    # ── 매체별 성과 비교 ──
-    with st.expander("📊 매체별 성과 비교", expanded=True):
+    # ── 요약 + 매체별 비교 (아코디언 — 메인 아님, 기본 접힘) ──
+    with st.expander("📊 내부 소재 성과 요약 · 매체별 비교", expanded=False):
+        cards = [("총 광고비", _krw(s["spend"])), ("총 매출", _krw(s["revenue"])),
+                 ("총 구매", f"{int(s['conversions'])}건"), ("평균 ROAS", f"{s['roas']:.0f}"),
+                 ("평균 CPC", f"{int(s['cpc']):,}원"), ("평균 CPM", f"{int(s['cpm']):,}원"),
+                 ("평균 CTR", f"{s['ctr']:.2f}%"), ("운영 소재", f"{s['n']}개"),
+                 ("OFF 후보", f"{s['off']}개"), ("위닝 후보", f"{s['winning']}개")]
+        cols = st.columns(5)
+        for i, (lab, val) in enumerate(cards):
+            with cols[i % 5]:
+                st.markdown(f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
+                            f"padding:9px 8px;text-align:center;margin-bottom:7px'>"
+                            f"<div style='font-size:10.5px;color:{S.SUB};font-weight:600'>{lab}</div>"
+                            f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin-top:2px'>"
+                            f"{val}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:12px;font-weight:700;color:{S.SUB};margin:6px 0 4px'>"
+                    f"매체별 성과 비교</div>", unsafe_allow_html=True)
         pc = st.columns(len(RI.by_platform(rows)) or 1)
         for i, p in enumerate(RI.by_platform(rows)):
             col, _bg = _REP_PLAT.get(p["platform"], ("#6B7280", "#F1F5F9"))
-            pc[i].markdown(f"<div style='border:1px solid {S.BORDER};border-radius:12px;padding:12px;"
+            pc[i].markdown(f"<div style='border:1px solid {S.BORDER};border-radius:10px;padding:10px;"
                            f"border-top:3px solid {col}'>"
-                           f"<div style='font-weight:800;color:{col};font-size:14px'>{p['platform']}</div>"
-                           f"<div style='font-size:12px;color:{S.SUB};margin-top:5px'>소재 {p['n']}개</div>"
-                           f"<div style='font-size:12.5px;color:{S.TEXT};margin-top:3px'>"
-                           f"광고비 {_krw(p['spend'])}<br>매출 {_krw(p['revenue'])}<br>"
+                           f"<div style='font-weight:800;color:{col};font-size:13px'>{p['platform']}</div>"
+                           f"<div style='font-size:11.5px;color:{S.SUB};margin-top:4px'>소재 {p['n']}개 · "
+                           f"광고비 {_krw(p['spend'])}<br>매출 {_krw(p['revenue'])} · "
                            f"<b>ROAS {p['roas']:.0f}</b></div></div>", unsafe_allow_html=True)
 
-    # ── 섹션별 소재 ──
+    # ── 매체 선택(매체별로 각각 보기) ──
+    plats = ["전체"] + [p["platform"] for p in RI.by_platform(rows)]
+    sel_p = st.segmented_control("매체", plats, default="전체", key="rep_plat",
+                                 label_visibility="collapsed") or "전체"
+    view = rows if sel_p == "전체" else [r for r in rows if r.get("platform") == sel_p]
+
+    # ── 섹션별 소재 (선택 매체) ──
     sections = [
-        ("🏆 위닝 소재", [r for r in rows if r["winning_label"] == "위닝 소재"]),
-        ("✨ 위닝 후보", [r for r in rows if r["winning_label"] == "위닝 후보"]),
-        ("🧪 신규 테스트 소재", [r for r in rows if r.get("is_new_test")]),
-        ("⚠️ 피로도 의심 소재", [r for r in rows if r.get("is_fatigue")]),
-        ("🔴 OFF 후보", [r for r in rows if r.get("is_off")]),
+        ("🏆 위닝 소재", [r for r in view if r["winning_label"] == "위닝 소재"]),
+        ("✨ 위닝 후보", [r for r in view if r["winning_label"] == "위닝 후보"]),
+        ("🧪 신규 테스트 소재", [r for r in view if r.get("is_new_test")]),
+        ("⚠️ 피로도 의심 소재", [r for r in view if r.get("is_fatigue")]),
+        ("🔴 OFF 후보", [r for r in view if r.get("is_off")]),
     ]
     for title, items in sections:
         items = sorted(items, key=lambda x: -x.get("spend", 0))
