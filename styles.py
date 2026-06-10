@@ -71,17 +71,16 @@ def inject_css() -> None:
       #MainMenu, footer {{visibility:hidden;}}
       /* header(상단 툴바)는 숨기지 않음 — 사이드바 펼치는 '>' 버튼이 여기 들어있다.
          배경만 투명 처리해 깔끔하게, 펼침/접기 컨트롤은 항상 보이도록 강제. */
-      /* 헤더는 클릭 통과(탭이 헤더 빈 영역에 가려도 눌리게) — 단 실제 버튼/링크는 다시 활성화.
-         ⚠ toolbar 전체를 none으로 막으면 specificity가 높아 펼치기 버튼까지 죽으므로,
-         컨테이너는 통과(header none)만 하고 '버튼'만 켠다. */
+      /* 헤더 전체를 클릭 통과시켜 상단 탭(메인 영역)이 헤더 빈 영역에 가려도 눌리게 한다.
+         toolbar까지 전부 통과(none) → 탭 클릭 보장. 단 펼치기 버튼만 예외로 다시 활성화. */
       header[data-testid="stHeader"] {{background:transparent; pointer-events:none;}}
-      header[data-testid="stHeader"] button,
-      header[data-testid="stHeader"] a,
-      header[data-testid="stHeader"] [role="button"],
+      header[data-testid="stHeader"] [data-testid="stToolbar"],
+      header[data-testid="stHeader"] [data-testid="stToolbar"] * {{pointer-events:none !important;}}
+      /* 펼치기(>>) 버튼만 재활성화 — toolbar none보다 높은 specificity로 이기게(toolbar 내/외 모두 매칭) */
+      header[data-testid="stHeader"] [data-testid="stToolbar"] [data-testid="stExpandSidebarButton"],
+      header[data-testid="stHeader"] [data-testid="stToolbar"] [data-testid="stExpandSidebarButton"] *,
       header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"],
-      header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"] *,
-      header[data-testid="stHeader"] [data-testid="stToolbar"] button,
-      header[data-testid="stHeader"] [data-testid="stToolbar"] a {{
+      header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"] * {{
           pointer-events:auto !important;}}
       /* 펼치기(>>)/접기(<<) 컨트롤 — 항상 보이고, 상단 탭 위로 올려 클릭 보장 */
       [data-testid="stExpandSidebarButton"],
