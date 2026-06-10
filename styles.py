@@ -1,12 +1,12 @@
 """Series Archive custom CSS — 그린/민트 SaaS 룩."""
 import streamlit as st
 
-# 팔레트 — 라이트 SaaS 대시보드 톤
-PRIMARY = "#2563EB"      # 클릭 가능 요소/브랜드명/링크/선택 탭 (블루)
-PRIMARY_HOVER = "#1D4ED8"  # 링크 hover
-DEEP = "#1D4ED8"         # 진한 블루(선택 텍스트)
+# 팔레트 — 라이트 SaaS 대시보드 톤(텍스트는 그레이, 액센트는 그린 유지)
+PRIMARY = "#03C75A"      # 브랜드명/링크/선택 탭 — 그린(Naver)
+PRIMARY_HOVER = "#02A94C"  # 링크 hover(진한 그린)
+DEEP = "#10B981"         # 진한 그린(선택 텍스트)
 MINT = "#2DD4BF"
-SOFT_MINT = "#EFF6FF"    # 연한 블루 배경(선택/칩)
+SOFT_MINT = "#ECFDF5"    # 연한 그린 배경(선택/칩)
 BG = "#F8FAFC"
 CARD = "#FFFFFF"
 TEXT = "#111827"         # 기본 본문
