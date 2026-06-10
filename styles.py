@@ -119,6 +119,10 @@ def inject_css() -> None:
       .sa-thumb-contain {{background:#F8FAFC !important;}}
       .sa-thumb-contain::before {{display:none;}}
       .sa-thumb-contain img {{object-fit:contain;}}
+      /* 메타 탭: 세로형 숏폼·클로즈업·자막이 잘 보이게 3:4(세로 긴) cover */
+      .sa-thumb-meta {{aspect-ratio:3/4 !important;}}
+      .sa-thumb-meta::before {{display:none;}}
+      .sa-thumb-meta img {{object-fit:cover; object-position:center;}}
       .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:700; font-size:11px;
                   padding:2px 7px; border-radius:999px; box-shadow:0 1px 4px rgba(0,0,0,.2); z-index:2;}}
       .sa-dot {{position:absolute; top:9px; right:9px; width:9px; height:9px; border-radius:50%;

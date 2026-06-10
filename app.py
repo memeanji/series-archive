@@ -62,10 +62,18 @@ def _yt_counts():
     return database.youtube_candidate_counts()
 
 
-@st.cache_data(ttl=3600, show_spinner="repurely 시트 불러오는 중…")   # 1시간 캐시
-def _repurely_rows():
+def _repurely_rows(force: bool = False):
+    """repurely 시트+API를 1시간 세션 캐시. _reload()의 cache_data.clear()에 안 날아가게
+    session_state에 보관 → 북마크/메모 등 다른 동작에도 재조회 안 함."""
+    import time as _t
+    c = st.session_state.get("_rep_cache")
+    if not force and c and (_t.time() - c["t"] < 3600):
+        return c["rows"]
     import repurely.insights as RI
-    return RI.load_all()
+    with st.spinner("repurely 시트 불러오는 중…"):
+        rows = RI.load_all()
+    st.session_state["_rep_cache"] = {"t": _t.time(), "rows": rows}
+    return rows
 
 
 @st.cache_data(ttl=60)

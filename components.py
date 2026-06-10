@@ -538,10 +538,12 @@ def render_ad_card(ad: dict, idx: int) -> None:
         inner = f"<img src='{thumb}'/>"
         if plat == "google":
             thumb_cls = "sa-thumb sa-thumb-contain"      # 구글: 원본 비율 유지(자르지 않음)
+        elif plat == "meta":
+            thumb_cls = "sa-thumb sa-thumb-meta"          # 메타: 4:3 세로형, cover·center
         elif thumb.startswith("data:"):
             thumb_cls = "sa-thumb sa-thumb-fill"          # data URI: 채움(crop)
         else:
-            thumb_cls = "sa-thumb"                         # Meta 등: 블러배경+소재 크게
+            thumb_cls = "sa-thumb"                         # 기타: 블러배경+소재 크게
             bg = f"background-image:url('{thumb}')"
     elif ad.get("scrape_status") == "failed":
         why = (ad.get("error_message") or "수집 실패")[:24]
@@ -1284,6 +1286,7 @@ def render_repurely_insights(rows: list[dict]) -> None:
                    f"<div style='font-size:11px;color:{S.SUB};margin-top:1px'>마지막 동기화 "
                    f"<b>{last_sync}</b> · 다음 자동 갱신 ~{nxt} · 30분 캐시</div>", unsafe_allow_html=True)
     if hc[1].button("🔄 Meta 데이터 새로고침", use_container_width=True):
+        st.session_state.pop("_rep_cache", None)   # 세션 캐시 비우고 재조회
         st.cache_data.clear()
         st.rerun()
     if stale:

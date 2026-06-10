@@ -178,13 +178,18 @@ def _parse_card(r: dict, brand: str) -> dict:
 
 
 def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
-                 headless: bool = True, shot: bool = False, retries: int = 1) -> list[dict]:
+                 headless: bool = True, shot: bool = False, retries: int = 1,
+                 page_id: str = "") -> list[dict]:
     """Playwright 렌더 → 다단계 썸네일 추출 → 실패 시 카드 screenshot 폴백.
-    각 광고에 scrape_status(img/poster/bg/screenshot/failed)·local_thumbnail_path 기록."""
+    page_id 주면 해당 페이지의 전체 광고를 크롤(키워드 검색 대신 — 영상 mp4 정확 수집)."""
     from playwright.sync_api import sync_playwright
 
-    url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
-           f"&country={country}&q={quote(brand)}&search_type=keyword_unordered&media_type=all")
+    if page_id:
+        url = (f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all"
+               f"&country={country}&view_all_page_id={page_id}&search_type=page&media_type=all")
+    else:
+        url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
+               f"&country={country}&q={quote(brand)}&search_type=keyword_unordered&media_type=all")
     rows: list[dict] = []
     ads: list[dict] = []
     stats = {"img": 0, "poster": 0, "bg": 0, "screenshot": 0, "failed": 0}
