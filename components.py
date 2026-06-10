@@ -622,7 +622,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
         if b[1].button("★" if marked else "☆", key=f"bm_{aid}_{idx}",
                        use_container_width=True, type=("primary" if marked else "secondary"),
                        help="북마크 해제" if marked else "북마크 저장"):
-            database.update_bookmark(aid, not marked)
+            database.update_bookmark(aid, not marked, st.session_state.get('username',''))
             _reload()
         if st.session_state.get("f_devhidden"):
             st.caption(f"🔧 id={aid} · {plat} · src={th['source']} · "
@@ -896,13 +896,18 @@ def _render_trend_section(ad: dict, aid: str) -> None:
     fat = TR.classify_fatigue(snaps, ad.get("status"))
     st.markdown("<hr style='margin:30px 0 0;border:none;border-top:1px solid #E5E7EB'>",
                 unsafe_allow_html=True)
+    # '데이터 부족'일 땐 상태 배지·사유 문구 숨김(헤더 + 안내만)
+    show_badge = fat["label"] != "데이터 부족"
+    badge = (f"<span style='background:{fat['color']}22;color:{fat['color']};"
+             f"border:1px solid {fat['color']}88;font-size:10px;font-weight:700;padding:1px 7px;"
+             f"border-radius:999px;margin-left:8px'>{fat['emoji']} {fat['label']}</span>"
+             if show_badge else "")
     st.markdown(
         f"<div style='margin:18px 0 4px'>"
         f"<span style='font-size:12px;font-weight:700;color:#6B7280'>📈 조회수 추이 · 소재 상태</span>"
-        f"<span style='background:{fat['color']}22;color:{fat['color']};border:1px solid {fat['color']}88;"
-        f"font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:8px'>"
-        f"{fat['emoji']} {fat['label']}</span></div>", unsafe_allow_html=True)
-    st.caption(fat["reason"])
+        f"{badge}</div>", unsafe_allow_html=True)
+    if show_badge:
+        st.caption(fat["reason"])
     if len(snaps) < 2:
         st.markdown(f"<div style='font-size:11.5px;color:#94A3B8;line-height:1.5;margin-top:4px;"
                     f"padding:9px 11px;background:{S.BG};border:1px solid {S.BORDER};border-radius:9px'>"
@@ -952,7 +957,7 @@ def render_ad_detail(ad: dict) -> None:
     if hc[1].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
                     type=("primary" if marked else "secondary"),
                     help="북마크 해제" if marked else "북마크 저장"):
-        database.update_bookmark(aid, not marked)
+        database.update_bookmark(aid, not marked, st.session_state.get('username',''))
         _reload()
 
     left, right = st.columns([2, 3], gap="medium")

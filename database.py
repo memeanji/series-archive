@@ -199,6 +199,7 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     migrate_base64_thumbnails()
     migrate_brands()
     restore_scripts_from_store()   # Supabase에 백업된 스크립트 복원(영구 보존)
+    restore_bookmarks_from_store()  # Supabase 북마크 복원(Cloud 재배포 후 유실 방지·팀 공유)
 
 
 def _migrate_legacy(conn: sqlite3.Connection) -> int:
@@ -1178,12 +1179,37 @@ def verify_user(username: str, password: str) -> bool:
     return bool(row) and row["password_hash"] == hash_pw(password)
 
 
-def update_bookmark(ad_id: str, value: bool) -> None:
+def update_bookmark(ad_id: str, value: bool, username: str = "") -> None:
     conn = get_conn()
     conn.execute("UPDATE ad_library_ads SET is_bookmarked=?, updated_at=? WHERE id=?",
                  (1 if value else 0, _now(), ad_id))
     conn.commit()
     conn.close()
+    # Supabase에도 반영(팀 공유·영구 보존). 미설정이면 무동작.
+    try:
+        import services.bookmark_store as BS
+        BS.add(ad_id, username) if value else BS.remove(ad_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def restore_bookmarks_from_store() -> int:
+    """Supabase 북마크를 로컬 DB에 복원(Cloud 재배포 후 유실 방지). 미설정/실패 시 로컬 유지."""
+    try:
+        import services.bookmark_store as BS
+        ids = BS.load_all()
+        if ids is None:          # 미설정·네트워크 실패 → 로컬 북마크 보존(덮어쓰지 않음)
+            return 0
+        conn = get_conn()
+        conn.execute("UPDATE ad_library_ads SET is_bookmarked=0")
+        n = 0
+        for aid in ids:
+            n += conn.execute("UPDATE ad_library_ads SET is_bookmarked=1 WHERE id=?", (aid,)).rowcount
+        conn.commit()
+        conn.close()
+        return n
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def set_yt_embeddable(ad_id: str, value) -> None:
