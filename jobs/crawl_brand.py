@@ -14,7 +14,7 @@ import config  # noqa: E402
 import database  # noqa: E402
 from collectors import google_library_crawler, meta_library_crawler  # noqa: E402
 
-GOOGLE_LIMIT = 30
+GOOGLE_LIMIT = 80
 
 
 def _now():

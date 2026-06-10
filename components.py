@@ -778,6 +778,16 @@ def render_ad_detail(ad: dict) -> None:
                          f"line-height:1.25;font-variant-numeric:tabular-nums'>{val}</div></div>")
             html += "</div>"
             st.markdown(html, unsafe_allow_html=True)
+            # 조회수 추이 그래프(일자별 스냅샷이 2개 이상 쌓이면 표시)
+            snaps = database.get_ad_snapshots(aid, days=60)
+            if len(snaps) >= 2:
+                import pandas as _pd
+                df = _pd.DataFrame(snaps)
+                df = df.rename(columns={"snapshot_date": "날짜", "views": "조회수"})[["날짜", "조회수"]]
+                df = df.set_index("날짜")
+                st.markdown("<div style='font-size:12px;color:#64748B;margin:6px 0 2px'>"
+                            "조회수 추이</div>", unsafe_allow_html=True)
+                st.line_chart(df, height=160)
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             # 출처/신뢰도 명확화: 메타 라이브러리 지표가 아니라 연결된 유튜브 원본 영상의 공개 지표
             st.caption("출처: 연결된 유튜브 원본 영상의 공개 지표(YouTube API) · 광고 성과 지표 아님(참고용)")

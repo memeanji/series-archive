@@ -120,6 +120,10 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     CREATE TABLE IF NOT EXISTS video_script_cache (
         cache_key TEXT PRIMARY KEY, segments_json TEXT, source TEXT, created_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS ad_view_snapshots (
+        ad_id TEXT, snapshot_date TEXT, views INTEGER, likes INTEGER, comments INTEGER,
+        created_at TEXT, UNIQUE(ad_id, snapshot_date)
+    );
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE,
         password_hash TEXT, role TEXT DEFAULT 'member', created_at TEXT
@@ -915,6 +919,30 @@ def social_count() -> int:
     n = conn.execute("SELECT COUNT(*) FROM social_videos").fetchone()[0]
     conn.close()
     return n
+
+
+def add_ad_snapshot(ad_id: str, views, likes, comments) -> None:
+    """광고(유튜브 연결)의 일자별 조회수 스냅샷 — 조회수 추이 그래프용(같은 날짜면 갱신)."""
+    from datetime import date
+    if not ad_id:
+        return
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO ad_view_snapshots"
+        "(ad_id,snapshot_date,views,likes,comments,created_at) VALUES(?,?,?,?,?,?)",
+        (ad_id, date.today().isoformat(), int(views or 0), int(likes or 0),
+         int(comments or 0), _now()))
+    conn.commit()
+    conn.close()
+
+
+def get_ad_snapshots(ad_id: str, days: int = 30) -> list[dict]:
+    conn = get_conn()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT snapshot_date, views, likes, comments FROM ad_view_snapshots "
+        "WHERE ad_id=? ORDER BY snapshot_date DESC LIMIT ?", (ad_id, days)).fetchall()]
+    conn.close()
+    return list(reversed(rows))
 
 
 def get_script_cache(cache_key: str) -> Optional[dict]:
