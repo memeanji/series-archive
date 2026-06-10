@@ -245,7 +245,7 @@ def render_header(ads=None) -> dict:
     h = st.columns([5, 1.4], vertical_alignment="center")
     with h[0]:
         st.markdown(
-            "<div style='display:flex;flex-direction:column;gap:3px;margin:2px 0 14px'>"
+            "<div style='display:flex;flex-direction:column;gap:1px;margin:0 0 6px'>"
             "<div class='sa-logo'>Series Archive</div>"
             "<div class='sa-sub'>Ad Reference Library</div></div>",
             unsafe_allow_html=True)
@@ -255,10 +255,10 @@ def render_header(ads=None) -> dict:
         st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
                     f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
-    tabs = ["전체", "Meta", "Google", "📈 조회수", "북마크"]
+    tabs = ["전체", "Meta", "Google", "📈 조회수", "북마크", "🏢 repurely"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     return {"search": search, "tab": tab}
 
 
@@ -409,7 +409,7 @@ def render_sidebar(counts: list, total: int) -> str:
     """counts: [{name, ad, approved, needs, rejected, live}, ...] (캐시). 상위 20개 + 검색."""
     sb = st.sidebar
     sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
-                f"margin:.1rem 0 .7rem'>브랜드</div>", unsafe_allow_html=True)
+                f"margin:0 0 .4rem'>브랜드</div>", unsafe_allow_html=True)
     render_add_brand()
     sb.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
     q = sb.text_input("브랜드 검색", placeholder="브랜드 검색", label_visibility="collapsed").strip().lower()
@@ -1112,6 +1112,173 @@ def render_ad_detail(ad: dict) -> None:
 
 
 # ════════════════════════════════════════════════════════════
+_REP_PLAT = {"Naver GFA": ("#03C75A", "#ECFDF5"), "Meta": ("#1877F2", "#EFF6FF"),
+             "TikTok": ("#111827", "#F1F5F9")}
+_REP_WIN = {"위닝 소재": "#10B981", "위닝 후보": "#0EA5E9", "모니터링": "#F59E0B", "일반 소재": "#94A3B8"}
+
+
+def _krw(n) -> str:
+    return f"{int(n or 0):,}원"
+
+
+def _rep_win_badge(label: str) -> str:
+    c = _REP_WIN.get(label, "#94A3B8")
+    return (f"<span style='background:{c}1A;color:{c};border:1px solid {c}66;font-size:10.5px;"
+            f"font-weight:700;padding:1px 8px;border-radius:999px'>{label}</span>")
+
+
+@st.dialog("repurely 소재 상세", width="large")
+def _repurely_detail(r: dict) -> None:
+    import html as _h
+    plat = r.get("platform", "")
+    pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
+    st.markdown(f"<div style='font-size:21px;font-weight:800;color:{S.PRIMARY}'>repurely</div>"
+                f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};margin-top:2px'>"
+                f"{_h.escape(r.get('creative_name') or '-')}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px'>"
+                f"<span style='background:{pb};color:{pc};font-size:12px;font-weight:700;"
+                f"padding:3px 11px;border-radius:999px'>{plat}</span>"
+                f"{_rep_win_badge(r.get('winning_label','-'))}"
+                f"<span style='background:{'#FEF2F2' if r.get('is_off') else '#ECFDF5'};"
+                f"color:{'#EF4444' if r.get('is_off') else '#10B981'};font-size:12px;font-weight:700;"
+                f"padding:3px 11px;border-radius:999px'>"
+                f"{'🔴 OFF 후보' if r.get('is_off') else '🟢 운영중'}</span></div>",
+                unsafe_allow_html=True)
+    # 캠페인/그룹/소재/UTM
+    meta = [("캠페인", r.get("campaign_name")), ("광고그룹", r.get("ad_group_name")),
+            ("소재명", r.get("creative_name")), ("UTM", r.get("utm_value"))]
+    st.markdown("".join(
+        f"<div style='display:flex;gap:8px;padding:3px 0;font-size:12.5px'>"
+        f"<span style='flex:0 0 70px;color:{S.SUB};font-weight:600'>{k}</span>"
+        f"<span style='color:{S.TEXT}'>{_h.escape(str(v or '-'))}</span></div>" for k, v in meta),
+        unsafe_allow_html=True)
+    # 지표 카드
+    cards = [("광고비", _krw(r.get("spend")), "#03C75A"), ("매출", _krw(r.get("revenue")), "#EF4444"),
+             ("구매", f"{int(r.get('conversions',0))}건", "#0EA5E9"), ("ROAS", f"{r.get('roas',0):.0f}", "#10B981")]
+    html = "<div style='display:flex;gap:8px;margin:12px 0 6px'>"
+    for lab, val, col in cards:
+        html += (f"<div style='flex:1;background:{S.BG};border:1px solid {S.BORDER};border-radius:12px;"
+                 f"padding:11px 6px;text-align:center'><div style='font-size:11px;color:{S.SUB};"
+                 f"font-weight:600'>{lab}</div><div style='font-size:18px;font-weight:800;color:{col};"
+                 f"line-height:1.3'>{val}</div></div>")
+    st.markdown(html + "</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:12.5px;color:{S.SUB};margin:2px 0 8px'>"
+                f"CTR {r.get('ctr',0)}% · CPC {int(r.get('cpc',0)):,}원 · CPM {int(r.get('cpm',0)):,}원</div>",
+                unsafe_allow_html=True)
+    # 자동 상태 요약
+    st.markdown(f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:10px;"
+                f"padding:11px 13px;font-size:13px;color:{S.TEXT};line-height:1.6'>"
+                f"🤖 {_h.escape(r.get('status_text',''))}</div>", unsafe_allow_html=True)
+    # 일별 추이 안내(시트엔 날짜 없음 → 스냅샷 누적 필요)
+    st.caption("📈 날짜별 광고비·매출·ROAS·CTR/CPC/CPM 추이는 매일 스냅샷이 누적되면 표시됩니다(시트는 현재 누적 합계).")
+    st.divider()
+    st.markdown("##### 📝 분석 메모")
+    mkey = f"repmemo_{plat}_{r.get('creative_name','')}"
+    st.text_area("메모", key=mkey, label_visibility="collapsed",
+                 placeholder="이 소재의 후킹/카피/구성 포인트, 운영 판단을 기록하세요",
+                 value=st.session_state.get("_repmemo", {}).get(mkey, ""))
+    ac = st.columns([1, 1])
+    if ac[0].button("💾 메모 저장", key=f"repsave_{mkey}", use_container_width=True):
+        st.session_state.setdefault("_repmemo", {})[mkey] = st.session_state[mkey]
+        st.toast("메모 저장됨(세션)")
+
+
+def _repurely_card(r: dict, key: str) -> None:
+    import html as _h
+    plat = r.get("platform", "")
+    pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
+    status = ("🔴 OFF 후보" if r.get("is_off") else
+              ("⚠️ 피로도 의심" if r.get("is_fatigue") else "🟢 운영중"))
+    with st.container(border=True):
+        st.markdown(
+            f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+            f"<span style='font-weight:800;color:{S.PRIMARY};font-size:13.5px'>repurely</span>"
+            f"<span style='background:{pb};color:{pc};font-size:10px;font-weight:700;"
+            f"padding:2px 8px;border-radius:6px'>{plat}</span></div>"
+            f"<div style='font-size:13.5px;font-weight:700;color:{S.TEXT};margin:7px 0 1px;"
+            f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"
+            f"{_h.escape(r.get('creative_name') or '-')}</div>"
+            f"<div style='font-size:11px;color:{S.SUB};white-space:nowrap;overflow:hidden;"
+            f"text-overflow:ellipsis'>{_h.escape(r.get('campaign_name') or '')}</div>"
+            f"<div style='font-size:12.5px;color:{S.TEXT};margin-top:8px'>광고비 "
+            f"<b>{_krw(r.get('spend'))}</b> · 구매 <b>{int(r.get('conversions',0))}건</b> · "
+            f"ROAS <b>{r.get('roas',0):.0f}</b></div>"
+            f"<div style='font-size:11px;color:{S.SUB};margin-top:2px'>CTR {r.get('ctr',0)}% · "
+            f"CPC {int(r.get('cpc',0)):,}원 · CPM {int(r.get('cpm',0)):,}원</div>"
+            f"<div style='margin-top:9px;display:flex;gap:6px;align-items:center'>"
+            f"{_rep_win_badge(r.get('winning_label','-'))}"
+            f"<span style='font-size:11px;color:{S.SUB}'>{status}</span></div>"
+            f"<div style='height:9px'></div>", unsafe_allow_html=True)
+        if st.button("상세 보기", key=f"repbtn_{key}", use_container_width=True):
+            _repurely_detail(r)
+
+
+def render_repurely_insights(rows: list[dict]) -> None:
+    """repurely 내부 소재 분석 탭 — 요약 카드 + 섹션별 소재 카드."""
+    import repurely.insights as RI
+    if not rows:
+        st.markdown(f"<div style='text-align:center;padding:4rem 1rem;color:{S.SUB}'>"
+                    f"<div style='font-size:48px'>📊</div><div style='font-size:16px;font-weight:700;"
+                    f"color:{S.TEXT};margin-top:.5rem'>repurely 성과 데이터를 불러오지 못했습니다</div>"
+                    f"<div style='font-size:13px;margin-top:.3rem'>구글시트 공개 설정 또는 서비스계정 인증을 "
+                    f"확인해주세요.</div></div>", unsafe_allow_html=True)
+        return
+    rows, av = RI.enrich(rows)
+    s = RI.summary(rows)
+
+    # ── 요약 카드 ──
+    st.markdown(f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin:.2rem 0 .6rem'>"
+                f"🏢 repurely 내부 소재 성과</div>", unsafe_allow_html=True)
+    cards = [("총 광고비", _krw(s["spend"])), ("총 매출", _krw(s["revenue"])),
+             ("총 구매", f"{int(s['conversions'])}건"), ("평균 ROAS", f"{s['roas']:.0f}"),
+             ("평균 CPC", f"{int(s['cpc']):,}원"), ("평균 CPM", f"{int(s['cpm']):,}원"),
+             ("평균 CTR", f"{s['ctr']:.2f}%"), ("운영 소재", f"{s['n']}개"),
+             ("OFF 후보", f"{s['off']}개"), ("위닝 후보", f"{s['winning']}개")]
+    cols = st.columns(5)
+    for i, (lab, val) in enumerate(cards):
+        with cols[i % 5]:
+            st.markdown(f"<div style='background:{S.CARD};border:1px solid {S.BORDER};border-radius:12px;"
+                        f"padding:12px 10px;text-align:center;margin-bottom:8px'>"
+                        f"<div style='font-size:11px;color:{S.SUB};font-weight:600'>{lab}</div>"
+                        f"<div style='font-size:18px;font-weight:800;color:{S.TEXT};margin-top:2px'>"
+                        f"{val}</div></div>", unsafe_allow_html=True)
+
+    # ── 매체별 성과 비교 ──
+    with st.expander("📊 매체별 성과 비교", expanded=True):
+        pc = st.columns(len(RI.by_platform(rows)) or 1)
+        for i, p in enumerate(RI.by_platform(rows)):
+            col, _bg = _REP_PLAT.get(p["platform"], ("#6B7280", "#F1F5F9"))
+            pc[i].markdown(f"<div style='border:1px solid {S.BORDER};border-radius:12px;padding:12px;"
+                           f"border-top:3px solid {col}'>"
+                           f"<div style='font-weight:800;color:{col};font-size:14px'>{p['platform']}</div>"
+                           f"<div style='font-size:12px;color:{S.SUB};margin-top:5px'>소재 {p['n']}개</div>"
+                           f"<div style='font-size:12.5px;color:{S.TEXT};margin-top:3px'>"
+                           f"광고비 {_krw(p['spend'])}<br>매출 {_krw(p['revenue'])}<br>"
+                           f"<b>ROAS {p['roas']:.0f}</b></div></div>", unsafe_allow_html=True)
+
+    # ── 섹션별 소재 ──
+    sections = [
+        ("🏆 위닝 소재", [r for r in rows if r["winning_label"] == "위닝 소재"]),
+        ("✨ 위닝 후보", [r for r in rows if r["winning_label"] == "위닝 후보"]),
+        ("🧪 신규 테스트 소재", [r for r in rows if r.get("is_new_test")]),
+        ("⚠️ 피로도 의심 소재", [r for r in rows if r.get("is_fatigue")]),
+        ("🔴 OFF 후보", [r for r in rows if r.get("is_off")]),
+    ]
+    for title, items in sections:
+        items = sorted(items, key=lambda x: -x.get("spend", 0))
+        st.markdown(f"<div style='font-size:15px;font-weight:800;color:{S.TEXT};margin:1.1rem 0 .5rem'>"
+                    f"{title} <span style='color:{S.SUB};font-size:13px;font-weight:600'>"
+                    f"{len(items)}개</span></div>", unsafe_allow_html=True)
+        if not items:
+            st.caption("해당 소재가 없습니다.")
+            continue
+        for i in range(0, len(items[:24]), 4):
+            cc = st.columns(4)
+            for col, r in zip(cc, items[i:i + 4]):
+                with col:
+                    _repurely_card(r, f"{title}_{i}_{r.get('platform')}_{r.get('creative_name','')}")
+
+
 def render_empty_state(msg: str = "표시할 광고가 없습니다") -> None:
     st.markdown(f"""
     <div style='text-align:center; padding:5rem 1rem; color:{S.SUB}'>

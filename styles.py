@@ -38,7 +38,7 @@ def inject_css() -> None:
           font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
                        "Malgun Gothic", sans-serif !important; }}
       /* 메인 폭 제한 + 여백(밀도 ↑) */
-      .block-container {{padding: 0.4rem 1.8rem 2rem !important; max-width: 1480px;}}
+      .block-container {{padding: 0.2rem 1.8rem 2rem !important; max-width: 1480px;}}
       [data-testid="stHorizontalBlock"] {{gap: 0.7rem;}}
       [data-testid="stVerticalBlock"] {{gap: 0.45rem;}}
       ::-webkit-scrollbar {{width: 7px; height: 7px;}}
@@ -73,7 +73,7 @@ def inject_css() -> None:
       [data-testid="collapsedControl"] {{
           visibility:visible !important; display:flex !important; opacity:1 !important;}}
       .stApp {{background:{BG};}}
-      .block-container {{padding-top:1rem; padding-bottom:2.5rem; max-width:1560px;}}
+      .block-container {{padding-top:0.2rem; padding-bottom:2.5rem; max-width:1560px;}}
 
       /* ── 헤더 ── */
       .sa-header {{display:flex; align-items:center; gap:12px;}}
@@ -154,7 +154,7 @@ def inject_css() -> None:
       section[data-testid="stSidebar"] {{background:{CARD}; border-right:1px solid {BORDER};
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
-      section[data-testid="stSidebar"] .block-container {{padding:0.25rem 18px 1rem !important;}}
+      section[data-testid="stSidebar"] .block-container {{padding:0.1rem 18px 1rem !important;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
       /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */
       section[data-testid="stSidebar"] div[data-testid="stButton"] button {{

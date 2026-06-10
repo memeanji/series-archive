@@ -62,6 +62,12 @@ def _yt_counts():
     return database.youtube_candidate_counts()
 
 
+@st.cache_data(ttl=600, show_spinner="repurely 시트 불러오는 중…")
+def _repurely_rows():
+    import repurely.insights as RI
+    return RI.load_all()
+
+
 @st.cache_data(ttl=60)
 def _apify_status():
     # 가벼운 상태만: 토큰 존재 여부(네트워크 호출 없음)
@@ -85,6 +91,12 @@ def main() -> None:
     C.render_sidebar(counts, total=sum(r["ad"] for r in counts))
 
     tab = header["tab"]
+
+    # ── repurely 내부 소재 분석 탭 ──
+    if tab == "🏢 repurely":
+        C.render_repurely_insights(_repurely_rows())
+        _footer(t0)
+        return
 
     # ── 광고 탭(전체/Meta/Google) — SQL 페이지 로딩 ──
     tabkey = TAB_KEY.get(tab, "all")
