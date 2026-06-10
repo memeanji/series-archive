@@ -175,10 +175,16 @@ def inject_css() -> None:
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
       section[data-testid="stSidebar"] .block-container {{padding:0 18px 1rem !important;}}
+      /* 사이드바 상단 기본 여백 제거 — 헤더를 최대한 위로 */
+      section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
+          height:0 !important; min-height:0 !important; padding:0 !important;}}
+      section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{padding-top:0 !important;}}
+      section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > div:first-child {{
+          padding-top:0 !important;}}
       /* Series Archive — 사이드바 최상단 sticky 헤더(브랜드 리스트만 아래로 스크롤) */
       section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sa-sb-head) {{
           position:sticky; top:0; z-index:6; background:{CARD};
-          margin:0 !important; padding:.55rem 0 .6rem !important;
+          margin:-.6rem 0 0 !important; padding:.35rem 0 .55rem !important;
           border-bottom:1px solid {BORDER};}}
       .sa-sb-head {{margin:0;}}
       section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
