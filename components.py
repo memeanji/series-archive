@@ -106,7 +106,7 @@ def _yt_smart_player(ad: dict, vid: str) -> None:
             f"text-decoration:none;margin:3px'>🔎 투명성센터에서 보기</a>"
             if is_valid_external_url(turl) else "")
     html = f"""
-    <div id="wrap" style="position:relative;width:100%;height:455px;border-radius:12px;
+    <div id="wrap" style="position:relative;width:100%;height:455px;border-radius:10px;
          overflow:hidden;background:#0F172A;font-family:Pretendard,-apple-system,sans-serif">
       <div id="player" style="width:100%;height:100%"></div>
       <div id="fb" style="display:none;position:absolute;inset:0;flex-direction:column;
@@ -146,7 +146,7 @@ def _yt_fallback_ui(ad: dict, vid: str) -> None:
     """임베드 제한 영상 — 오류 화면 대신 썸네일 + 안내 + 외부 링크(YouTube·투명성센터)."""
     thumb = YT.thumb_url(vid)
     st.markdown(
-        f"<div style='position:relative;border-radius:12px;overflow:hidden;background:#0F172A;"
+        f"<div style='position:relative;border-radius:10px;overflow:hidden;background:#0F172A;"
         f"aspect-ratio:16/9'>"
         f"<img src='{thumb}' style='width:100%;height:100%;object-fit:cover;opacity:.5'/>"
         f"<div style='position:absolute;inset:0;display:flex;flex-direction:column;"
@@ -423,7 +423,7 @@ def render_sidebar(counts: list, total: int) -> str:
         st.rerun()
 
     # 구분선 → 그 아래에 '전체 브랜드'
-    sb.markdown(f"<hr style='margin:.2rem 0 .7rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
+    sb.markdown(f"<hr style='margin:.2rem 0 1.2rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
     if sb.button(f"전체 브랜드  ·  {total}", key="b_all",
                  type=("primary" if sel == "전체" else "secondary")):
         _select("전체")
@@ -467,8 +467,8 @@ def render_sidebar(counts: list, total: int) -> str:
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
     grade = "전체"   # 등급 기능 제거
-    # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 (높이 맞춤) ──
-    c = st.columns([1.1, 1.7, 1.2, 0.7])
+    # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 (하단 정렬로 높이 맞춤) ──
+    c = st.columns([1.1, 1.7, 1.2, 0.55], vertical_alignment="bottom")
     media = c[0].multiselect("매체", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
@@ -478,7 +478,6 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                            "게재기간 짧은순", "저장 많은순"],
                           index=0, key="f_sort")
     period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
-    c[3].markdown("<div style='height:1.62rem'></div>", unsafe_allow_html=True)
     if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
         for k in ("f_media", "f_status", "f_sort", "f_period", "f_devhidden", "f_unavail"):
             st.session_state.pop(k, None)
@@ -590,13 +589,21 @@ def render_ad_card(ad: dict, idx: int) -> None:
                    else f"<span class='sa-live' style='color:{S.OFF_GRAY}'>● {ad.get('status') or '종료'}</span>")
     media_chip = f"<span class='sa-mchip'>{'🎬 영상' if is_video else ('🔍 Google' if plat=='google' else '🖼 이미지')}</span>"
     plat_badge = f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span>"
+    # 소재 피로도 배지(일별 잡이 계산한 fatigue_status — 데이터 쌓이면 표시)
+    import services.trend as _TR
+    fstat = ad.get("fatigue_status")
+    fat_chip = ""
+    if fstat and fstat not in ("데이터 부족", "종료"):
+        _fc, _fe = _TR.FATIGUE_STYLE.get(fstat, ("#94A3B8", ""))
+        fat_chip = (f"<span style='font-size:10px;font-weight:700;color:{_fc};background:{_fc}1A;"
+                    f"padding:1px 6px;border-radius:5px'>{_fe} {fstat}</span>")
 
     with st.container(border=True):
         st.markdown(
             f"<div class='{thumb_cls}' style=\"{bg}\">{inner}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}{ab_badge}{play_badge}</div>"
             f"<div class='sa-brand'>{_g(ad,'brand_name','-')}</div>"
-            f"<div class='sa-meta'><span>{metric}</span></div>"
+            f"<div class='sa-meta'><span>{metric}</span>{fat_chip}</div>"
             f"<div class='sa-meta'><span>{media_chip} {plat_badge}</span>{status_html}</div>"
             f"<div style='height:16px'></div>",
             unsafe_allow_html=True)
@@ -876,6 +883,44 @@ def _render_video_script(ad: dict) -> None:
 
 
 @st.dialog("광고 상세", width="large")
+def _render_trend_section(ad: dict, aid: str) -> None:
+    """조회수 추이 분석 — 피로도 상태 + 기간선택 + 누적/일별증가량/좋아요 차트."""
+    import services.trend as TR
+    import pandas as _pd
+    snaps = database.get_ad_snapshots(aid, days=120)
+    fat = TR.classify_fatigue(snaps, ad.get("status"))
+    st.markdown(
+        f"<div style='margin:16px 0 4px'>"
+        f"<span style='font-size:12px;font-weight:700;color:#64748B'>📈 조회수 추이 · 소재 상태</span>"
+        f"<span style='background:{fat['color']}1A;color:{fat['color']};border:1px solid {fat['color']}66;"
+        f"font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:8px'>"
+        f"{fat['emoji']} {fat['label']}</span></div>", unsafe_allow_html=True)
+    st.caption(fat["reason"])
+    if len(snaps) < 2:
+        st.markdown(f"<div style='font-size:11.5px;color:#94A3B8;line-height:1.5;margin-top:4px;"
+                    f"padding:9px 11px;background:{S.BG};border:1px solid {S.BORDER};border-radius:9px'>"
+                    f"{'오늘치(1일) 수집됨 · 내일 한 번 더 쌓이면 추이가 표시돼요.' if snaps else '아직 추이 데이터가 없습니다.'}"
+                    f"</div>", unsafe_allow_html=True)
+        return
+    period = st.selectbox("기간", ["최근 7일", "최근 14일", "최근 30일", "전체"],
+                          key=f"tp_{aid}", label_visibility="collapsed")
+    dmap = {"최근 7일": 7, "최근 14일": 14, "최근 30일": 30, "전체": 120}
+    rows = TR.with_deltas(snaps)[-dmap[period]:]
+    df = _pd.DataFrame(rows).rename(columns={"snapshot_date": "날짜"}).set_index("날짜")
+    st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700;margin:8px 0 1px'>"
+                "누적 조회수</div>", unsafe_allow_html=True)
+    st.line_chart(df[["views"]].rename(columns={"views": "조회수"}), height=130)
+    st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700;margin:6px 0 1px'>"
+                "일별 조회수 증가량</div>", unsafe_allow_html=True)
+    st.bar_chart(df[["daily_view_delta"]].rename(columns={"daily_view_delta": "증가량"}),
+                 height=130, color="#03C75A")
+    if df["likes"].max() > 0:
+        st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700;margin:6px 0 1px'>"
+                    "일별 좋아요 증가량</div>", unsafe_allow_html=True)
+        st.bar_chart(df[["daily_like_delta"]].rename(columns={"daily_like_delta": "좋아요"}),
+                     height=110, color="#EF4444")
+
+
 def render_ad_detail(ad: dict) -> None:
     import html as _h
     aid = ad.get("id")
@@ -924,35 +969,20 @@ def render_ad_detail(ad: dict) -> None:
                         f"<div class='sa-ph'><span class='i'>🖼</span>미리보기 없음</div></div>",
                         unsafe_allow_html=True)
         _render_source_buttons(ad)
-        # 조회수 추이 그래프 — 영상 바로 밑(스크립트/대본 왼쪽 자리).
-        # 일자별 스냅샷이 2일치 이상이면 선그래프, 1일치면 안내 문구.
-        _snaps = database.get_ad_snapshots(aid, days=60)
-        if len(_snaps) >= 2:
-            import pandas as _pd
-            _df = (_pd.DataFrame(_snaps)
-                   .rename(columns={"snapshot_date": "날짜", "views": "조회수"})[["날짜", "조회수"]]
-                   .set_index("날짜"))
-            st.markdown("<div style='font-size:12px;color:#64748B;font-weight:700;"
-                        "margin:16px 0 2px'>📈 조회수 추이</div>", unsafe_allow_html=True)
-            st.line_chart(_df, height=180)
-        elif len(_snaps) == 1:
-            st.markdown("<div style='font-size:12px;color:#94A3B8;line-height:1.5;"
-                        "margin:16px 0 0;padding:10px 12px;background:#F8FAFC;"
-                        "border:1px solid #E5E7EB;border-radius:10px'>"
-                        "📈 <b>조회수 추이</b><br>오늘치(1일) 수집됨 · 내일 한 번 더 쌓이면 그래프가 표시돼요.</div>",
-                        unsafe_allow_html=True)
+        # 조회수 추이 분석(피로도 상태 + 기간선택 + 누적/일별증가량/좋아요)
+        _render_trend_section(ad, aid)
 
     # ── 우: 핵심 광고정보(배지) → 지표 → 보조정보 → 카피 → 스크립트 ──
     with right:
         if ad.get("ad_title"):
-            st.markdown(f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};"
-                        f"margin:4px 0 13px;line-height:1.35'>{_h.escape(ad['ad_title'])}</div>",
+            st.markdown(f"<div style='font-size:17px;font-weight:800;color:{S.TEXT};"
+                        f"margin:4px 0 14px;line-height:1.35'>{_h.escape(ad['ad_title'])}</div>",
                         unsafe_allow_html=True)
 
         # ── 배지 행: 상태 · 플랫폼 · 게재위치 · CTA · A/B ──
         def _b(txt, bg, fg, bd):
             return (f"<span style='display:inline-flex;align-items:center;background:{bg};color:{fg};"
-                    f"border:1px solid {bd};font-size:11.5px;font-weight:700;padding:3px 10px;"
+                    f"border:1px solid {bd};font-size:13px;font-weight:700;padding:4px 12px;"
                     f"border-radius:999px'>{txt}</span>")
         live = ad.get("status") == "live"
         badges = [_b("● 라이브", S.SOFT_MINT, S.DEEP, "#A7F3D0") if live
@@ -992,36 +1022,33 @@ def render_ad_detail(ad: dict) -> None:
                          f"<div style='font-size:24px;font-weight:900;color:{col};"
                          f"line-height:1.3;font-variant-numeric:tabular-nums'>{val}</div></div>")
             st.markdown(html + "</div>", unsafe_allow_html=True)
-        elif plat == "meta":
-            st.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:2px 0 4px;"
-                        f"line-height:1.5'>ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 "
-                        f"반응 지표를 제공하지 않습니다.</div>", unsafe_allow_html=True)
         elif plat == "google":
             st.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:2px 0 4px;"
                         f"line-height:1.5'>ℹ️ 이 구글 광고는 유튜브 영상이 아니어서 "
                         f"조회수·좋아요 지표가 없습니다.</div>", unsafe_allow_html=True)
+        # (메타: 반응지표 미제공 안내문구 삭제)
 
-        # ── 보조 정보: 게재 시작 · 수집 · 광고 ID (조금 크게) ──
+        # ── 보조 정보: 게재 시작 · 수집 · 광고 ID ──
         started = str(_g(ad, "started_at", ""))[:10]
         sub = [f"게재 시작 {started}" if started
                else "<span style='color:#94A3B8'>게시 시작일 확인 불가</span>",
                f"수집 {str(_g(ad,'collected_at','-'))[:10]}", f"ID {aid}"]
-        st.markdown(f"<div style='font-size:13px;color:{S.SUB};margin:10px 0 0'>"
+        st.markdown(f"<div style='font-size:13px;color:{S.SUB};margin:14px 0 0'>"
                     + "&nbsp;·&nbsp; ".join(sub) + "</div>", unsafe_allow_html=True)
         if is_valid_external_url(ad.get("landing_url")):
             _lu = ad["landing_url"]
             _disp = _lu if len(_lu) <= 110 else _lu[:110] + "…"
-            st.markdown(f"<div style='font-size:13px;margin-top:4px;line-height:1.55;"
+            st.markdown(f"<div style='font-size:13px;margin-top:11px;line-height:1.55;"
                         f"word-break:break-all'>🛒 "
                         f"<a href='{_lu}' target='_blank' style='color:{S.SUB}'>"
                         f"{_h.escape(_disp)}</a></div>", unsafe_allow_html=True)
 
         st.divider()
-        # ── 광고 카피 — 아코디언(>) + 복사 버튼 내장 ──
+        # ── 광고 카피 — 아코디언(>) ──
         copy = (ad.get("ad_copy") or "").strip()
         if copy:
-            with st.expander("광고 카피  ·  📋 펼쳐서 복사", expanded=False):
-                st.code(copy)   # st.code 우상단 복사 버튼 내장
+            with st.expander("광고 카피", expanded=False):
+                st.code(copy, language=None)   # language=None → 해시태그(#) 기울임/하이라이트 방지
                 tags = re.findall(r"#[^\s#]+", copy)
                 if tags:
                     st.markdown("<div style='margin-top:6px'>"
@@ -1084,6 +1111,26 @@ def render_empty_state(msg: str = "표시할 광고가 없습니다") -> None:
       <div style='font-size:13px; margin-top:.3rem'>필터를 바꾸거나 새 브랜드를 수집해 보세요.</div>
     </div>
     """, unsafe_allow_html=True)
+
+
+def render_brand_trend_summary(brand: str) -> None:
+    """브랜드 단위 추이 요약: 총 조회수 · 운영중 · 피로도 의심 · 성장 중 + 일별 총 조회수."""
+    s = database.get_brand_trend_summary(brand)
+    with st.expander(f"📊 {brand} 추이 요약", expanded=False):
+        m = st.columns(4)
+        m[0].metric("브랜드 총 조회수", _kabbr(s["total_views"]) if s["total_views"] else "-")
+        m[1].metric("운영 중 광고", f"{s['live']}개")
+        m[2].metric("⚠️ 피로도 의심", f"{s['fatigue']}개")
+        m[3].metric("📈 성장 중", f"{s['growing']}개")
+        if len(s["daily"]) >= 2:
+            import pandas as _pd
+            df = (_pd.DataFrame(s["daily"]).rename(columns={"snapshot_date": "날짜", "views": "총 조회수"})
+                  .set_index("날짜"))
+            st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700'>일별 브랜드 총 조회수</div>",
+                        unsafe_allow_html=True)
+            st.line_chart(df, height=140)
+        else:
+            st.caption("일별 추이는 스냅샷이 2일치 이상 쌓이면 표시됩니다.")
 
 
 def render_ad_grid(rows: list[dict], total: int, page: int, page_size: int) -> None:

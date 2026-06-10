@@ -112,6 +112,9 @@ def main() -> None:
                                                   index=0 if page_size == 12 else 1,
                                                   label_visibility="collapsed")
 
+    if f["brand"] != "전체":   # 특정 브랜드 선택 시 추이 요약
+        C.render_brand_trend_summary(f["brand"])
+
     t_render = time.perf_counter()
     C.render_ad_grid(rows, total, page, page_size)
     render_ms = (time.perf_counter() - t_render) * 1000

@@ -154,7 +154,8 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("cta", "TEXT"), ("ad_variant_count", "INTEGER DEFAULT 1"),
                  ("yt_views", "INTEGER DEFAULT 0"), ("yt_likes", "INTEGER DEFAULT 0"),
                  ("yt_comments", "INTEGER DEFAULT 0"), ("detail_status", "TEXT DEFAULT ''"),
-                 ("yt_embeddable", "INTEGER")):   # 1=임베드가능 0=제한 NULL=미확인(지연조회)
+                 ("yt_embeddable", "INTEGER"),   # 1=임베드가능 0=제한 NULL=미확인(지연조회)
+                 ("fatigue_status", "TEXT")):    # 성장중/안정/정체/피로도의심/회복중/종료(일별잡이 계산)
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -270,7 +271,7 @@ _SUMMARY_COLS = (
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
     "a.scrape_status, a.error_message, a.platforms, a.detail_status, "
-    "a.yt_views, a.yt_likes, a.yt_comments, a.yt_embeddable, "
+    "a.yt_views, a.yt_likes, a.yt_comments, a.yt_embeddable, a.fatigue_status, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
     "s.views AS social_views, s.likes AS social_likes, "
@@ -1181,6 +1182,33 @@ def set_yt_embeddable(ad_id: str, value) -> None:
                  (1 if value else 0, ad_id))
     conn.commit()
     conn.close()
+
+
+def set_fatigue_status(ad_id: str, status: str) -> None:
+    """소재 피로도 상태 캐시(일별 스냅샷 잡이 계산해 저장 → 카드/브랜드에서 싸게 읽음)."""
+    conn = get_conn()
+    conn.execute("UPDATE ad_library_ads SET fatigue_status=? WHERE id=?", (status, ad_id))
+    conn.commit()
+    conn.close()
+
+
+def get_brand_trend_summary(brand: str) -> dict:
+    """브랜드 단위 추이 요약: 총 조회수 · 운영중 광고수 · 피로도/성장 광고수 · 일별 총조회수."""
+    conn = get_conn()
+    tv = conn.execute("SELECT COALESCE(SUM(yt_views),0) FROM ad_library_ads WHERE brand_name=?",
+                      (brand,)).fetchone()[0]
+    live = conn.execute("SELECT COUNT(*) FROM ad_library_ads WHERE brand_name=? AND status='live' "
+                        "AND COALESCE(video_url,'')<>''", (brand,)).fetchone()[0]
+    fat = conn.execute("SELECT COUNT(*) FROM ad_library_ads WHERE brand_name=? AND fatigue_status=?",
+                       (brand, "피로도 의심")).fetchone()[0]
+    grow = conn.execute("SELECT COUNT(*) FROM ad_library_ads WHERE brand_name=? AND fatigue_status=?",
+                        (brand, "성장 중")).fetchone()[0]
+    rows = conn.execute("SELECT s.snapshot_date, SUM(s.views) FROM ad_view_snapshots s "
+                        "JOIN ad_library_ads a ON a.id=s.ad_id WHERE a.brand_name=? "
+                        "GROUP BY s.snapshot_date ORDER BY s.snapshot_date", (brand,)).fetchall()
+    conn.close()
+    return {"total_views": tv, "live": live, "fatigue": fat, "growing": grow,
+            "daily": [{"snapshot_date": r[0], "views": r[1] or 0} for r in rows]}
 
 
 def update_memo(ad_id: str, memo: str) -> None:

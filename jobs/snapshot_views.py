@@ -43,6 +43,21 @@ def main() -> None:
                 n += 1
     print(f"스냅샷 저장 {n}건 완료")
 
+    # 소재 피로도 상태 계산·저장(추이 기반) — 카드/브랜드에서 싸게 읽도록 컬럼에 캐시
+    import services.trend as TR
+    conn = database.get_conn()
+    ad_rows = [dict(r) for r in conn.execute(
+        "SELECT id, status FROM ad_library_ads "
+        "WHERE id IN (SELECT DISTINCT ad_id FROM ad_view_snapshots)").fetchall()]
+    conn.close()
+    fn = 0
+    for r in ad_rows:
+        snaps = database.get_ad_snapshots(r["id"], days=120)
+        fat = TR.classify_fatigue(snaps, r.get("status"))
+        database.set_fatigue_status(r["id"], fat["label"])
+        fn += 1
+    print(f"피로도 상태 갱신 {fn}건")
+
     # demo.db 갱신 + 푸시(Cloud에 조회수 추이 반영)
     import shutil
     import sqlite3

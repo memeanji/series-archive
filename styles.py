@@ -122,7 +122,7 @@ def inject_css() -> None:
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
       .sa-meta {{font-size:12.5px; color:{SUB}; margin-top:6px; display:flex;
                  justify-content:space-between; align-items:center;}}
-      .sa-meta .v {{font-weight:700; color:{TEXT};}}
+      .sa-meta .v {{font-weight:700; color:#475569;}}
       .sa-pbadge {{font-size:11px; font-weight:600; color:{SUB}; background:{BG};
                    border:1px solid {BORDER}; padding:1px 7px; border-radius:6px;}}
       .sa-mchip {{font-size:11px; font-weight:600; color:{SUB}; background:#F1F5F9;
@@ -154,7 +154,7 @@ def inject_css() -> None:
           font-weight:500;}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button p {{
           display:flex; justify-content:space-between; align-items:center; width:100%; margin:0;
-          gap:8px; color:{SUB};}}
+          gap:8px; color:#475569; font-weight:600;}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {{
           background:#F1F5F9; color:{TEXT};}}
       /* 선택된 브랜드(primary) — 은은한 민트 배경 + 초록 좌측 액센트 */
