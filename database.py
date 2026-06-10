@@ -296,6 +296,9 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
         w.append("s.final_grade IN ('S','A','B')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")  # placeholder 카드 제외
         w.append("a.ad_format NOT IN ('search_text','unknown')")
+    if tab == "views":   # 📈 조회수 탭 — 조회수 데이터가 있는 영상광고만
+        w.append("a.yt_views > 0")
+        w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")
     if f.get("only_unavailable"):
         w.append("COALESCE(a.detail_status,'')='unavailable'")   # '상세 확인 불가'만 보기
     elif not f.get("show_hidden"):
@@ -332,14 +335,24 @@ def _order(tab: str, sort: str) -> str:
         return (f"ORDER BY {rank} DESC, s.engagement_score DESC NULLS LAST, "
                 "s.views DESC NULLS LAST, a.collected_at DESC")
     empty_last = "(a.started_at='' OR a.started_at IS NULL) ASC"
-    return {
+    grow_rank = ("CASE a.fatigue_status WHEN '성장 중' THEN 3 WHEN '회복 중' THEN 2 "
+                 "WHEN '안정' THEN 1 ELSE 0 END")
+    tired_rank = "CASE a.fatigue_status WHEN '피로도 의심' THEN 2 WHEN '정체' THEN 1 ELSE 0 END"
+    base = {
         "조회수 높은순": "ORDER BY a.yt_views DESC NULLS LAST, a.collected_at DESC",  # 유튜브 조회수
+        "좋아요 높은순": "ORDER BY a.yt_likes DESC NULLS LAST, a.collected_at DESC",
+        "급성장순": f"ORDER BY {grow_rank} DESC, a.yt_views DESC NULLS LAST",
+        "피로도 의심순": f"ORDER BY {tired_rank} DESC, a.yt_views DESC NULLS LAST",
         "최근 수집순": "ORDER BY a.collected_at DESC",
         "오래된순": "ORDER BY a.collected_at ASC",
         "게재기간 긴순": f"ORDER BY {empty_last}, a.started_at ASC",   # 오래 게재(시작 이른 순)
         "게재기간 짧은순": f"ORDER BY {empty_last}, a.started_at DESC",  # 최근 게재
         "저장 많은순": "ORDER BY a.is_bookmarked DESC, a.score DESC",
-    }.get(sort, "ORDER BY a.collected_at DESC")
+    }
+    # 조회수 탭 기본 정렬은 조회수 높은순
+    if tab == "views" and sort not in base:
+        return base["조회수 높은순"]
+    return base.get(sort, "ORDER BY a.collected_at DESC")
 
 
 # 같은 크리에이티브+문구를 쓰는 A/B 변형을 1개로 묶는다(브랜드+매체+카피 시그니처).

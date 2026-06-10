@@ -255,7 +255,7 @@ def render_header(ads=None) -> dict:
         st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
                     f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
-    tabs = ["전체", "Meta", "Google", "북마크"]
+    tabs = ["전체", "Meta", "Google", "📈 조회수", "북마크"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
@@ -475,10 +475,14 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
                              key="f_media")
-    sort = c[1].selectbox("정렬",
-                          ["최근 수집순", "오래된순", "조회수 높은순", "게재기간 긴순",
-                           "게재기간 짧은순", "저장 많은순"],
-                          index=0, key="f_sort")
+    if header["tab"] == "📈 조회수":
+        sort = c[1].selectbox("정렬", ["조회수 높은순", "좋아요 높은순", "급성장순", "피로도 의심순"],
+                              key="f_sort_v")
+    else:
+        sort = c[1].selectbox("정렬",
+                              ["최근 수집순", "오래된순", "조회수 높은순", "게재기간 긴순",
+                               "게재기간 짧은순", "저장 많은순"],
+                              index=0, key="f_sort")
     period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
     if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
         for k in ("f_media", "f_status", "f_sort", "f_period", "f_devhidden", "f_unavail"):

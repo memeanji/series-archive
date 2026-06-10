@@ -18,7 +18,7 @@ import components as C  # noqa: E402
 import database  # noqa: E402
 import styles  # noqa: E402
 
-TAB_KEY = {"전체": "all", "Meta": "meta", "Google": "google"}
+TAB_KEY = {"전체": "all", "Meta": "meta", "Google": "google", "📈 조회수": "views"}
 
 
 # ── 캐시된 경량 조회 (ttl=300) ───────────────────────────
