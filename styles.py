@@ -185,19 +185,16 @@ def inject_css() -> None:
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
       section[data-testid="stSidebar"] .block-container {{padding:0 18px 1rem !important;}}
-      /* 사이드바 상단 여백 축소(헤더는 위로) — 단, << 접기 버튼 공간은 남김 */
+      /* 사이드바 상단 << 접기 버튼 행 — 컴팩트하게(클릭 유지), 단 겹치지 않게 공간만 최소 확보 */
       section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
-          min-height:0 !important; padding:.35rem .4rem 0 !important;}}
-      /* << 접기 버튼이 잘리지 않게 살짝 아래로 */
-      section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{
-          margin-top:.35rem !important;}}
+          min-height:0 !important; height:auto !important; padding:.25rem .4rem .1rem !important;}}
       section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{padding-top:0 !important;}}
       section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > div:first-child {{
           padding-top:0 !important;}}
-      /* Series Archive — 사이드바 최상단 sticky 헤더(브랜드 리스트만 아래로 스크롤, 구분선 없음) */
+      /* Series Archive — << 행 바로 아래 sticky 헤더(겹침 없음·구분선 없음·브랜드 리스트만 스크롤) */
       section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sa-sb-head) {{
-          position:sticky; top:0; z-index:6; background:{CARD};
-          margin:0 !important; padding:.2rem 0 .5rem !important;}}
+          position:sticky; top:0; z-index:4; background:{CARD};
+          margin:0 !important; padding:.1rem 0 .5rem !important;}}
       .sa-sb-head {{margin:0;}}
       section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
