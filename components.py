@@ -1262,16 +1262,24 @@ def _repurely_card(r: dict, key: str) -> None:
     status = ("🔴 OFF 후보" if r.get("is_off") else
               ("⚠️ 피로도 의심" if r.get("is_fatigue") else "🟢 운영중"))
     th = r.get("thumbnail_url") or ""
+    is_meta = plat == "Meta"
+    is_video = bool(r.get("video_id"))
+    # Meta 탭 카드와 동일한 썸네일 컴포넌트(sa-thumb sa-thumb-meta = 3:4·cover·center·radius 통일)
+    meta_cls = " sa-thumb-meta" if is_meta else ""
+    if th.startswith("http"):
+        play = "<div class='sa-play'>▶</div>" if is_video else ""
+        media_label = ("▶ 영상" if is_video else "🖼 이미지") if is_meta else plat
+        thumb_html = (f"<div class='sa-thumb{meta_cls}'><img src='{th}'/>{play}"
+                      f"<div class='sa-media'>{media_label}</div></div>")
+    else:
+        icon = "🎬" if is_video else "🖼"
+        thumb_html = (f"<div class='sa-thumb{meta_cls} sa-thumb-empty'>"
+                      f"<div class='sa-ph'><span class='i'>{icon}</span>미리보기 없음</div></div>")
     with st.container(border=True):
-        if th.startswith("http"):   # 매칭된 소재 썸네일/영상
-            play = "<div class='sa-play'>▶</div>" if r.get("video_id") else ""
-            ar = "3/4" if plat == "Meta" else "16/9"   # Meta=세로 숏폼, 그 외=가로
-            st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
-                        f"aspect-ratio:{ar};background:#0F172A;margin-bottom:8px'>"
-                        f"<img src='{th}' style='width:100%;height:100%;object-fit:cover'/>{play}</div>",
-                        unsafe_allow_html=True)
+        st.markdown(thumb_html, unsafe_allow_html=True)
         st.markdown(
-            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:4px'>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:4px;"
+            f"margin-top:9px'>"
             f"<span style='font-weight:800;color:{S.PRIMARY};font-size:13.5px'>repurely</span>"
             f"<span style='display:flex;gap:3px'>"
             f"<span style='background:#EEF2FF;color:#4F46E5;font-size:9.5px;font-weight:700;"
