@@ -136,7 +136,7 @@ def inject_css() -> None:
       .sa-date {{font-size:11.5px; color:{OFF_GRAY};}}
 
       /* ── 버튼 ── */
-      div[data-testid="stButton"] button {{border-radius:9px; font-size:12px; border:1px solid {BORDER};
+      div[data-testid="stButton"] button {{border-radius:9px; font-size:13px; border:1px solid {BORDER};
           color:{TEXT}; background:{CARD};}}
       div[data-testid="stButton"] button:hover {{border-color:{PRIMARY}; color:{PRIMARY};}}
       div[data-testid="stButton"] button[kind="primary"] {{background:{PRIMARY}; border-color:{PRIMARY}; color:#fff;}}

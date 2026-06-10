@@ -255,7 +255,7 @@ def render_header(ads=None) -> dict:
         st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
                     f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
-    tabs = ["전체", "Meta", "Google", "📈 조회수", "북마크", "🏢 repurely"]
+    tabs = ["전체", "Meta", "Google", "북마크", "Insight"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
                                label_visibility="collapsed") or "전체"
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
@@ -471,7 +471,7 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     grade = "전체"   # 등급 기능 제거
     # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 (하단 정렬로 높이 맞춤) ──
     c = st.columns([1.1, 1.7, 1.2, 0.55], vertical_alignment="bottom")
-    media = c[0].multiselect("매체", ["video", "image"],
+    media = c[0].multiselect("소재 유형", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
                              key="f_media")
@@ -1191,10 +1191,13 @@ def _repurely_card(r: dict, key: str) -> None:
               ("⚠️ 피로도 의심" if r.get("is_fatigue") else "🟢 운영중"))
     with st.container(border=True):
         st.markdown(
-            f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:4px'>"
             f"<span style='font-weight:800;color:{S.PRIMARY};font-size:13.5px'>repurely</span>"
+            f"<span style='display:flex;gap:3px'>"
+            f"<span style='background:#EEF2FF;color:#4F46E5;font-size:9.5px;font-weight:700;"
+            f"padding:2px 6px;border-radius:6px'>내부 데이터</span>"
             f"<span style='background:{pb};color:{pc};font-size:10px;font-weight:700;"
-            f"padding:2px 8px;border-radius:6px'>{plat}</span></div>"
+            f"padding:2px 8px;border-radius:6px'>{plat}</span></span></div>"
             f"<div style='font-size:13.5px;font-weight:700;color:{S.TEXT};margin:7px 0 1px;"
             f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"
             f"{_h.escape(r.get('creative_name') or '-')}</div>"
@@ -1216,6 +1219,13 @@ def _repurely_card(r: dict, key: str) -> None:
 def render_repurely_insights(rows: list[dict]) -> None:
     """repurely 내부 소재 분석 탭 — 요약 카드 + 섹션별 소재 카드."""
     import repurely.insights as RI
+    # 동기화 실패(빈 결과) 시 마지막 정상 데이터 유지
+    if rows:
+        st.session_state["_rep_last_good"] = rows
+        stale = False
+    else:
+        rows = st.session_state.get("_rep_last_good", [])
+        stale = bool(rows)
     if not rows:
         st.markdown(f"<div style='text-align:center;padding:4rem 1rem;color:{S.SUB}'>"
                     f"<div style='font-size:48px'>📊</div><div style='font-size:16px;font-weight:700;"
@@ -1226,9 +1236,25 @@ def render_repurely_insights(rows: list[dict]) -> None:
     rows, av = RI.enrich(rows)
     s = RI.summary(rows)
 
-    # ── 요약 카드 ──
-    st.markdown(f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin:.2rem 0 .6rem'>"
-                f"🏢 repurely 내부 소재 성과</div>", unsafe_allow_html=True)
+    # ── 헤더 + 동기화 상태 + 새로고침 ──
+    last_sync = max((r.get("collected_at", "") for r in rows), default="-")
+    from datetime import datetime as _dt, timedelta as _td
+    try:
+        nxt = (_dt.strptime(last_sync, "%Y-%m-%d %H:%M") + _td(minutes=30)).strftime("%H:%M")
+    except Exception:  # noqa: BLE001
+        nxt = "-"
+    hc = st.columns([4, 1.3])
+    hc[0].markdown(f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin:.2rem 0 0'>"
+                   f"🏢 repurely 내부 소재 성과</div>"
+                   f"<div style='font-size:11px;color:{S.SUB};margin-top:1px'>마지막 동기화 "
+                   f"<b>{last_sync}</b> · 다음 자동 갱신 ~{nxt} · 30분 캐시</div>", unsafe_allow_html=True)
+    if hc[1].button("🔄 Meta 데이터 새로고침", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+    if stale:
+        st.warning("Meta 시트 동기화 실패 · 마지막 정상 데이터 표시 중", icon="⚠️")
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
     cards = [("총 광고비", _krw(s["spend"])), ("총 매출", _krw(s["revenue"])),
              ("총 구매", f"{int(s['conversions'])}건"), ("평균 ROAS", f"{s['roas']:.0f}"),
              ("평균 CPC", f"{int(s['cpc']):,}원"), ("평균 CPM", f"{int(s['cpm']):,}원"),

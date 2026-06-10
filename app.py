@@ -18,7 +18,7 @@ import components as C  # noqa: E402
 import database  # noqa: E402
 import styles  # noqa: E402
 
-TAB_KEY = {"전체": "all", "Meta": "meta", "Google": "google", "📈 조회수": "views"}
+TAB_KEY = {"전체": "all", "Meta": "meta", "Google": "google"}
 
 
 # ── 캐시된 경량 조회 (ttl=300) ───────────────────────────
@@ -62,7 +62,7 @@ def _yt_counts():
     return database.youtube_candidate_counts()
 
 
-@st.cache_data(ttl=600, show_spinner="repurely 시트 불러오는 중…")
+@st.cache_data(ttl=1800, show_spinner="repurely 시트 불러오는 중…")   # 30분 캐시(시트 30분 갱신)
 def _repurely_rows():
     import repurely.insights as RI
     return RI.load_all()
@@ -92,8 +92,8 @@ def main() -> None:
 
     tab = header["tab"]
 
-    # ── repurely 내부 소재 분석 탭 ──
-    if tab == "🏢 repurely":
+    # ── repurely 내부 소재 분석 탭(Insight) ──
+    if tab == "Insight":
         C.render_repurely_insights(_repurely_rows())
         _footer(t0)
         return
