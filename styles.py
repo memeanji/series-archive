@@ -1,22 +1,25 @@
 """Series Archive custom CSS — 그린/민트 SaaS 룩."""
 import streamlit as st
 
-# 팔레트
-PRIMARY = "#03C75A"      # Naver green
-DEEP = "#10B981"
+# 팔레트 — 라이트 SaaS 대시보드 톤
+PRIMARY = "#2563EB"      # 클릭 가능 요소/브랜드명/링크/선택 탭 (블루)
+PRIMARY_HOVER = "#1D4ED8"  # 링크 hover
+DEEP = "#1D4ED8"         # 진한 블루(선택 텍스트)
 MINT = "#2DD4BF"
-SOFT_MINT = "#ECFDF5"
+SOFT_MINT = "#EFF6FF"    # 연한 블루 배경(선택/칩)
 BG = "#F8FAFC"
 CARD = "#FFFFFF"
-TEXT = "#1E293B"
-SUB = "#64748B"
-BORDER = "#E2E8F0"
-END_RED = "#EF4444"
-OFF_GRAY = "#94A3B8"
+TEXT = "#111827"         # 기본 본문
+SUB = "#6B7280"          # 보조 텍스트
+BORDER = "#E5E7EB"
+END_RED = "#EF4444"      # 종료 상태
+OFF_GRAY = "#9CA3AF"     # 흐린 설명 텍스트
+LIVE = "#10B981"         # 라이브 상태(그린)
+WARN = "#F59E0B"         # 경고/주의
 
 
 def status_color(status: str) -> str:
-    return {"live": PRIMARY, "ended": END_RED, "inactive": OFF_GRAY}.get(status, OFF_GRAY)
+    return {"live": LIVE, "ended": END_RED, "inactive": OFF_GRAY}.get(status, OFF_GRAY)
 
 
 def score_color(s: int) -> str:
@@ -135,6 +138,10 @@ def inject_css() -> None:
           color:{TEXT}; background:{CARD};}}
       div[data-testid="stButton"] button:hover {{border-color:{PRIMARY}; color:{PRIMARY};}}
       div[data-testid="stButton"] button[kind="primary"] {{background:{PRIMARY}; border-color:{PRIMARY}; color:#fff;}}
+      /* 링크 — 블루 + hover 진한 블루 */
+      a, .stMarkdown a, [data-testid="stMarkdownContainer"] a {{color:{PRIMARY} !important;
+          text-decoration:none;}}
+      a:hover, .stMarkdown a:hover {{color:{PRIMARY_HOVER} !important; text-decoration:underline;}}
       /* 카드 내부 액션 버튼: 작게 + 기본 은은 → 카드 hover 시 또렷 */
       div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stButton"] button {{
           font-size:12px; padding:5px 8px; min-height:0; opacity:.8;

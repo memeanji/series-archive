@@ -585,8 +585,8 @@ def render_ad_card(ad: dict, idx: int) -> None:
     else:
         metric = f"<span class='sa-date'>게재 {str(_g(ad,'started_at','-'))[:10]}</span>"
     live = ad.get("status") == "live"
-    status_html = (f"<span class='sa-live' style='color:{S.PRIMARY}'>● 라이브</span>" if live
-                   else f"<span class='sa-live' style='color:{S.OFF_GRAY}'>● {ad.get('status') or '종료'}</span>")
+    status_html = (f"<span class='sa-live' style='color:{S.LIVE}'>● 라이브</span>" if live
+                   else f"<span class='sa-live' style='color:{S.END_RED}'>● {ad.get('status') or '종료'}</span>")
     media_chip = f"<span class='sa-mchip'>{'🎬 영상' if is_video else ('🔍 Google' if plat=='google' else '🖼 이미지')}</span>"
     plat_badge = f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span>"
     # 소재 피로도 배지(일별 잡이 계산한 fatigue_status — 데이터 쌓이면 표시)
@@ -882,7 +882,6 @@ def _render_video_script(ad: dict) -> None:
             ovr[aid] = {"text": new, "status": "completed", "source": "manual", "error": ""}
 
 
-@st.dialog("광고 상세", width="large")
 def _render_trend_section(ad: dict, aid: str) -> None:
     """조회수 추이 분석 — 피로도 상태 + 기간선택 + 누적/일별증가량/좋아요 차트."""
     import services.trend as TR
@@ -921,6 +920,7 @@ def _render_trend_section(ad: dict, aid: str) -> None:
                      height=110, color="#EF4444")
 
 
+@st.dialog("광고 상세", width="large")
 def render_ad_detail(ad: dict) -> None:
     import html as _h
     aid = ad.get("id")
@@ -985,8 +985,8 @@ def render_ad_detail(ad: dict) -> None:
                     f"border:1px solid {bd};font-size:13px;font-weight:700;padding:4px 12px;"
                     f"border-radius:999px'>{txt}</span>")
         live = ad.get("status") == "live"
-        badges = [_b("● 라이브", S.SOFT_MINT, S.DEEP, "#A7F3D0") if live
-                  else _b("● " + (ad.get("status") or "종료"), "#F1F5F9", S.SUB, S.BORDER),
+        badges = [_b("● 라이브", "#ECFDF5", S.LIVE, "#A7F3D0") if live
+                  else _b("● " + (ad.get("status") or "종료"), "#FEF2F2", S.END_RED, "#FECACA"),
                   _b(PLATFORM_LABEL.get(plat, plat or "-"), "#F1F5F9", S.TEXT, S.BORDER)]
         for p in [x.strip() for x in (ad.get("platforms") or "").split(",") if x.strip()]:
             badges.append(_b(f"{PLAT_ICON.get(p,'')} {p}".strip(), "#F8FAFC", S.SUB, S.BORDER))
