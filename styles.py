@@ -114,7 +114,7 @@ def inject_css() -> None:
       .sa-ph {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                text-align:center; color:{OFF_GRAY}; font-size:13px; font-weight:600; z-index:1;}}
       .sa-ph .i {{display:block; font-size:30px; margin-bottom:2px; opacity:.7;}}
-      .sa-brand {{font-weight:700; font-size:15px; color:{TEXT}; margin-top:9px;
+      .sa-brand {{font-weight:800; font-size:15px; color:{PRIMARY}; margin-top:9px;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.2px;}}
       .sa-title {{font-size:14px; color:{TEXT}; font-weight:600; margin-top:1px; line-height:1.25;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}

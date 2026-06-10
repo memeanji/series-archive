@@ -250,12 +250,9 @@ def render_header(ads=None) -> dict:
             unsafe_allow_html=True)
     search = ""   # 통합 검색 제거(사이드바 브랜드 검색만 사용)
     with h[1]:
-        cc = st.columns([1, 1, 2])
-        if cc[0].button("🔄", help="새로고침", use_container_width=True):
-            _reload()
         user = st.session_state.get("username", "guest")
-        cc[2].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB};margin-top:6px'>"
-                       f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB};margin-top:10px'>"
+                    f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
 
     tabs = ["전체", "Meta", "Google", "북마크"]
     tab = st.segmented_control("메뉴", tabs, default="전체",
@@ -410,10 +407,10 @@ def render_sidebar(counts: list, total: int) -> str:
     """counts: [{name, ad, approved, needs, rejected, live}, ...] (캐시). 상위 20개 + 검색."""
     sb = st.sidebar
     sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
-                f"margin:.1rem 0 .7rem'>🏷 브랜드</div>", unsafe_allow_html=True)
+                f"margin:.1rem 0 .7rem'>브랜드</div>", unsafe_allow_html=True)
     render_add_brand()
     sb.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
-    q = sb.text_input("브랜드 검색", placeholder="🔍  브랜드 검색", label_visibility="collapsed").strip().lower()
+    q = sb.text_input("브랜드 검색", placeholder="브랜드 검색", label_visibility="collapsed").strip().lower()
 
     sel = st.session_state.get("sa_brand", "전체")
 
@@ -425,40 +422,40 @@ def render_sidebar(counts: list, total: int) -> str:
             st.session_state.recent_brands = ([b] + rec)[:6]
         st.rerun()
 
-    if sb.button(f"📁 전체 브랜드  ·  {total}", key="b_all",
+    # 구분선 → 그 아래에 '전체 브랜드'
+    sb.markdown(f"<hr style='margin:.2rem 0 .7rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
+    if sb.button(f"전체 브랜드  ·  {total}", key="b_all",
                  type=("primary" if sel == "전체" else "secondary")):
         _select("전체")
-    sb.markdown(f"<hr style='margin:.05rem 0 .8rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
 
     # ── 최근 본 브랜드 ──
     valid = {r["name"] for r in counts}
     recent = [b for b in st.session_state.get("recent_brands", []) if b in valid]
     if recent and not q:
         sb.markdown(f"<div style='font-size:11px;font-weight:700;color:{S.OFF_GRAY};"
-                    f"margin:0 0 .2rem 2px'>🕘 최근 본 브랜드</div>", unsafe_allow_html=True)
+                    f"margin:.5rem 0 .2rem 2px'>최근 본 브랜드</div>", unsafe_allow_html=True)
         for b in recent[:5]:
             if sb.button(b, key=f"rc_{b}", type=("primary" if b == sel else "secondary")):
                 _select(b)
-        sb.markdown(f"<hr style='margin:.5rem 0 .8rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
+        sb.markdown(f"<hr style='margin:.5rem 0 .6rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
 
-    # ── 브랜드 목록 ──
-    sb.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:0 0 .2rem 2px'>"
-                f"<b>M</b> 메타 · <b>G</b> 구글 투명성센터</div>", unsafe_allow_html=True)
+    # ── 브랜드 목록: 🟢 라이브 점 + Ⓜ 메타 · Ⓖ 구글 광고수 ──
     shown = [r for r in counts if not q or q in (r["name"] or "").lower()]
     if not q:
         shown = shown[:20]   # 검색 없을 땐 상위 20개만 렌더(성능)
     for r in shown:
         b = r["name"]
+        dot = "🟢" if r.get("live") else "⚪"
         m, g = r.get("meta", 0), r.get("google", 0)
         seg = []
         if m:
-            seg.append(f"M{m}")
+            seg.append(f"Ⓜ {m}")
         if g:
-            seg.append(f"G{g}")
-        cnt = "  ".join(seg) if seg else "0"
+            seg.append(f"Ⓖ {g}")
+        cnt = "   ".join(seg)
         tip = (f"메타 광고 {m} · 구글 투명성센터 {g} · 소셜 승인 {r['approved']} "
                f"(검토필요 {r['needs']} · 제외 {r['rejected']})")
-        if sb.button(f"{b}   {cnt}", key=f"b_{b}", help=tip,
+        if sb.button(f"{dot} {b}   {cnt}", key=f"b_{b}", help=tip,
                      type=("primary" if b == sel else "secondary")):
             _select(b)
     if not q and len(counts) > 20:
@@ -470,8 +467,8 @@ def render_sidebar(counts: list, total: int) -> str:
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
     grade = "전체"   # 등급 기능 제거
-    # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 ──
-    c = st.columns([1.5, 1.8, 1.2, 0.7])
+    # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 (높이 맞춤) ──
+    c = st.columns([1.1, 1.7, 1.2, 0.7])
     media = c[0].multiselect("매체", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
@@ -481,7 +478,7 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                            "게재기간 짧은순", "저장 많은순"],
                           index=0, key="f_sort")
     period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
-    c[3].markdown("<div style='height:1.55rem'></div>", unsafe_allow_html=True)
+    c[3].markdown("<div style='height:1.62rem'></div>", unsafe_allow_html=True)
     if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
         for k in ("f_media", "f_status", "f_sort", "f_period", "f_devhidden", "f_unavail"):
             st.session_state.pop(k, None)
@@ -573,10 +570,19 @@ def render_ad_card(ad: dict, idx: int) -> None:
     dot = S.status_color(ad.get("status"))
 
     # ── 핵심 지표(우선순위 2) ──
-    yv, yl = int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0)
-    if yv or yl:
-        metric = (f"<span class='v' title='연결된 유튜브 원본 공개지표 · 광고 성과 아님'>👁 {_kabbr(yv)}</span>"
-                  + (f" <span style='color:{S.SUB}'>❤ {_kabbr(yl)}</span>" if yl else ""))
+    yv, yl, yc = (int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0),
+                  int(ad.get("yt_comments") or 0))
+    if yv or yl or yc:
+        # 조회수=축약(288만), 좋아요·댓글=정확한 수+개
+        _p = []
+        if yv:
+            _p.append(f"👁 {_kabbr(yv)}")
+        if yl:
+            _p.append(f"❤ {_full(yl)}개")
+        if yc:
+            _p.append(f"💬 {_full(yc)}개")
+        metric = (f"<span class='v' title='연결된 유튜브 원본 공개지표 · 광고 성과 아님'>"
+                  + " · ".join(_p) + "</span>")
     else:
         metric = f"<span class='sa-date'>게재 {str(_g(ad,'started_at','-'))[:10]}</span>"
     live = ad.get("status") == "live"
@@ -590,10 +596,9 @@ def render_ad_card(ad: dict, idx: int) -> None:
             f"<div class='{thumb_cls}' style=\"{bg}\">{inner}"
             f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}{ab_badge}{play_badge}</div>"
             f"<div class='sa-brand'>{_g(ad,'brand_name','-')}</div>"
-            f"<div class='sa-meta'><span>{metric}</span>{status_html}</div>"
-            f"<div class='sa-meta'><span>{media_chip} {plat_badge}</span>"
-            f"<span class='sa-date'>📅 {str(_g(ad,'collected_at','-'))[:10]}</span></div>"
-            f"<div style='height:9px'></div>",
+            f"<div class='sa-meta'><span>{metric}</span></div>"
+            f"<div class='sa-meta'><span>{media_chip} {plat_badge}</span>{status_html}</div>"
+            f"<div style='height:16px'></div>",
             unsafe_allow_html=True)
         b = st.columns([3, 1])
         if b[0].button("상세 보기", key=f"open_{aid}_{idx}", use_container_width=True):
@@ -888,7 +893,7 @@ def render_ad_detail(ad: dict) -> None:
 
     # ── 헤더: 브랜드명(가장 크게) + 우측 북마크 별 아이콘 ──
     hc = st.columns([8, 1])
-    hc[0].markdown(f"<div style='font-size:23px;font-weight:800;color:{S.TEXT};"
+    hc[0].markdown(f"<div style='font-size:23px;font-weight:800;color:{S.PRIMARY};"
                    f"letter-spacing:-.3px;line-height:1.25;margin-top:2px'>"
                    f"{_h.escape(_g(ad,'brand_name','-'))}</div>", unsafe_allow_html=True)
     if hc[1].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
@@ -941,7 +946,7 @@ def render_ad_detail(ad: dict) -> None:
     with right:
         if ad.get("ad_title"):
             st.markdown(f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};"
-                        f"margin:2px 0 10px;line-height:1.35'>{_h.escape(ad['ad_title'])}</div>",
+                        f"margin:4px 0 13px;line-height:1.35'>{_h.escape(ad['ad_title'])}</div>",
                         unsafe_allow_html=True)
 
         # ── 배지 행: 상태 · 플랫폼 · 게재위치 · CTA · A/B ──
@@ -968,57 +973,62 @@ def render_ad_detail(ad: dict) -> None:
                 badges.append(_b("▶ 재생 가능", S.SOFT_MINT, S.DEEP, "#A7F3D0"))
             else:
                 badges.append(_b("↗ 원본 확인 필요", "#F1F5F9", S.SUB, S.BORDER))
-        st.markdown("<div style='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px'>"
+        st.markdown("<div style='display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 18px'>"
                     + "".join(badges) + "</div>", unsafe_allow_html=True)
 
         # ── 지표(숫자 중심, 낮은 색 강조) — 구글/유튜브 공개 지표 ──
         yv, yl, yc = (int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0),
                       int(ad.get("yt_comments") or 0))
         if ad.get("video_url") and (yv or yl or yc):
-            cards = [("👁", "조회수", _full(yv)), ("❤", "좋아요", _full(yl)), ("💬", "댓글", _full(yc))]
-            html = "<div style='display:flex;gap:8px;margin:2px 0 4px'>"
-            for icon, lab, val in cards:
-                html += (f"<div style='flex:1;background:{S.BG};border:1px solid {S.BORDER};"
-                         f"border-radius:12px;padding:11px 8px;text-align:center'>"
-                         f"<div style='font-size:11px;color:{S.SUB};font-weight:600'>{icon} {lab}</div>"
-                         f"<div style='font-size:21px;font-weight:800;color:{S.TEXT};"
-                         f"line-height:1.35;font-variant-numeric:tabular-nums'>{val}</div></div>")
+            # 배경색 있는 카드(색강조) — 조회수/좋아요/댓글
+            cards = [("👁", "조회수", _full(yv), "#03C75A"),
+                     ("❤", "좋아요", _full(yl), "#EF4444"),
+                     ("💬", "댓글", _full(yc), "#0EA5E9")]
+            html = "<div style='display:flex;gap:8px;margin:2px 0 8px'>"
+            for icon, lab, val, col in cards:
+                html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};"
+                         f"border-radius:14px;padding:13px 8px;text-align:center'>"
+                         f"<div style='font-size:11.5px;color:{S.SUB};font-weight:700'>{icon} {lab}</div>"
+                         f"<div style='font-size:24px;font-weight:900;color:{col};"
+                         f"line-height:1.3;font-variant-numeric:tabular-nums'>{val}</div></div>")
             st.markdown(html + "</div>", unsafe_allow_html=True)
-            st.caption("출처: 연결된 유튜브 원본 영상의 공개 지표 · 광고 성과 아님(참고용)")
         elif plat == "meta":
-            st.caption("ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 반응 지표를 제공하지 않습니다.")
+            st.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:2px 0 4px;"
+                        f"line-height:1.5'>ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 "
+                        f"반응 지표를 제공하지 않습니다.</div>", unsafe_allow_html=True)
         elif plat == "google":
-            st.caption("ℹ️ 이 구글 광고는 유튜브 영상이 아니어서 조회수·좋아요 지표가 없습니다.")
+            st.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:2px 0 4px;"
+                        f"line-height:1.5'>ℹ️ 이 구글 광고는 유튜브 영상이 아니어서 "
+                        f"조회수·좋아요 지표가 없습니다.</div>", unsafe_allow_html=True)
 
-        # ── 보조 정보(작게): 게재 시작 · 수집 · 광고 ID ──
+        # ── 보조 정보: 게재 시작 · 수집 · 광고 ID (조금 크게) ──
         started = str(_g(ad, "started_at", ""))[:10]
         sub = [f"게재 시작 {started}" if started
                else "<span style='color:#94A3B8'>게시 시작일 확인 불가</span>",
                f"수집 {str(_g(ad,'collected_at','-'))[:10]}", f"ID {aid}"]
-        st.markdown(f"<div style='font-size:11.5px;color:{S.SUB};margin:9px 0 0'>"
+        st.markdown(f"<div style='font-size:13px;color:{S.SUB};margin:10px 0 0'>"
                     + "&nbsp;·&nbsp; ".join(sub) + "</div>", unsafe_allow_html=True)
         if is_valid_external_url(ad.get("landing_url")):
             _lu = ad["landing_url"]
             _disp = _lu if len(_lu) <= 110 else _lu[:110] + "…"
-            st.markdown(f"<div style='font-size:11.5px;margin-top:3px;line-height:1.55;"
+            st.markdown(f"<div style='font-size:13px;margin-top:4px;line-height:1.55;"
                         f"word-break:break-all'>🛒 "
                         f"<a href='{_lu}' target='_blank' style='color:{S.SUB}'>"
                         f"{_h.escape(_disp)}</a></div>", unsafe_allow_html=True)
 
         st.divider()
-        # ── 광고 카피 ──
-        st.markdown("##### 광고 카피")
+        # ── 광고 카피 — 아코디언(>) + 복사 버튼 내장 ──
         copy = (ad.get("ad_copy") or "").strip()
         if copy:
-            st.markdown(_greybox(copy), unsafe_allow_html=True)
-            tags = re.findall(r"#[^\s#]+", copy)
-            if tags:
-                st.markdown("<div style='margin-top:8px'>"
-                            + "".join(f"<span class='sa-chip'>{_h.escape(t)}</span>" for t in tags[:14])
-                            + "</div>", unsafe_allow_html=True)
-            with st.expander("📋 원문 복사"):
-                st.code(copy)
+            with st.expander("광고 카피  ·  📋 펼쳐서 복사", expanded=False):
+                st.code(copy)   # st.code 우상단 복사 버튼 내장
+                tags = re.findall(r"#[^\s#]+", copy)
+                if tags:
+                    st.markdown("<div style='margin-top:6px'>"
+                                + "".join(f"<span class='sa-chip'>{_h.escape(t)}</span>" for t in tags[:14])
+                                + "</div>", unsafe_allow_html=True)
         else:
+            st.markdown("##### 광고 카피")
             empty_who = "Google 투명성센터" if plat == "google" else "이 광고"
             st.markdown(f"<div style='background:{S.BG};border:1px dashed {S.BORDER};border-radius:10px;"
                         f"padding:16px;text-align:center;color:{S.SUB};font-size:12.5px;line-height:1.7'>"
