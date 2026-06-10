@@ -245,9 +245,9 @@ def render_header(ads=None) -> dict:
     # 상단: 큰 탭(직관적) + 우측 유저. 제목(Series Archive)은 사이드바로 이동.
     tc = st.columns([5, 1], vertical_alignment="center")
     with tc[0]:
-        tabs = ["전체", "Meta", "Google", "Insight", "북마크"]
-        tab = st.segmented_control("메뉴", tabs, default="전체", key="nav_tab",
-                                   label_visibility="collapsed") or "전체"
+        tabs = ["Meta", "Google", "Insight", "북마크"]
+        tab = st.segmented_control("메뉴", tabs, default="Meta", key="nav_tab",
+                                   label_visibility="collapsed") or "Meta"
     user = st.session_state.get("username", "guest")
     tc[1].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
                    f"👤 <b>{user}</b></div>", unsafe_allow_html=True)

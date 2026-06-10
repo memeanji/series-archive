@@ -57,20 +57,24 @@ def inject_css() -> None:
           font-weight:600; margin-bottom:1px !important;}}
       div[data-testid="stCheckbox"] label {{font-size:11.5px; color:{OFF_GRAY};}}
 
-      /* 메인 내비 탭 — 깔끔한 SaaS 탭(필터보다 우선순위 높게) */
-      div[data-testid="stSegmentedControl"] [role="radiogroup"],
-      div[data-testid="stSegmentedControl"] > div {{gap:5px !important;}}
-      div[data-testid="stSegmentedControl"] button {{border-radius:8px !important;
-          font-size:14px; font-weight:500; border:1px solid {BORDER}; padding:8px 16px;
-          min-height:36px; box-sizing:border-box; line-height:1; color:{TEXT};}}
-      div[data-testid="stSegmentedControl"] button[aria-checked="true"],
-      div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
+      /* 메인 내비 탭 — 깔끔한 SaaS 탭(실제 DOM: stButtonGroup + stBaseButton-segmented_control) */
+      div[data-testid="stButtonGroup"] {{gap:5px !important;}}
+      button[data-testid^="stBaseButton-segmented_control"] {{border-radius:8px !important;
+          font-size:14px !important; font-weight:500; border:1px solid {BORDER} !important;
+          padding:8px 16px !important; min-height:36px; box-sizing:border-box; line-height:1;
+          color:{TEXT} !important;}}
+      button[data-testid="stBaseButton-segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{PRIMARY} !important;
           border-color:{PRIMARY} !important; font-weight:600 !important;}}
       #MainMenu, footer {{visibility:hidden;}}
       /* header(상단 툴바)는 숨기지 않음 — 사이드바 펼치는 '>' 버튼이 여기 들어있다.
          배경만 투명 처리해 깔끔하게, 펼침/접기 컨트롤은 항상 보이도록 강제. */
-      header[data-testid="stHeader"] {{background:transparent;}}
+      /* 헤더/툴바가 상단 탭 클릭을 가로채지 않게 통과(버튼만 클릭 유지) */
+      header[data-testid="stHeader"] {{background:transparent; pointer-events:none;}}
+      header[data-testid="stHeader"] [data-testid="stToolbar"],
+      header[data-testid="stHeader"] [data-testid="stToolbar"] * {{pointer-events:none !important;}}
+      header[data-testid="stHeader"] button,
+      header[data-testid="stHeader"] a {{pointer-events:auto !important;}}
       [data-testid="stSidebarCollapseButton"],
       [data-testid="stSidebarCollapsedControl"],
       [data-testid="collapsedControl"] {{
