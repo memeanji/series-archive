@@ -451,7 +451,9 @@ def render_ad_card(ad: dict, idx: int) -> None:
     badge = ""   # 등급/점수 뱃지 제거
     if int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
         eng = (f"<span title='연결된 유튜브 원본 영상의 공개 지표 · 광고 성과 아님'>"
-               f"👁 {_full(ad.get('yt_views'))}회 ❤ {_full(ad.get('yt_likes'))}</span>")
+               f"👁 {_full(ad.get('yt_views'))}회"
+               f"<span style='display:inline-block;width:9px'></span>"
+               f"❤ {_full(ad.get('yt_likes'))}개</span>")
     else:
         eng = f"<span style='color:{S.SUB}'>게재 {str(_g(ad,'started_at','-'))[:10] or '-'}</span>"
     _title = (_g(ad, "ad_title", "") or "")[:40]            # 실제 제목만(없으면 공백 div 생략)
@@ -767,8 +769,8 @@ def render_ad_detail(ad: dict) -> None:
                       int(ad.get("yt_comments") or 0))
         if ad.get("video_url") and (yv or yl or yc):
             cards = [("👁", "조회수", _full(yv) + ("회" if yv else ""), "#03C75A"),
-                     ("❤", "좋아요", _full(yl), "#EF4444"),
-                     ("💬", "댓글", _full(yc), "#0EA5E9")]
+                     ("❤", "좋아요", _full(yl) + ("개" if yl else ""), "#EF4444"),
+                     ("💬", "댓글", _full(yc) + ("개" if yc else ""), "#0EA5E9")]
             html = "<div style='display:flex;gap:10px;margin:10px 0 6px'>"
             for icon, lab, val, col in cards:
                 html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};"
