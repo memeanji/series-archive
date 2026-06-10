@@ -6,13 +6,43 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import os
+import time
 from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
 
 import database
+
+_LOGIN_TTL = 6 * 3600   # 로그인 유지 6시간
+
+
+def _sign_key() -> bytes:
+    return (_secret("AUTH_SECRET") or "series-archive-2026-internal-signing").encode()
+
+
+def _make_token(username: str) -> str:
+    """서명된 만료 토큰(6시간) — URL 쿼리파라미터에 저장해 새로고침에도 유지."""
+    exp = int(time.time()) + _LOGIN_TTL
+    msg = f"{username}|{exp}"
+    sig = hmac.new(_sign_key(), msg.encode(), hashlib.sha256).hexdigest()[:20]
+    return base64.urlsafe_b64encode(f"{msg}|{sig}".encode()).decode()
+
+
+def _check_token(token: str) -> str:
+    """토큰 검증 → 유효하면 username, 아니면 ''."""
+    try:
+        raw = base64.urlsafe_b64decode(token.encode()).decode()
+        username, exp, sig = raw.rsplit("|", 2)
+        if int(exp) < time.time():
+            return ""
+        good = hmac.new(_sign_key(), f"{username}|{exp}".encode(), hashlib.sha256).hexdigest()[:20]
+        return username if hmac.compare_digest(sig, good) else ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 _ASSETS = Path(__file__).resolve().parent / "assets"
 
@@ -141,6 +171,10 @@ def login() -> None:
                 if check_password(u.strip(), p):
                     st.session_state.authenticated = True
                     st.session_state.username = u.strip()
+                    try:   # 6시간 유지 토큰을 URL에 저장(새로고침에도 로그인 유지)
+                        st.query_params["auth"] = _make_token(u.strip())
+                    except Exception:  # noqa: BLE001
+                        pass
                     st.rerun()
                 else:
                     st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
@@ -151,8 +185,25 @@ def login() -> None:
 def logout() -> None:
     for k in ("authenticated", "username"):
         st.session_state.pop(k, None)
+    try:
+        del st.query_params["auth"]   # 유지 토큰 제거
+    except Exception:  # noqa: BLE001
+        pass
     st.rerun()
 
 
 def require_login() -> bool:
-    return bool(st.session_state.get("authenticated"))
+    if st.session_state.get("authenticated"):
+        return True
+    # 새로고침 시 세션이 풀려도, URL의 서명 토큰(6시간)으로 자동 재로그인
+    try:
+        tok = st.query_params.get("auth")
+    except Exception:  # noqa: BLE001
+        tok = None
+    if tok:
+        u = _check_token(tok)
+        if u:
+            st.session_state.authenticated = True
+            st.session_state.username = u
+            return True
+    return False
