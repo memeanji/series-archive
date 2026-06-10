@@ -62,13 +62,12 @@ def load_ads() -> list[dict]:
     if not (tok and acct):
         return []
     acct_id = acct if acct.startswith("act_") else f"act_{acct}"
-    fields = ("name,effective_status,creative{thumbnail_url,image_url,video_id,"
-              "object_story_spec{link_data{link},video_data{call_to_action{value{link}}}}},"
-              "adset{name},campaign{name}")
+    # 매칭/카드용 경량 필드(깊은 object_story_spec 제외) → limit 높여 요청 수↓·속도↑.
+    # landing은 상세에서 video_info로 on-demand 조회.
+    fields = "name,effective_status,creative{thumbnail_url,image_url,video_id},campaign{name}"
     out: list[dict] = []
     url = f"{GRAPH}/{acct_id}/ads"
-    # limit 낮게(깊은 필드라 너무 크면 'reduce data' 500). 페이지네이션으로 전체 수집.
-    params = {"fields": fields, "limit": 40, "access_token": tok}
+    params = {"fields": fields, "limit": 200, "access_token": tok}
     try:
         for _ in range(20):
             r = requests.get(url, params=params, timeout=30)

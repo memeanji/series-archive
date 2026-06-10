@@ -12,40 +12,17 @@ def load_all() -> list[dict]:
     import repurely.gfa_sheet as gfa
     import repurely.meta_sheet as meta
     import repurely.tiktok_sheet as tiktok
-    rows: list[dict] = []
-    for mod in (gfa, meta, tiktok):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _safe(mod):
         try:
-            rows += mod.load()
+            return mod.load()
         except Exception:  # noqa: BLE001
-            pass
-    # ── Meta 성과(시트) ↔ 소재(Marketing API) 매칭 ──
-    try:
-        import repurely.meta_api as api
-        if api.enabled():
-            idx = api.index_by_name(api.load_ads())
-            for r in rows:
-                if r.get("platform") != "Meta":
-                    continue
-                key = (r.get("utm_value") or r.get("creative_name") or "").strip().lower()
-                a = idx.get(key)
-                if a:
-                    r["thumbnail_url"] = a.get("thumbnail_url") or ""
-                    r["video_id"] = a.get("video_id") or ""
-                    r["ad_status"] = a.get("status") or ""
-                    r["landing"] = a.get("landing") or ""
-                    if a.get("adset"):
-                        r["ad_group_name"] = a["adset"]
-                    r["matched"] = True
-                    r["matched_by"] = "ad_name/utm"
-                    r["match_confidence"] = "high"
-                    # 실제 광고 상태로 운영/종료 반영
-                    r["status"] = "live" if a.get("status") == "ACTIVE" else "ended"
-                else:
-                    r["matched"] = False
-                    r["matched_by"] = ""
-                    r["match_confidence"] = "none"
-    except Exception:  # noqa: BLE001
-        pass
+            return []
+    rows: list[dict] = []
+    with ThreadPoolExecutor(max_workers=3) as ex:   # 3개 시트 동시 fetch(속도↑)
+        for res in ex.map(_safe, (gfa, meta, tiktok)):
+            rows += res
     return rows
 
 
