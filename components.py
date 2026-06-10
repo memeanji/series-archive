@@ -894,9 +894,11 @@ def _render_trend_section(ad: dict, aid: str) -> None:
     import pandas as _pd
     snaps = database.get_ad_snapshots(aid, days=120)
     fat = TR.classify_fatigue(snaps, ad.get("status"))
+    st.markdown("<hr style='margin:30px 0 0;border:none;border-top:1px solid #E5E7EB'>",
+                unsafe_allow_html=True)
     st.markdown(
-        f"<div style='margin:28px 0 4px'>"
-        f"<span style='font-size:12px;font-weight:700;color:#64748B'>📈 조회수 추이 · 소재 상태</span>"
+        f"<div style='margin:18px 0 4px'>"
+        f"<span style='font-size:12px;font-weight:700;color:#6B7280'>📈 조회수 추이 · 소재 상태</span>"
         f"<span style='background:{fat['color']}1A;color:{fat['color']};border:1px solid {fat['color']}66;"
         f"font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:8px'>"
         f"{fat['emoji']} {fat['label']}</span></div>", unsafe_allow_html=True)
@@ -1028,11 +1030,7 @@ def render_ad_detail(ad: dict) -> None:
                          f"<div style='font-size:24px;font-weight:900;color:{col};"
                          f"line-height:1.3;font-variant-numeric:tabular-nums'>{val}</div></div>")
             st.markdown(html + "</div>", unsafe_allow_html=True)
-        elif plat == "google":
-            st.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:2px 0 4px;"
-                        f"line-height:1.5'>ℹ️ 이 구글 광고는 유튜브 영상이 아니어서 "
-                        f"조회수·좋아요 지표가 없습니다.</div>", unsafe_allow_html=True)
-        # (메타: 반응지표 미제공 안내문구 삭제)
+        # (메타·구글 반응지표 미제공 안내문구 삭제)
 
         # ── 보조 정보: 게재 시작 · 수집 · 광고 ID ──
         started = str(_g(ad, "started_at", ""))[:10]

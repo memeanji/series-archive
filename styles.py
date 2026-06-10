@@ -127,7 +127,7 @@ def inject_css() -> None:
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
       .sa-meta {{font-size:12.5px; color:{SUB}; margin-top:6px; display:flex;
                  justify-content:space-between; align-items:center;}}
-      .sa-meta .v {{font-weight:700; color:#475569;}}
+      .sa-meta .v {{font-weight:700; color:{SUB};}}
       .sa-pbadge {{font-size:11px; font-weight:600; color:{SUB}; background:{BG};
                    border:1px solid {BORDER}; padding:1px 7px; border-radius:6px;}}
       .sa-mchip {{font-size:11px; font-weight:600; color:{SUB}; background:#F1F5F9;
@@ -176,7 +176,7 @@ def inject_css() -> None:
           border:1px solid {BORDER}; font-size:13.5px; border-radius:10px;}}
       section[data-testid="stSidebar"] .stTextInput input:focus {{background:#fff;
           border-color:{PRIMARY}; box-shadow:0 0 0 3px {SOFT_MINT};}}
-      section[data-testid="stSidebar"] hr {{margin:.05rem 0 .85rem !important;}}
+      section[data-testid="stSidebar"] hr {{margin:.45rem 0 1.5rem !important;}}
       section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{margin:0 !important;}}
       section[data-testid="stSidebar"] [data-testid="stExpander"] {{margin:.15rem 0;}}
       section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{padding:.3rem .6rem;}}
