@@ -58,9 +58,9 @@ def inject_css() -> None:
       div[data-testid="stCheckbox"] label {{font-size:11.5px; color:{OFF_GRAY};}}
 
       /* segmented control(탭/필터) → 작은 pill */
-      div[data-testid="stSegmentedControl"] button {{border-radius:9px !important;
-          font-size:12.5px; font-weight:600; border:1px solid {BORDER}; padding:5px 14px;
-          min-height:34px; box-sizing:border-box; line-height:1;}}
+      div[data-testid="stSegmentedControl"] button {{border-radius:10px !important;
+          font-size:14.5px; font-weight:700; border:1px solid {BORDER}; padding:9px 24px;
+          min-height:44px; box-sizing:border-box; line-height:1;}}
       div[data-testid="stSegmentedControl"] button[aria-checked="true"],
       div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
           background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}

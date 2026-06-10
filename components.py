@@ -242,24 +242,17 @@ def render_script_section(social_id: str, video_id: str = "") -> None:
 
 # ════════════════════════════════════════════════════════════
 def render_header(ads=None) -> dict:
-    h = st.columns([5, 1.4], vertical_alignment="center")
-    with h[0]:
-        st.markdown(
-            "<div style='display:flex;flex-direction:column;gap:1px;margin:0 0 6px'>"
-            "<div class='sa-logo'>Series Archive</div>"
-            "<div class='sa-sub'>Ad Reference Library</div></div>",
-            unsafe_allow_html=True)
-    search = ""   # 통합 검색 제거(사이드바 브랜드 검색만 사용)
-    with h[1]:
-        user = st.session_state.get("username", "guest")
-        st.markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
-                    f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
-
-    tabs = ["전체", "Meta", "Google", "북마크", "Insight"]
-    tab = st.segmented_control("메뉴", tabs, default="전체",
-                               label_visibility="collapsed") or "전체"
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-    return {"search": search, "tab": tab}
+    # 상단: 큰 탭(직관적) + 우측 유저. 제목(Series Archive)은 사이드바로 이동.
+    tc = st.columns([5, 1], vertical_alignment="center")
+    with tc[0]:
+        tabs = ["전체", "Meta", "Google", "Insight", "북마크"]
+        tab = st.segmented_control("메뉴", tabs, default="전체",
+                                   label_visibility="collapsed") or "전체"
+    user = st.session_state.get("username", "guest")
+    tc[1].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
+                   f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    return {"search": "", "tab": tab}
 
 
 # ════════════════════════════════════════════════════════════
@@ -408,6 +401,10 @@ def render_add_brand() -> None:
 def render_sidebar(counts: list, total: int) -> str:
     """counts: [{name, ad, approved, needs, rejected, live}, ...] (캐시). 상위 20개 + 검색."""
     sb = st.sidebar
+    # 앱 타이틀(상단 헤더에서 이동)
+    sb.markdown(f"<div style='margin:0 0 .9rem'>"
+                f"<div class='sa-logo'>Series Archive</div>"
+                f"<div class='sa-sub'>Ad Reference Library</div></div>", unsafe_allow_html=True)
     sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
                 f"margin:0 0 .4rem'>브랜드</div>", unsafe_allow_html=True)
     render_add_brand()
