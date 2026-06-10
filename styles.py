@@ -78,63 +78,96 @@ def inject_css() -> None:
       .sa-info {{color:{SUB}; font-size:12.5px; margin:.2rem 0 .6rem;}}
       .sa-info b {{color:{TEXT};}}
 
-      /* ── 칩 ── */
-      .sa-chip {{display:inline-block; background:{SOFT_MINT}; color:{DEEP}; border:1px solid #A7F3D0;
-                 font-size:12px; padding:2px 10px; border-radius:999px; margin:0 6px 6px 0;}}
+      /* ── 칩(적용된 필터 요약) ── */
+      .sa-chip {{display:inline-block; background:#F1F5F9; color:{SUB}; border:1px solid {BORDER};
+                 font-size:11.5px; font-weight:600; padding:2px 10px; border-radius:999px; margin:0 5px 6px 0;}}
+      .sa-chip b {{color:{TEXT}; font-weight:700;}}
 
       /* ── 카드 ── */
       div[data-testid="stVerticalBlockBorderWrapper"] {{
-          background:{CARD}; border:1px solid {BORDER} !important; border-radius:16px;
-          box-shadow:0 1px 2px rgba(16,24,40,.04); transition:transform .15s, box-shadow .15s;}}
+          background:{CARD}; border:1px solid #EEF1F6 !important; border-radius:16px;
+          box-shadow:0 1px 2px rgba(16,24,40,.03); transition:transform .16s, box-shadow .16s, border-color .16s;}}
       div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
-          transform:translateY(-3px); box-shadow:0 8px 22px rgba(16,24,40,.10);}}
+          transform:translateY(-2px); box-shadow:0 10px 26px rgba(16,24,40,.09);
+          border-color:{BORDER} !important;}}
+      /* 썸네일: 16:9 통일 + 영상 전체가 보이도록 contain + 뒤에 블러 배경(레터박스/세로영상 자연스럽게) */
       .sa-thumb {{position:relative; aspect-ratio:16/9; border-radius:12px; overflow:hidden;
-                  background:#0F172A;}}
-      .sa-thumb img {{width:100%; height:100%; object-fit:cover;}}
-      .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:800; font-size:12px;
-                  padding:3px 9px; border-radius:999px; box-shadow:0 1px 4px rgba(0,0,0,.2);}}
-      .sa-dot {{position:absolute; top:10px; right:10px; width:11px; height:11px; border-radius:50%;
-                box-shadow:0 0 0 2px #fff;}}
-      .sa-media {{position:absolute; bottom:8px; right:8px; background:rgba(15,23,42,.78); color:#fff;
-                  font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;}}
-      .sa-play {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:38px;
-                 color:#fff; opacity:.95; text-shadow:0 2px 10px rgba(0,0,0,.55);}}
+                  background:#0F172A; background-size:cover; background-position:center;}}
+      .sa-thumb::before {{content:''; position:absolute; inset:0; background:inherit;
+                  background-size:cover; background-position:center;
+                  filter:blur(22px) brightness(.5); transform:scale(1.3);}}
+      .sa-thumb img {{position:relative; z-index:1; width:100%; height:100%; object-fit:contain;}}
+      /* data URI 썸네일(구글 스크린샷 등)은 블러배경 없이 꽉 채움(용량 절감) */
+      .sa-thumb-fill::before {{display:none;}}
+      .sa-thumb-fill img {{object-fit:cover;}}
+      .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:700; font-size:11px;
+                  padding:2px 7px; border-radius:999px; box-shadow:0 1px 4px rgba(0,0,0,.2); z-index:2;}}
+      .sa-dot {{position:absolute; top:9px; right:9px; width:9px; height:9px; border-radius:50%;
+                box-shadow:0 0 0 2px #fff; z-index:2;}}
+      .sa-media {{position:absolute; bottom:7px; left:7px; background:rgba(15,23,42,.6); color:#fff;
+                  font-size:10px; font-weight:600; padding:1px 7px; border-radius:6px; z-index:2;
+                  backdrop-filter:blur(2px);}}
+      .sa-play {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:34px;
+                 color:#fff; opacity:.92; text-shadow:0 2px 10px rgba(0,0,0,.55); z-index:2;}}
       .sa-thumb-empty {{background:{BG} !important; border:1px dashed {BORDER};}}
+      .sa-thumb-empty::before {{display:none;}}
       .sa-ph {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-               text-align:center; color:{OFF_GRAY}; font-size:13px; font-weight:600;}}
+               text-align:center; color:{OFF_GRAY}; font-size:13px; font-weight:600; z-index:1;}}
       .sa-ph .i {{display:block; font-size:30px; margin-bottom:2px; opacity:.7;}}
-      .sa-brand {{font-weight:800; font-size:15.5px; color:{PRIMARY}; margin-top:7px;
-                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
-      .sa-title {{font-size:14.5px; color:{TEXT}; font-weight:700; margin-top:1px; line-height:1.25;
+      .sa-brand {{font-weight:700; font-size:15px; color:{TEXT}; margin-top:9px;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.2px;}}
+      .sa-title {{font-size:14px; color:{TEXT}; font-weight:600; margin-top:1px; line-height:1.25;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}}
       .sa-copy {{font-size:12px; color:{SUB}; line-height:1.3; margin-top:2px;
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}}
-      .sa-meta {{font-size:13px; color:{SUB}; margin-top:5px; display:flex; justify-content:space-between;}}
-      .sa-pbadge {{font-size:11.5px; font-weight:700; color:{SUB}; background:{BG};
+      .sa-meta {{font-size:12.5px; color:{SUB}; margin-top:6px; display:flex;
+                 justify-content:space-between; align-items:center;}}
+      .sa-meta .v {{font-weight:700; color:{TEXT};}}
+      .sa-pbadge {{font-size:11px; font-weight:600; color:{SUB}; background:{BG};
                    border:1px solid {BORDER}; padding:1px 7px; border-radius:6px;}}
+      .sa-mchip {{font-size:11px; font-weight:600; color:{SUB}; background:#F1F5F9;
+                  padding:1px 7px; border-radius:6px;}}
+      .sa-live {{font-size:11.5px; font-weight:700;}}
+      .sa-date {{font-size:11.5px; color:{OFF_GRAY};}}
 
       /* ── 버튼 ── */
       div[data-testid="stButton"] button {{border-radius:9px; font-size:12px; border:1px solid {BORDER};
           color:{TEXT}; background:{CARD};}}
       div[data-testid="stButton"] button:hover {{border-color:{PRIMARY}; color:{PRIMARY};}}
       div[data-testid="stButton"] button[kind="primary"] {{background:{PRIMARY}; border-color:{PRIMARY}; color:#fff;}}
+      /* 카드 내부 액션 버튼: 작게 + 기본 은은 → 카드 hover 시 또렷 */
+      div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stButton"] button {{
+          font-size:12px; padding:5px 8px; min-height:0; opacity:.8;
+          transition:opacity .16s, border-color .16s, color .16s;}}
+      div[data-testid="stVerticalBlockBorderWrapper"]:hover div[data-testid="stButton"] button {{opacity:1;}}
 
       /* ── 사이드바(흰 카드) ── */
       section[data-testid="stSidebar"] {{background:{CARD}; border-right:1px solid {BORDER};
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
-      section[data-testid="stSidebar"] .block-container {{padding:1rem 18px 1rem !important;}}
+      section[data-testid="stSidebar"] .block-container {{padding:0.25rem 18px 1rem !important;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}
       /* 브랜드 row: 이름 왼쪽 · 개수 오른쪽(양끝 정렬) */
       section[data-testid="stSidebar"] div[data-testid="stButton"] button {{
-          width:100%; background:transparent; border:none; color:{TEXT};
-          font-size:13px; padding:9px 10px; min-height:0; line-height:1.3; border-radius:8px;}}
+          width:100%; background:transparent; border:none; border-left:3px solid transparent; color:{TEXT};
+          font-size:13px; padding:8px 10px; min-height:0; line-height:1.3; border-radius:8px;
+          font-weight:500;}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button p {{
-          display:flex; justify-content:space-between; align-items:center; width:100%; margin:0;}}
+          display:flex; justify-content:space-between; align-items:center; width:100%; margin:0;
+          gap:8px; color:{SUB};}}
       section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {{
-          background:{SOFT_MINT}; color:{DEEP};}}
-      section[data-testid="stSidebar"] .stTextInput input {{height:38px;}}
-      section[data-testid="stSidebar"] hr {{margin:.45rem 0 !important;}}
+          background:#F1F5F9; color:{TEXT};}}
+      /* 선택된 브랜드(primary) — 은은한 민트 배경 + 초록 좌측 액센트 */
+      section[data-testid="stSidebar"] div[data-testid="stButton"] button[kind="primary"] {{
+          background:{SOFT_MINT} !important; color:{DEEP} !important; font-weight:700;
+          border-left:3px solid {PRIMARY} !important;}}
+      section[data-testid="stSidebar"] div[data-testid="stButton"] button[kind="primary"] p {{color:{DEEP};}}
+      /* 브랜드 검색창 강조 */
+      section[data-testid="stSidebar"] .stTextInput input {{height:42px; background:{BG};
+          border:1px solid {BORDER}; font-size:13.5px; border-radius:10px;}}
+      section[data-testid="stSidebar"] .stTextInput input:focus {{background:#fff;
+          border-color:{PRIMARY}; box-shadow:0 0 0 3px {SOFT_MINT};}}
+      section[data-testid="stSidebar"] hr {{margin:.05rem 0 .85rem !important;}}
       section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{margin:0 !important;}}
       section[data-testid="stSidebar"] [data-testid="stExpander"] {{margin:.15rem 0;}}
       section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{padding:.3rem .6rem;}}

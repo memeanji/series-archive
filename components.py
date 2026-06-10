@@ -54,6 +54,25 @@ def _full(n) -> str:
     return f"{n:,}" if n > 0 else "-"
 
 
+def _kabbr(n) -> str:
+    """한국식 축약 표기. 예: 2,882,363 → 288만 · 28,823 → 2.9만 · 120,000,000 → 1.2억"""
+    try:
+        n = int(n or 0)
+    except (TypeError, ValueError):
+        return "-"
+    if n <= 0:
+        return "-"
+    if n >= 100_000_000:
+        v = n / 100_000_000
+        return (f"{v:.0f}" if v >= 100 else f"{v:.1f}".rstrip("0").rstrip(".")) + "억"
+    if n >= 10_000:
+        v = n / 10_000
+        return (f"{v:.0f}" if v >= 100 else f"{v:.1f}".rstrip("0").rstrip(".")) + "만"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}".rstrip("0").rstrip(".") + "천"
+    return str(n)
+
+
 def _g(ad: dict, key: str, default=""):
     v = ad.get(key)
     return default if v in (None, "") else v
@@ -67,6 +86,80 @@ def _reload() -> None:
 @st.cache_data(ttl=86400, show_spinner=False)
 def _yt_transcript(video_id: str) -> str:
     return YT.fetch_transcript(video_id)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _yt_embeddable(video_id: str):
+    """status.embeddable 캐시 조회(영상별 1회). True=재생가능 / False=외부재생필요 / None=미확인."""
+    return YT.embeddable(video_id)
+
+
+def _yt_smart_player(ad: dict, vid: str) -> None:
+    """YouTube IFrame Player API로 재생 시도 → 임베드 차단(onError 101/150 등) 감지 시
+    같은 자리에서 fallback(썸네일+안내+외부링크)으로 자동 전환. 우회 아님(정상 외부링크)."""
+    import html as _h
+    turl = normalize_google_transparency_url(ad.get("transparency_url") or ad.get("original_ad_url"))
+    watch, thumb = YT.watch_url(vid), YT.thumb_url(vid)
+    tbtn = (f"<a href='{_h.escape(turl)}' target='_blank' style='display:inline-block;"
+            f"background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.5);"
+            f"font-size:12.5px;font-weight:700;padding:7px 14px;border-radius:8px;"
+            f"text-decoration:none;margin:3px'>🔎 투명성센터에서 보기</a>"
+            if is_valid_external_url(turl) else "")
+    html = f"""
+    <div id="wrap" style="position:relative;width:100%;height:455px;border-radius:12px;
+         overflow:hidden;background:#0F172A;font-family:Pretendard,-apple-system,sans-serif">
+      <div id="player" style="width:100%;height:100%"></div>
+      <div id="fb" style="display:none;position:absolute;inset:0;flex-direction:column;
+           align-items:center;justify-content:center;text-align:center;color:#fff;padding:18px;
+           background-image:url('{thumb}');background-size:cover;background-position:center">
+        <div style="position:absolute;inset:0;background:rgba(15,23,42,.74)"></div>
+        <div style="position:relative;z-index:1">
+          <div style="font-size:32px">🔒</div>
+          <div style="font-size:13.5px;font-weight:700;margin:10px 0 16px;line-height:1.6">
+            이 영상은 소유자 설정으로<br>앱 내 재생이 제한되어 있습니다.</div>
+          <a href="{watch}" target="_blank" style="display:inline-block;background:#fff;color:#0F172A;
+             font-size:12.5px;font-weight:700;padding:7px 14px;border-radius:8px;
+             text-decoration:none;margin:3px">▶ YouTube에서 보기</a>
+          {tbtn}
+        </div>
+      </div>
+    </div>
+    <script>
+      var tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+      function _saFb(){{var p=document.getElementById('player');if(p)p.style.display='none';
+        var f=document.getElementById('fb');if(f)f.style.display='flex';}}
+      function onYouTubeIframeAPIReady(){{
+        new YT.Player('player',{{width:'100%',height:'100%',videoId:'{vid}',
+          playerVars:{{rel:0,modestbranding:1}},
+          events:{{'onError':function(e){{
+            if([101,150,100,2,5].indexOf(e.data)>=0){{_saFb();}}
+          }}}}
+        }});
+      }}
+    </script>
+    """
+    stc.html(html, height=470)
+
+
+def _yt_fallback_ui(ad: dict, vid: str) -> None:
+    """임베드 제한 영상 — 오류 화면 대신 썸네일 + 안내 + 외부 링크(YouTube·투명성센터)."""
+    thumb = YT.thumb_url(vid)
+    st.markdown(
+        f"<div style='position:relative;border-radius:12px;overflow:hidden;background:#0F172A;"
+        f"aspect-ratio:16/9'>"
+        f"<img src='{thumb}' style='width:100%;height:100%;object-fit:cover;opacity:.5'/>"
+        f"<div style='position:absolute;inset:0;display:flex;flex-direction:column;"
+        f"align-items:center;justify-content:center;text-align:center;color:#fff;padding:18px'>"
+        f"<div style='font-size:30px'>🔒</div>"
+        f"<div style='font-size:13px;font-weight:700;margin-top:8px;line-height:1.55'>"
+        f"이 영상은 소유자 설정으로<br>앱 내 재생이 제한되어 있습니다.</div></div></div>",
+        unsafe_allow_html=True)
+    bc = st.columns(2)
+    bc[0].link_button("▶ YouTube에서 보기", YT.watch_url(vid), use_container_width=True)
+    turl = normalize_google_transparency_url(ad.get("transparency_url") or ad.get("original_ad_url"))
+    if is_valid_external_url(turl):
+        bc[1].link_button("🔎 투명성센터에서 보기", turl, use_container_width=True)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -314,36 +407,62 @@ def render_add_brand() -> None:
 
 
 def render_sidebar(counts: list, total: int) -> str:
-    """counts: [(brand, n, live_flag), ...] (캐시). 상위 20개 + 검색."""
+    """counts: [{name, ad, approved, needs, rejected, live}, ...] (캐시). 상위 20개 + 검색."""
     sb = st.sidebar
     sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
-                f"margin:.2rem 0 .8rem'>🏷️ 브랜드</div>", unsafe_allow_html=True)
+                f"margin:.1rem 0 .7rem'>🏷 브랜드</div>", unsafe_allow_html=True)
     render_add_brand()
-    sb.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
-    q = sb.text_input("브랜드 검색", placeholder="브랜드 찾기", label_visibility="collapsed").strip().lower()
+    sb.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
+    q = sb.text_input("브랜드 검색", placeholder="🔍  브랜드 검색", label_visibility="collapsed").strip().lower()
 
     sel = st.session_state.get("sa_brand", "전체")
-    if sb.button(f"📁 전체 브랜드  ·  {total}", key="b_all"):
-        st.session_state.sa_brand = "전체"
-        st.session_state.sa_page = 1
-        st.rerun()
-    sb.markdown(f"<hr style='margin:.55rem 0 .7rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
 
+    def _select(b: str) -> None:
+        st.session_state.sa_brand = b
+        st.session_state.sa_page = 1
+        if b != "전체":   # 최근 본 브랜드 갱신(최신 우선, 최대 6)
+            rec = [x for x in st.session_state.get("recent_brands", []) if x != b]
+            st.session_state.recent_brands = ([b] + rec)[:6]
+        st.rerun()
+
+    if sb.button(f"📁 전체 브랜드  ·  {total}", key="b_all",
+                 type=("primary" if sel == "전체" else "secondary")):
+        _select("전체")
+    sb.markdown(f"<hr style='margin:.05rem 0 .8rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
+
+    # ── 최근 본 브랜드 ──
+    valid = {r["name"] for r in counts}
+    recent = [b for b in st.session_state.get("recent_brands", []) if b in valid]
+    if recent and not q:
+        sb.markdown(f"<div style='font-size:11px;font-weight:700;color:{S.OFF_GRAY};"
+                    f"margin:0 0 .2rem 2px'>🕘 최근 본 브랜드</div>", unsafe_allow_html=True)
+        for b in recent[:5]:
+            if sb.button(b, key=f"rc_{b}", type=("primary" if b == sel else "secondary")):
+                _select(b)
+        sb.markdown(f"<hr style='margin:.5rem 0 .8rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
+
+    # ── 브랜드 목록 ──
+    sb.markdown(f"<div style='font-size:10.5px;color:{S.OFF_GRAY};margin:0 0 .2rem 2px'>"
+                f"<b>M</b> 메타 · <b>G</b> 구글 투명성센터</div>", unsafe_allow_html=True)
     shown = [r for r in counts if not q or q in (r["name"] or "").lower()]
     if not q:
         shown = shown[:20]   # 검색 없을 땐 상위 20개만 렌더(성능)
     for r in shown:
         b = r["name"]
-        mark = "▸ " if b == sel else ""
-        extra = f"  ·  📺{r['approved']}" if r["approved"] else ""
-        tip = f"승인 {r['approved']} · 검토필요 {r['needs']} · 제외 {r['rejected']}"
-        if sb.button(f"{mark}{'🟢' if r['live'] else '⚪'} {b}  ·  {r['ad']}{extra}",
-                     key=f"b_{b}", help=tip):
-            st.session_state.sa_brand = b
-            st.session_state.sa_page = 1
-            st.rerun()
+        m, g = r.get("meta", 0), r.get("google", 0)
+        seg = []
+        if m:
+            seg.append(f"M{m}")
+        if g:
+            seg.append(f"G{g}")
+        cnt = "  ".join(seg) if seg else "0"
+        tip = (f"메타 광고 {m} · 구글 투명성센터 {g} · 소셜 승인 {r['approved']} "
+               f"(검토필요 {r['needs']} · 제외 {r['rejected']})")
+        if sb.button(f"{b}   {cnt}", key=f"b_{b}", help=tip,
+                     type=("primary" if b == sel else "secondary")):
+            _select(b)
     if not q and len(counts) > 20:
-        sb.caption(f"… 외 {len(counts) - 20}개. 검색으로 찾기")
+        sb.caption(f"… 외 {len(counts) - 20}개 · 검색으로 찾기")
     return sel
 
 
@@ -351,47 +470,47 @@ def render_sidebar(counts: list, total: int) -> str:
 def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
     has_social = social_count > 0
     grade = "전체"   # 등급 기능 제거
-    c = st.columns([1, 1, 1.6, 1, 0.8])
-
-    media = c[0].multiselect("매체(소재)", ["video", "image"],
+    # ── 기본 필터: 매체 · 정렬 · 기간 · 초기화 ──
+    c = st.columns([1.5, 1.8, 1.2, 0.7])
+    media = c[0].multiselect("매체", ["video", "image"],
                              default=st.session_state.get("f_media", []),
                              format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
                              key="f_media")
-    status = c[1].selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
-    sort = c[2].selectbox("정렬",
+    sort = c[1].selectbox("정렬",
                           ["최근 수집순", "오래된순", "조회수 높은순", "게재기간 긴순",
                            "게재기간 짧은순", "저장 많은순"],
                           index=0, key="f_sort")
-    period = c[3].selectbox("기간(게재 시작 기준)", ["전체", "7일", "30일", "90일"], key="f_period")
-    c[4].markdown("<div style='height:2.05rem'></div>", unsafe_allow_html=True)
-    if c[4].button("초기화", use_container_width=True, help="필터 초기화"):
-        for k in ("f_media", "f_status", "f_sort", "f_period"):
+    period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
+    c[3].markdown("<div style='height:1.55rem'></div>", unsafe_allow_html=True)
+    if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
+        for k in ("f_media", "f_status", "f_sort", "f_period", "f_devhidden", "f_unavail"):
             st.session_state.pop(k, None)
         st.rerun()
-    hc = st.columns([1, 1])
-    show_hidden = hc[0].checkbox("🔧 (개발용) 검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
-                                 help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김.")
-    only_unavail = hc[1].checkbox("⚠️ 상세 확인 불가 광고만 보기", value=False, key="f_unavail",
-                                  help="카드엔 보여도 상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고. "
-                                       "기본 목록에선 자동 제외되며, 여기서만 따로 확인.")
+
+    # ── 고급 필터(접힘): 상태 · 미디어 없는 광고 · 상세 확인 불가 ──
+    with st.expander("⚙ 고급 필터"):
+        status = st.selectbox("상태", ["전체", "라이브", "종료", "OFF"], key="f_status")
+        show_hidden = st.checkbox("검색형·미디어 없는 광고도 표시", value=False, key="f_devhidden",
+                                  help="구글의 텍스트/검색광고나 썸네일·영상이 없는 광고는 품질 위해 기본 숨김(개발·디버그용).")
+        only_unavail = st.checkbox("상세 확인 불가 광고만 보기", value=False, key="f_unavail",
+                                   help="카드엔 보여도 상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고만 모아 봅니다.")
 
     # 탭 → 매체/북마크 매핑
     tab = header["tab"]
     platforms = {"Meta": ["meta"], "Google": ["google"]}.get(tab)
     only_bm = tab == "북마크"
 
-    # 활성 필터 칩
-    chips = []
-    if st.session_state.get("sa_brand", "전체") != "전체":
-        chips.append("🏷️ " + st.session_state["sa_brand"])
-    chips += [f"🎬 {m}" if m == "video" else f"🖼 {m}" for m in media]
-    if status != "전체":
-        chips.append("● " + status)
-    if period != "전체":
-        chips.append("📅 " + period)
-    if chips:
-        st.markdown(" ".join(f"<span class='sa-chip'>{c}</span>" for c in chips),
-                    unsafe_allow_html=True)
+    # ── 적용된 필터 요약 칩(콘텐츠 상단) — 예: Google · 전체 상태 · 최근 수집순 · 전체 기간 ──
+    brand = st.session_state.get("sa_brand", "전체")
+    chips = [f"<b>{tab}</b>"]
+    if brand != "전체":
+        chips.append("🏷 " + brand)
+    chips += ["🎬 영상" if m == "video" else "🖼 이미지" for m in media]
+    chips.append(("● " + status) if status != "전체" else "전체 상태")
+    chips.append(sort)
+    chips.append(period if period != "전체" else "전체 기간")
+    st.markdown(" ".join(f"<span class='sa-chip'>{c}</span>" for c in chips),
+                unsafe_allow_html=True)
 
     return {
         "search": header["search"],
@@ -411,19 +530,25 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
 # ════════════════════════════════════════════════════════════
 def render_ad_card(ad: dict, idx: int) -> None:
     aid = ad.get("id")
-    score = int(ad.get("score") or 0)
     plat = ad.get("platform", "")
     is_video = ad.get("media_type") == "video"
     th = get_display_thumbnail(ad)
     thumb = th["src"]
 
+    # ── 썸네일(우선순위 1) ──
+    bg = ""
     if ad.get("detail_status") == "unavailable":
         inner = ("<div class='sa-ph'><span class='i'>⚠️</span>상세 확인 불가"
                  "<div style='font-size:10px;opacity:.7'>광고 라이브러리에 없음</div></div>")
         thumb_cls = "sa-thumb sa-thumb-empty"
     elif thumb:
         inner = f"<img src='{thumb}'/>"
-        thumb_cls = "sa-thumb"
+        # http 썸네일은 블러 배경 적용(레터박스/세로영상 자연스럽게), data URI는 용량 위해 cover
+        if thumb.startswith("data:"):
+            thumb_cls = "sa-thumb sa-thumb-fill"
+        else:
+            thumb_cls = "sa-thumb"
+            bg = f"background-image:url('{thumb}')"
     elif ad.get("scrape_status") == "failed":
         why = (ad.get("error_message") or "수집 실패")[:24]
         inner = (f"<div class='sa-ph'><span class='i'>⚠️</span>수집 실패"
@@ -433,54 +558,52 @@ def render_ad_card(ad: dict, idx: int) -> None:
         inner = (f"<div class='sa-ph'><span class='i'>{'🎬' if is_video else '🖼'}</span>"
                  f"미리보기 없음</div>")
         thumb_cls = "sa-thumb sa-thumb-empty"
+
     nab = max(int(ad.get("variant_count") or 1), int(ad.get("dup_rows") or 1))
-    ab_chip = (f"<span style='background:#F59E0B;color:#fff;font-size:10px;font-weight:700;"
-               f"padding:1px 6px;border-radius:5px;margin-left:5px' "
-               f"title='이 크리에이티브·문구를 사용하는 광고 {nab}개 (A/B 테스트)'>A/B {nab}</span>"
-               if plat == "meta" and nab >= 2 else "")
-    plats = [p.strip() for p in (ad.get("platforms") or "").split(",") if p.strip()]
-    plat_chip = (" ".join(PLAT_ICON.get(p, "") for p in plats) + " ") if plats else ""
+    ab_badge = (f"<span class='sa-badge' style='background:#F59E0B;top:auto;bottom:7px;right:7px;left:auto'"
+                f" title='이 크리에이티브·문구를 쓰는 광고 {nab}개 (A/B 테스트)'>A/B {nab}</span>"
+                if plat == "meta" and nab >= 2 else "")
     play = "<div class='sa-play'>▶</div>" if is_video and thumb else ""
-    if plat == "google":
-        media_badge = "<div class='sa-media'>🔍 Google Preview</div>"
-    else:
-        media_badge = f"<div class='sa-media'>{'▶ 영상' if is_video else '🖼 이미지'}</div>"
+    media_label = "Google" if plat == "google" else ("▶ 영상" if is_video else "🖼 이미지")
+    media_badge = f"<div class='sa-media'>{media_label}</div>"
+    # 임베드 제한 영상 표시(YouTube 소유자가 외부 재생 차단) — 카드 상단 좌측
+    yt_blocked = (ad.get("yt_embeddable") == 0) and ("youtu" in (ad.get("video_url") or ""))
+    play_badge = ("<div class='sa-badge' style='background:rgba(180,83,9,.92);top:7px;left:7px'>"
+                  "🔒 외부재생</div>" if yt_blocked else "")
     dot = S.status_color(ad.get("status"))
 
-    status_txt = "🟢 라이브" if ad.get("status") == "live" else "⚫ " + str(ad.get("status") or "-")
-    badge = ""   # 등급/점수 뱃지 제거
-    if int(ad.get("yt_views") or 0) or int(ad.get("yt_likes") or 0):
-        eng = (f"<span title='연결된 유튜브 원본 영상의 공개 지표 · 광고 성과 아님'>"
-               f"👁 {_full(ad.get('yt_views'))}회"
-               f"<span style='display:inline-block;width:9px'></span>"
-               f"❤ {_full(ad.get('yt_likes'))}개</span>")
+    # ── 핵심 지표(우선순위 2) ──
+    yv, yl = int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0)
+    if yv or yl:
+        metric = (f"<span class='v' title='연결된 유튜브 원본 공개지표 · 광고 성과 아님'>👁 {_kabbr(yv)}</span>"
+                  + (f" <span style='color:{S.SUB}'>❤ {_kabbr(yl)}</span>" if yl else ""))
     else:
-        eng = f"<span style='color:{S.SUB}'>게재 {str(_g(ad,'started_at','-'))[:10] or '-'}</span>"
-    _title = (_g(ad, "ad_title", "") or "")[:40]            # 실제 제목만(없으면 공백 div 생략)
-    _copy = (_g(ad, "ad_copy_short", "") or "")[:60]
+        metric = f"<span class='sa-date'>게재 {str(_g(ad,'started_at','-'))[:10]}</span>"
+    live = ad.get("status") == "live"
+    status_html = (f"<span class='sa-live' style='color:{S.PRIMARY}'>● 라이브</span>" if live
+                   else f"<span class='sa-live' style='color:{S.OFF_GRAY}'>● {ad.get('status') or '종료'}</span>")
+    media_chip = f"<span class='sa-mchip'>{'🎬 영상' if is_video else ('🔍 Google' if plat=='google' else '🖼 이미지')}</span>"
+    plat_badge = f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span>"
+
     with st.container(border=True):
         st.markdown(
-            f"<div class='{thumb_cls}'>{inner}{badge}"
-            f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}</div>"
-            f"<div class='sa-brand'>{_g(ad,'brand_name','-')}{ab_chip}</div>"
-            + (f"<div class='sa-title'>{_title}</div>" if _title else "")
-            + (f"<div class='sa-copy'>{_copy}</div>" if _copy else "")
-            +
-            f"<div class='sa-meta'><span>{eng}</span>"
-            f"<span title='게재 플랫폼: {', '.join(plats) if plats else '-'}'>{plat_chip}"
-            f"<span class='sa-pbadge'>{PLATFORM_LABEL.get(plat, plat or '-')}</span></span></div>"
-            f"<div class='sa-meta' style='margin-bottom:10px'><span>📅 수집 {str(_g(ad,'collected_at','-'))[:10]}</span>"
-            f"<span>{status_txt}</span></div>",
+            f"<div class='{thumb_cls}' style=\"{bg}\">{inner}"
+            f"<div class='sa-dot' style='background:{dot}'></div>{play}{media_badge}{ab_badge}{play_badge}</div>"
+            f"<div class='sa-brand'>{_g(ad,'brand_name','-')}</div>"
+            f"<div class='sa-meta'><span>{metric}</span>{status_html}</div>"
+            f"<div class='sa-meta'><span>{media_chip} {plat_badge}</span>"
+            f"<span class='sa-date'>📅 {str(_g(ad,'collected_at','-'))[:10]}</span></div>"
+            f"<div style='height:9px'></div>",
             unsafe_allow_html=True)
-        b = st.columns([2, 1])
+        b = st.columns([3, 1])
         if b[0].button("상세 보기", key=f"open_{aid}_{idx}", use_container_width=True):
             full = database.get_ad_full(aid)   # 상세 클릭 시에만 1건 전체 로드
             if full:
                 render_ad_detail(full)
         marked = bool(ad.get("is_bookmarked"))
-        if b[1].button("북마크됨" if marked else "북마크", key=f"bm_{aid}_{idx}",
+        if b[1].button("★" if marked else "☆", key=f"bm_{aid}_{idx}",
                        use_container_width=True, type=("primary" if marked else "secondary"),
-                       help="북마크"):
+                       help="북마크 해제" if marked else "북마크 저장"):
             database.update_bookmark(aid, not marked)
             _reload()
         if st.session_state.get("f_devhidden"):
@@ -490,22 +613,33 @@ def render_ad_card(ad: dict, idx: int) -> None:
 
 # ════════════════════════════════════════════════════════════
 def _render_source_buttons(ad: dict) -> None:
-    """원본/투명성센터/랜딩 버튼 — 유효한 외부 절대 URL일 때만 노출."""
-    if ad.get("platform") == "google":
+    """원본/투명성센터/랜딩 — 작은 링크형 pill. 유효한 외부 절대 URL일 때만."""
+    plat = ad.get("platform")
+    links = []
+    # 영상 광고면 항상 YouTube 원본 링크 제공(임베드 차단돼도 원본 확인 가능한 안전장치)
+    _vu = ad.get("video_url") or ""
+    if "youtu" in _vu:
+        _vid = YT.extract_video_id(_vu)
+        if _vid:
+            links.append(("▶ YouTube", YT.watch_url(_vid)))
+    if plat == "google":
         turl = normalize_google_transparency_url(ad.get("transparency_url") or ad.get("original_ad_url"))
         if is_valid_external_url(turl):
-            st.link_button("🔎 Google 투명성센터에서 보기 ↗", turl, use_container_width=True)
-        else:
-            st.caption("투명성센터 URL 없음")
-        if is_valid_external_url(ad.get("landing_url")):
-            st.link_button("🛒 랜딩 열기 ↗", ad["landing_url"], use_container_width=True)
-        else:
-            st.caption("랜딩 URL 추출 안 됨")
+            links.append(("🔎 투명성센터", turl))
+    elif is_valid_external_url(ad.get("original_ad_url")):
+        links.append(("🔗 원본 광고", ad["original_ad_url"]))
+    if is_valid_external_url(ad.get("landing_url")):
+        links.append(("🛒 랜딩", ad["landing_url"]))
+    if links:
+        pills = "".join(
+            f"<a href='{u}' target='_blank' style='font-size:12px;color:{S.SUB};text-decoration:none;"
+            f"border:1px solid {S.BORDER};border-radius:8px;padding:4px 11px;background:{S.CARD};"
+            f"white-space:nowrap;transition:all .15s'>{lbl} ↗</a>" for lbl, u in links)
+        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:9px'>{pills}</div>",
+                    unsafe_allow_html=True)
     else:
-        if is_valid_external_url(ad.get("original_ad_url")):
-            st.link_button("🔗 원본 광고 열기 ↗", ad["original_ad_url"], use_container_width=True)
-        if is_valid_external_url(ad.get("landing_url")):
-            st.link_button("🛒 랜딩 열기 ↗", ad["landing_url"], use_container_width=True)
+        st.markdown(f"<div style='font-size:11.5px;color:{S.OFF_GRAY};margin-top:9px'>"
+                    f"원본·랜딩 URL 정보 없음</div>", unsafe_allow_html=True)
 
 
 def _greybox(text: str) -> str:
@@ -533,28 +667,36 @@ def _render_script_segments(text: str):
             return None
     except Exception:  # noqa: BLE001
         return None
+    # 향후 구간 태그(후킹/문제제기/제품효과/CTA) — seg에 'tag'가 있으면 chip으로 표시(forward-compatible)
+    tag_color = {"후킹": "#F59E0B", "문제제기": "#EF4444", "제품효과": "#10B981",
+                 "CTA": "#6366F1", "혜택": "#0EA5E9"}
     rows = []
     for s in segs:
         chip = f"{s.get('start','')}–{s.get('end','')}".strip("–")
         script = _h.escape(s.get("script") or "")
         vis = _h.escape(s.get("visual_summary") or "")
         ost = _h.escape(s.get("on_screen_text") or "")
-        ost_badge = (f"<span style='background:{S.MINT}1A;color:#0F766E;font-size:10.5px;"
+        tag = (s.get("tag") or "").strip()
+        tag_badge = (f"<span style='background:{tag_color.get(tag, '#94A3B8')};color:#fff;"
+                     f"font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;"
+                     f"margin-left:6px'>{_h.escape(tag)}</span>" if tag else "")
+        ost_badge = (f"<span style='background:{S.SOFT_MINT};color:#0F766E;font-size:10.5px;"
                      f"padding:1px 6px;border-radius:5px;margin-left:6px'>화면: {ost}</span>"
                      if ost else "")
         rows.append(
-            f"<div style='display:flex;gap:9px;align-items:flex-start;padding:7px 0;"
+            f"<div style='display:flex;gap:11px;align-items:flex-start;padding:11px 0;"
             f"border-bottom:1px solid {S.BORDER}'>"
-            f"<span style='flex:0 0 auto;background:{S.MINT}1A;color:#0F766E;font-weight:700;"
-            f"font-size:11px;padding:2px 7px;border-radius:6px;font-variant-numeric:tabular-nums;"
+            f"<span style='flex:0 0 auto;background:{S.SOFT_MINT};color:#0F766E;font-weight:700;"
+            f"font-size:11px;padding:3px 8px;border-radius:6px;font-variant-numeric:tabular-nums;"
             f"white-space:nowrap'>{_h.escape(chip)}</span>"
             f"<span style='flex:1'>"
-            f"<span style='font-size:13px;color:{S.TEXT};line-height:1.5;font-weight:600'>"
-            f"{script or '<span style=\"color:#94A3B8\">(대사 없음)</span>'}</span>{ost_badge}"
-            + (f"<div style='font-size:11.5px;color:{S.SUB};margin-top:2px'>🎬 {vis}</div>" if vis else "")
+            f"<span style='font-size:13.5px;color:{S.TEXT};line-height:1.75;font-weight:600'>"
+            f"{script or '<span style=\"color:#94A3B8\">(대사 없음)</span>'}</span>{tag_badge}{ost_badge}"
+            + (f"<div style='font-size:11.5px;color:{S.SUB};margin-top:4px;line-height:1.5'>🎬 {vis}</div>"
+               if vis else "")
             + "</span></div>")
-    return (f"<div style='background:{S.BG};border:1px solid {S.BORDER};border-radius:10px;"
-            f"padding:10px 12px;max-height:380px;overflow:auto'>{''.join(rows)}</div>")
+    return (f"<div style='background:{S.CARD};border:1px solid {S.BORDER};border-radius:12px;"
+            f"padding:6px 14px;max-height:420px;overflow:auto'>{''.join(rows)}</div>")
 
 
 def _render_thumb_analysis(text: str) -> str:
@@ -681,14 +823,31 @@ def _render_video_script(ad: dict) -> None:
         return
 
     # ── 영상 소재: 3초 구간 스크립트 ──
-    head[0].markdown("##### 영상 스크립트")
+    head[0].markdown("##### 🎬 영상 스크립트")
     completed = bool(cur["text"]) and status == "completed"
+    err = cur.get("error")
     if completed:
         regen = head[1].button("재생성", key=f"rgen_{aid}", use_container_width=True)
         edit = head[2].toggle("편집", key=f"edit_{aid}")
     else:
-        regen = head[1].button("AI 생성", key=f"rgen2_{aid}", use_container_width=True,
-                               help="Gemini가 이 영상을 분석해 3초 구간별 대본(대사·화면문구·장면)을 만듭니다.")
+        # 실패/미생성 — 메시지 바로 아래에 [생성/다시 생성] · [직접 입력] 배치
+        if status == "video_too_long":
+            st.caption(f"⏱ {err}")
+        elif err:
+            st.warning(f"스크립트 생성 실패 · {err}", icon="⚠️")
+        else:
+            st.caption("Gemini가 이 영상을 3초 구간별 대본(대사·화면문구·장면)으로 분석합니다.")
+        fb = st.columns(2)
+        regen = fb[0].button("🔁 다시 생성" if err else "✨ AI 생성", key=f"rgen2_{aid}",
+                             use_container_width=True, type="primary")
+        with fb[1].popover("✍️ 직접 입력", use_container_width=True):
+            man = st.text_area("스크립트", key=f"scman_{aid}", height=160,
+                               label_visibility="collapsed", placeholder="스크립트를 직접 붙여넣기")
+            if st.button("저장", key=f"scmansave_{aid}", type="primary"):
+                database.update_ad_script(aid, man, "manual", "completed", "")
+                ovr[aid] = {"text": man, "status": "completed", "source": "manual", "error": ""}
+                cur = ovr[aid]
+                completed = True
         edit = False
     if regen:
         _gen("Gemini가 영상을 분석해 구간별 대본 작성 중… (최대 2분)")
@@ -709,39 +868,45 @@ def _render_video_script(ad: dict) -> None:
         if st.button("💾 스크립트 저장", key=f"scsave_{aid}", type="primary"):
             database.update_ad_script(aid, new, "manual", "completed", "")
             ovr[aid] = {"text": new, "status": "completed", "source": "manual", "error": ""}
-    else:
-        if status == "video_too_long":
-            st.caption(f"⏱ {cur['error']}")
-        elif cur.get("error"):
-            st.caption(f"⚠️ {cur['error']}")
-        else:
-            st.caption("**AI 생성**을 누르면 Gemini가 이 영상을 3초 구간별 대본으로 분석합니다.")
-        with st.popover("✍️ 직접 입력"):
-            man = st.text_area("스크립트", key=f"scman_{aid}", height=160,
-                               label_visibility="collapsed", placeholder="스크립트를 직접 붙여넣기")
-            if st.button("저장", key=f"scmansave_{aid}", type="primary"):
-                database.update_ad_script(aid, man, "manual", "completed", "")
-                ovr[aid] = {"text": man, "status": "completed", "source": "manual", "error": ""}
 
 
 @st.dialog("광고 상세", width="large")
 def render_ad_detail(ad: dict) -> None:
+    import html as _h
     aid = ad.get("id")
     plat = ad.get("platform", "")
-    st.markdown(f"### {_g(ad,'brand_name','-')}", unsafe_allow_html=True)
+    marked = bool(ad.get("is_bookmarked"))
+
+    # ── YouTube 임베드 가능 여부 사전 판단(영상별 1회 조회 후 DB 캐시) ──
+    vurl = ad.get("video_url") or ""
+    yt_vid = YT.extract_video_id(vurl) if "youtu" in vurl else None
+    emb = ad.get("yt_embeddable")   # 1/0/None
+    if yt_vid and emb is None and YT.is_enabled():
+        emb = _yt_embeddable(yt_vid)
+        database.set_yt_embeddable(aid, emb)
+    blocked = yt_vid and (emb == 0 or emb is False)
+
+    # ── 헤더: 브랜드명(가장 크게) + 우측 북마크 별 아이콘 ──
+    hc = st.columns([8, 1])
+    hc[0].markdown(f"<div style='font-size:23px;font-weight:800;color:{S.TEXT};"
+                   f"letter-spacing:-.3px;line-height:1.25;margin-top:2px'>"
+                   f"{_h.escape(_g(ad,'brand_name','-'))}</div>", unsafe_allow_html=True)
+    if hc[1].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
+                    type=("primary" if marked else "secondary"),
+                    help="북마크 해제" if marked else "북마크 저장"):
+        database.update_bookmark(aid, not marked)
+        _reload()
 
     left, right = st.columns([2, 3], gap="medium")
     # ── 좌: 영상/썸네일 + 버튼 ──
     with left:
         th = get_display_thumbnail(ad)
-        vurl = ad.get("video_url") or ""
-        yt_vid = YT.extract_video_id(vurl) if "youtu" in vurl else None
-        if yt_vid:
-            # 유튜브 영상(구글 투명성센터 영상광고 등)은 임베드로 직접 재생(크게)
-            stc.html(f"<iframe width='100%' height='460' src='{YT.embed_url(yt_vid)}' "
-                     f"frameborder='0' style='border-radius:10px' allowfullscreen "
-                     f"allow='accelerometer;autoplay;clipboard-write;encrypted-media;"
-                     f"gyroscope;picture-in-picture'></iframe>", height=470)
+        if yt_vid and blocked:
+            # API가 사전에 '임베드 제한' 확인한 경우 — 바로 fallback(플레이어 깜빡임 없이)
+            _yt_fallback_ui(ad, yt_vid)
+        elif yt_vid:
+            # 그 외 — Player API로 재생 시도, 실제 차단(onError) 시 자동 fallback 전환
+            _yt_smart_player(ad, yt_vid)
         elif vurl:
             st.video(vurl)
         elif th["src"]:
@@ -754,99 +919,132 @@ def render_ad_detail(ad: dict) -> None:
                         f"<div class='sa-ph'><span class='i'>🖼</span>미리보기 없음</div></div>",
                         unsafe_allow_html=True)
         _render_source_buttons(ad)
+        # 조회수 추이 그래프 — 영상 바로 밑(스크립트/대본 왼쪽 자리).
+        # 일자별 스냅샷이 2일치 이상이면 선그래프, 1일치면 안내 문구.
+        _snaps = database.get_ad_snapshots(aid, days=60)
+        if len(_snaps) >= 2:
+            import pandas as _pd
+            _df = (_pd.DataFrame(_snaps)
+                   .rename(columns={"snapshot_date": "날짜", "views": "조회수"})[["날짜", "조회수"]]
+                   .set_index("날짜"))
+            st.markdown("<div style='font-size:12px;color:#64748B;font-weight:700;"
+                        "margin:16px 0 2px'>📈 조회수 추이</div>", unsafe_allow_html=True)
+            st.line_chart(_df, height=180)
+        elif len(_snaps) == 1:
+            st.markdown("<div style='font-size:12px;color:#94A3B8;line-height:1.5;"
+                        "margin:16px 0 0;padding:10px 12px;background:#F8FAFC;"
+                        "border:1px solid #E5E7EB;border-radius:10px'>"
+                        "📈 <b>조회수 추이</b><br>오늘치(1일) 수집됨 · 내일 한 번 더 쌓이면 그래프가 표시돼요.</div>",
+                        unsafe_allow_html=True)
 
-    # ── 우: 정보 → 소셜반응 → 카피 → 스크립트 → 메모 ──
+    # ── 우: 핵심 광고정보(배지) → 지표 → 보조정보 → 카피 → 스크립트 ──
     with right:
         if ad.get("ad_title"):
-            st.markdown(f"#### {ad['ad_title']}")
-        info = st.columns(3)
-        info[0].metric("상태", "라이브" if ad.get("status") == "live" else (ad.get("status") or "-"))
-        info[1].metric("게재 시작", str(_g(ad, "started_at", "-"))[:10] or "-")
-        info[2].metric("플랫폼", PLATFORM_LABEL.get(plat, plat or "-"))
+            st.markdown(f"<div style='font-size:15px;font-weight:700;color:{S.TEXT};"
+                        f"margin:2px 0 10px;line-height:1.35'>{_h.escape(ad['ad_title'])}</div>",
+                        unsafe_allow_html=True)
 
-        # 대시보드형 지표(상태/게재/플랫폼 바로 아래) — 구글 영상=유튜브 공개 지표
+        # ── 배지 행: 상태 · 플랫폼 · 게재위치 · CTA · A/B ──
+        def _b(txt, bg, fg, bd):
+            return (f"<span style='display:inline-flex;align-items:center;background:{bg};color:{fg};"
+                    f"border:1px solid {bd};font-size:11.5px;font-weight:700;padding:3px 10px;"
+                    f"border-radius:999px'>{txt}</span>")
+        live = ad.get("status") == "live"
+        badges = [_b("● 라이브", S.SOFT_MINT, S.DEEP, "#A7F3D0") if live
+                  else _b("● " + (ad.get("status") or "종료"), "#F1F5F9", S.SUB, S.BORDER),
+                  _b(PLATFORM_LABEL.get(plat, plat or "-"), "#F1F5F9", S.TEXT, S.BORDER)]
+        for p in [x.strip() for x in (ad.get("platforms") or "").split(",") if x.strip()]:
+            badges.append(_b(f"{PLAT_ICON.get(p,'')} {p}".strip(), "#F8FAFC", S.SUB, S.BORDER))
+        if ad.get("cta"):
+            badges.append(_b(f"🔘 {_h.escape(ad['cta'])}", S.SOFT_MINT, S.DEEP, "#A7F3D0"))
+        nab = int(ad.get("ad_variant_count") or 1)
+        if plat == "meta" and nab >= 2:
+            badges.append(_b(f"A/B 광고 {nab}개", "#FEF3C7", "#B45309", "#FDE68A"))
+        # 재생 상태 배지(YouTube 영상일 때): 재생 가능 / 외부 재생 필요 / 원본 확인 필요
+        if yt_vid:
+            if blocked:
+                badges.append(_b("🔒 외부 재생 필요", "#FEF3C7", "#B45309", "#FDE68A"))
+            elif emb in (1, True):
+                badges.append(_b("▶ 재생 가능", S.SOFT_MINT, S.DEEP, "#A7F3D0"))
+            else:
+                badges.append(_b("↗ 원본 확인 필요", "#F1F5F9", S.SUB, S.BORDER))
+        st.markdown("<div style='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px'>"
+                    + "".join(badges) + "</div>", unsafe_allow_html=True)
+
+        # ── 지표(숫자 중심, 낮은 색 강조) — 구글/유튜브 공개 지표 ──
         yv, yl, yc = (int(ad.get("yt_views") or 0), int(ad.get("yt_likes") or 0),
                       int(ad.get("yt_comments") or 0))
         if ad.get("video_url") and (yv or yl or yc):
-            cards = [("👁", "조회수", _full(yv) + ("회" if yv else ""), "#03C75A"),
-                     ("❤", "좋아요", _full(yl) + ("개" if yl else ""), "#EF4444"),
-                     ("💬", "댓글", _full(yc) + ("개" if yc else ""), "#0EA5E9")]
-            html = "<div style='display:flex;gap:10px;margin:10px 0 6px'>"
-            for icon, lab, val, col in cards:
-                html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};"
-                         f"border-radius:16px;padding:14px 8px;text-align:center'>"
-                         f"<div style='font-size:12px;color:{S.SUB};font-weight:700'>{icon} {lab}</div>"
-                         f"<div style='font-size:27px;font-weight:900;color:{col};"
-                         f"line-height:1.25;font-variant-numeric:tabular-nums'>{val}</div></div>")
-            html += "</div>"
-            st.markdown(html, unsafe_allow_html=True)
-            # 조회수 추이 그래프(일자별 스냅샷이 2개 이상 쌓이면 표시)
-            snaps = database.get_ad_snapshots(aid, days=60)
-            if len(snaps) >= 2:
-                import pandas as _pd
-                df = _pd.DataFrame(snaps)
-                df = df.rename(columns={"snapshot_date": "날짜", "views": "조회수"})[["날짜", "조회수"]]
-                df = df.set_index("날짜")
-                st.markdown("<div style='font-size:12px;color:#64748B;margin:6px 0 2px'>"
-                            "조회수 추이</div>", unsafe_allow_html=True)
-                st.line_chart(df, height=160)
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            # 출처/신뢰도 명확화: 메타 라이브러리 지표가 아니라 연결된 유튜브 원본 영상의 공개 지표
-            st.caption("출처: 연결된 유튜브 원본 영상의 공개 지표(YouTube API) · 광고 성과 지표 아님(참고용)")
+            cards = [("👁", "조회수", _full(yv)), ("❤", "좋아요", _full(yl)), ("💬", "댓글", _full(yc))]
+            html = "<div style='display:flex;gap:8px;margin:2px 0 4px'>"
+            for icon, lab, val in cards:
+                html += (f"<div style='flex:1;background:{S.BG};border:1px solid {S.BORDER};"
+                         f"border-radius:12px;padding:11px 8px;text-align:center'>"
+                         f"<div style='font-size:11px;color:{S.SUB};font-weight:600'>{icon} {lab}</div>"
+                         f"<div style='font-size:21px;font-weight:800;color:{S.TEXT};"
+                         f"line-height:1.35;font-variant-numeric:tabular-nums'>{val}</div></div>")
+            st.markdown(html + "</div>", unsafe_allow_html=True)
+            st.caption("출처: 연결된 유튜브 원본 영상의 공개 지표 · 광고 성과 아님(참고용)")
         elif plat == "meta":
             st.caption("ℹ️ 메타 광고 라이브러리는 조회수·좋아요·댓글 등 반응 지표를 제공하지 않습니다.")
         elif plat == "google":
             st.caption("ℹ️ 이 구글 광고는 유튜브 영상이 아니어서 조회수·좋아요 지표가 없습니다.")
 
-        d_plats = [p.strip() for p in (ad.get("platforms") or "").split(",") if p.strip()]
-        if d_plats:
-            chips = " ".join(f"<span style='background:{S.BG};border:1px solid {S.BORDER};"
-                             f"padding:1px 8px;border-radius:6px;font-size:12px;margin-right:3px'>"
-                             f"{PLAT_ICON.get(p,'')} {p}</span>" for p in d_plats)
-            st.markdown(f"**게재 위치** {chips}", unsafe_allow_html=True)
-        if ad.get("cta"):
-            st.markdown(f"**CTA 버튼** <span style='background:{S.SOFT_MINT};color:{S.DEEP};"
-                        f"padding:1px 8px;border-radius:6px;font-size:12px;font-weight:700'>"
-                        f"{ad['cta']}</span>", unsafe_allow_html=True)
-        nab = int(ad.get("ad_variant_count") or 1)
-        if plat == "meta" and nab >= 2:
-            st.markdown(f"**A/B 테스트** <span style='background:#F59E0B;color:#fff;"
-                        f"padding:1px 8px;border-radius:6px;font-size:12px;font-weight:700'>"
-                        f"광고 {nab}개</span> "
-                        f"<span style='font-size:11px;color:{S.SUB}'>· 같은 크리에이티브·문구를 "
-                        f"여러 광고에서 사용</span>", unsafe_allow_html=True)
-        if ad.get("landing_url"):
-            st.markdown(f"**랜딩** <span style='font-size:12px'>"
-                        f"[{ad['landing_url'][:54]}…]({ad['landing_url']})</span>",
-                        unsafe_allow_html=True)
-        st.caption(f"광고 ID {aid} · 수집일 {str(_g(ad,'collected_at','-'))[:10]}")
+        # ── 보조 정보(작게): 게재 시작 · 수집 · 광고 ID ──
+        started = str(_g(ad, "started_at", ""))[:10]
+        sub = [f"게재 시작 {started}" if started
+               else "<span style='color:#94A3B8'>게시 시작일 확인 불가</span>",
+               f"수집 {str(_g(ad,'collected_at','-'))[:10]}", f"ID {aid}"]
+        st.markdown(f"<div style='font-size:11.5px;color:{S.SUB};margin:9px 0 0'>"
+                    + "&nbsp;·&nbsp; ".join(sub) + "</div>", unsafe_allow_html=True)
+        if is_valid_external_url(ad.get("landing_url")):
+            _lu = ad["landing_url"]
+            _disp = _lu if len(_lu) <= 110 else _lu[:110] + "…"
+            st.markdown(f"<div style='font-size:11.5px;margin-top:3px;line-height:1.55;"
+                        f"word-break:break-all'>🛒 "
+                        f"<a href='{_lu}' target='_blank' style='color:{S.SUB}'>"
+                        f"{_h.escape(_disp)}</a></div>", unsafe_allow_html=True)
 
         st.divider()
+        # ── 광고 카피 ──
         st.markdown("##### 광고 카피")
-        if ad.get("ad_copy"):
-            st.markdown(_greybox(ad["ad_copy"]), unsafe_allow_html=True)
+        copy = (ad.get("ad_copy") or "").strip()
+        if copy:
+            st.markdown(_greybox(copy), unsafe_allow_html=True)
+            tags = re.findall(r"#[^\s#]+", copy)
+            if tags:
+                st.markdown("<div style='margin-top:8px'>"
+                            + "".join(f"<span class='sa-chip'>{_h.escape(t)}</span>" for t in tags[:14])
+                            + "</div>", unsafe_allow_html=True)
+            with st.expander("📋 원문 복사"):
+                st.code(copy)
         else:
-            st.caption("광고 카피가 없습니다.")
+            empty_who = "Google 투명성센터" if plat == "google" else "이 광고"
+            st.markdown(f"<div style='background:{S.BG};border:1px dashed {S.BORDER};border-radius:10px;"
+                        f"padding:16px;text-align:center;color:{S.SUB};font-size:12.5px;line-height:1.7'>"
+                        f"📝 {empty_who}에서 제공된 광고 카피가 없습니다.<br>"
+                        f"<span style='color:#94A3B8'>영상/스크립트를 기준으로 분석해보세요.</span></div>",
+                        unsafe_allow_html=True)
 
         st.divider()
         _render_video_script(ad)
 
-    # ── 분석 메모(스크립트와 분리) ──
+    # ── 내 분석 메모 + 하단 액션(메모 저장 · 원본 보기 · YouTube 연결) ──
     st.divider()
-    st.markdown("##### 분석 메모")
+    st.markdown("##### 📝 내 분석 메모")
     memo = st.text_area("메모", value=ad.get("memo") or "", label_visibility="collapsed",
-                        key=f"memo_{aid}", placeholder="이 레퍼런스의 후킹/구조/인사이트 메모…")
-    cc = st.columns([1, 1, 2])
-    if cc[0].button("💾 메모 저장", use_container_width=True, type="primary", key=f"sm_{aid}"):
+                        key=f"memo_{aid}", placeholder="이 소재의 후킹/카피/구성 포인트를 기록하세요")
+    ac = st.columns([1, 1.5, 1.5])
+    if ac[0].button("💾 메모 저장", use_container_width=True, key=f"sm_{aid}"):
         database.update_memo(aid, memo)
         st.toast("메모 저장됨")
         _reload()
-    marked = bool(ad.get("is_bookmarked"))
-    if cc[1].button("🔖 북마크 해제" if marked else "🏷️ 북마크 추가",
-                    use_container_width=True, key=f"bmm_{aid}"):
-        database.update_bookmark(aid, not marked)
-        _reload()
-    with cc[2].popover("🔗 YouTube 원본 연결"):
+    src_url = (normalize_google_transparency_url(ad.get("transparency_url") or ad.get("original_ad_url"))
+               if plat == "google" else ad.get("original_ad_url"))
+    if is_valid_external_url(src_url):
+        ac[1].link_button("🔎 Google 투명성센터에서 보기" if plat == "google" else "🔗 원본 광고 보기",
+                          src_url, use_container_width=True)
+    with ac[2].popover("▶ YouTube 원본 연결", use_container_width=True):
         if not YT.is_enabled():
             st.caption("YOUTUBE_API_KEY 등록 시 사용 가능")
         else:

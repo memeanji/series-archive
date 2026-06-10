@@ -153,7 +153,8 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("script_created_at", "TEXT"), ("script_updated_at", "TEXT"),
                  ("cta", "TEXT"), ("ad_variant_count", "INTEGER DEFAULT 1"),
                  ("yt_views", "INTEGER DEFAULT 0"), ("yt_likes", "INTEGER DEFAULT 0"),
-                 ("yt_comments", "INTEGER DEFAULT 0"), ("detail_status", "TEXT DEFAULT ''")):
+                 ("yt_comments", "INTEGER DEFAULT 0"), ("detail_status", "TEXT DEFAULT ''"),
+                 ("yt_embeddable", "INTEGER")):   # 1=임베드가능 0=제한 NULL=미확인(지연조회)
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -269,7 +270,7 @@ _SUMMARY_COLS = (
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
     "a.scrape_status, a.error_message, a.platforms, a.detail_status, "
-    "a.yt_views, a.yt_likes, a.yt_comments, "
+    "a.yt_views, a.yt_likes, a.yt_comments, a.yt_embeddable, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
     "s.views AS social_views, s.likes AS social_likes, "
@@ -572,6 +573,10 @@ def brand_counts() -> list[dict]:
     rows = conn.execute("""
         SELECT b.display_name,
           (SELECT COUNT(*) FROM ad_library_ads a WHERE a.brand_name=b.display_name) ad_n,
+          (SELECT COUNT(*) FROM ad_library_ads a WHERE a.brand_name=b.display_name
+             AND a.platform='meta') meta_n,
+          (SELECT COUNT(*) FROM ad_library_ads a WHERE a.brand_name=b.display_name
+             AND a.platform='google') google_n,
           (SELECT COALESCE(MAX(CASE WHEN a.status='live' THEN 1 ELSE 0 END),0)
              FROM ad_library_ads a WHERE a.brand_name=b.display_name) live,
           (SELECT COUNT(*) FROM social_videos s WHERE s.brand_name=b.display_name
@@ -584,7 +589,8 @@ def brand_counts() -> list[dict]:
         ORDER BY (ad_n + soc_ok + soc_rev) DESC, b.display_name
     """).fetchall()
     conn.close()
-    return [{"name": r["display_name"], "ad": r["ad_n"], "live": r["live"],
+    return [{"name": r["display_name"], "ad": r["ad_n"],
+             "meta": r["meta_n"], "google": r["google_n"], "live": r["live"],
              "approved": r["soc_ok"], "needs": r["soc_rev"], "rejected": r["soc_rej"]}
             for r in rows]
 
@@ -1162,6 +1168,17 @@ def update_bookmark(ad_id: str, value: bool) -> None:
     conn = get_conn()
     conn.execute("UPDATE ad_library_ads SET is_bookmarked=?, updated_at=? WHERE id=?",
                  (1 if value else 0, _now(), ad_id))
+    conn.commit()
+    conn.close()
+
+
+def set_yt_embeddable(ad_id: str, value) -> None:
+    """YouTube 임베드 가능 여부 캐시(1/0). 상세 진입 시 1회 조회해 저장."""
+    if value is None:
+        return
+    conn = get_conn()
+    conn.execute("UPDATE ad_library_ads SET yt_embeddable=? WHERE id=?",
+                 (1 if value else 0, ad_id))
     conn.commit()
     conn.close()
 

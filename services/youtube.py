@@ -36,6 +36,28 @@ def watch_url(video_id: str) -> str:
     return f"https://www.youtube.com/watch?v={video_id}"
 
 
+def thumb_url(video_id: str) -> str:
+    """API 없이도 안정적인 YouTube 썸네일(httpsで직접). fallback UI용."""
+    return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+
+def embeddable(video_id: str, api_key: str = "") -> bool | None:
+    """status.embeddable 사전 조회. True=앱내재생가능 / False=외부재생필요 / None=미확인(키없음·실패)."""
+    import requests
+    key = api_key or get_api_key()
+    if not key or not video_id:
+        return None
+    try:
+        r = requests.get("https://www.googleapis.com/youtube/v3/videos",
+                         params={"part": "status", "id": video_id, "key": key}, timeout=15)
+        items = r.json().get("items", [])
+    except Exception:  # noqa: BLE001
+        return None
+    if not items:
+        return None
+    return bool(items[0].get("status", {}).get("embeddable", False))
+
+
 def get_api_key() -> str:
     if config.YOUTUBE_API_KEY:
         return config.YOUTUBE_API_KEY
