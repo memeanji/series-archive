@@ -57,13 +57,16 @@ def inject_css() -> None:
           font-weight:600; margin-bottom:1px !important;}}
       div[data-testid="stCheckbox"] label {{font-size:11.5px; color:{OFF_GRAY};}}
 
-      /* segmented control(탭/필터) → 작은 pill */
-      div[data-testid="stSegmentedControl"] button {{border-radius:10px !important;
-          font-size:14.5px; font-weight:700; border:1px solid {BORDER}; padding:9px 24px;
-          min-height:44px; box-sizing:border-box; line-height:1;}}
+      /* 메인 내비 탭 — 깔끔한 SaaS 탭(필터보다 우선순위 높게) */
+      div[data-testid="stSegmentedControl"] [role="radiogroup"],
+      div[data-testid="stSegmentedControl"] > div {{gap:5px !important;}}
+      div[data-testid="stSegmentedControl"] button {{border-radius:8px !important;
+          font-size:14px; font-weight:500; border:1px solid {BORDER}; padding:8px 16px;
+          min-height:36px; box-sizing:border-box; line-height:1; color:{TEXT};}}
       div[data-testid="stSegmentedControl"] button[aria-checked="true"],
       div[data-testid="stSegmentedControl"] button[kind="segmented_controlActive"] {{
-          background:{SOFT_MINT} !important; color:{DEEP} !important; border-color:{PRIMARY} !important;}}
+          background:{SOFT_MINT} !important; color:{PRIMARY} !important;
+          border-color:{PRIMARY} !important; font-weight:600 !important;}}
       #MainMenu, footer {{visibility:hidden;}}
       /* header(상단 툴바)는 숨기지 않음 — 사이드바 펼치는 '>' 버튼이 여기 들어있다.
          배경만 투명 처리해 깔끔하게, 펼침/접기 컨트롤은 항상 보이도록 강제. */
@@ -184,6 +187,5 @@ def inject_css() -> None:
       section[data-testid="stSidebar"] [data-testid="stElementContainer"] {{margin-bottom:0 !important;}}
 
       /* 탭(segmented) 라운드 */
-      div[data-testid="stSegmentedControl"] button {{border-radius:9px;}}
     </style>
     """, unsafe_allow_html=True)
