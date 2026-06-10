@@ -542,11 +542,12 @@ def render_ad_card(ad: dict, idx: int) -> None:
         thumb_cls = "sa-thumb sa-thumb-empty"
     elif thumb:
         inner = f"<img src='{thumb}'/>"
-        # http 썸네일은 블러 배경 적용(레터박스/세로영상 자연스럽게), data URI는 용량 위해 cover
-        if thumb.startswith("data:"):
-            thumb_cls = "sa-thumb sa-thumb-fill"
+        if plat == "google":
+            thumb_cls = "sa-thumb sa-thumb-contain"      # 구글: 원본 비율 유지(자르지 않음)
+        elif thumb.startswith("data:"):
+            thumb_cls = "sa-thumb sa-thumb-fill"          # data URI: 채움(crop)
         else:
-            thumb_cls = "sa-thumb"
+            thumb_cls = "sa-thumb"                         # Meta 등: 블러배경+소재 크게
             bg = f"background-image:url('{thumb}')"
     elif ad.get("scrape_status") == "failed":
         why = (ad.get("error_message") or "수집 실패")[:24]
@@ -585,6 +586,8 @@ def render_ad_card(ad: dict, idx: int) -> None:
             _p.append(f"💬 {_full(yc)}개")
         metric = (f"<span class='v' title='연결된 유튜브 원본 공개지표 · 광고 성과 아님'>"
                   + " · ".join(_p) + "</span>")
+    elif plat == "google":
+        metric = f"<span class='sa-date'>조회수 정보 없음</span>"
     else:
         metric = f"<span class='sa-date'>게재 {str(_g(ad,'started_at','-'))[:10]}</span>"
     live = ad.get("status") == "live"

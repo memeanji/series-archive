@@ -112,6 +112,10 @@ def inject_css() -> None:
       /* data URI 썸네일(구글 스크린샷 등)은 블러배경 없이 꽉 채움(용량 절감) */
       .sa-thumb-fill::before {{display:none;}}
       .sa-thumb-fill img {{object-fit:cover;}}
+      /* 구글 탭: 원본 비율 유지(자르지 않음) — 흰 배경, 블러 없음 */
+      .sa-thumb-contain {{background:#F8FAFC !important;}}
+      .sa-thumb-contain::before {{display:none;}}
+      .sa-thumb-contain img {{object-fit:contain;}}
       .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:700; font-size:11px;
                   padding:2px 7px; border-radius:999px; box-shadow:0 1px 4px rgba(0,0,0,.2); z-index:2;}}
       .sa-dot {{position:absolute; top:9px; right:9px; width:9px; height:9px; border-radius:50%;
