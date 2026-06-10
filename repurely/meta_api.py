@@ -142,14 +142,15 @@ def video_permalink(video_id: str) -> str:
 
 
 def video_info(video_id: str) -> dict:
-    """영상 permalink + 고해상도 썸네일(1080급). {permalink, thumbnail}."""
+    """영상 원본 mp4(source) + permalink + 고해상도 썸네일(1080급).
+    {source, permalink, thumbnail}. source는 자사 계정 영상이라 직접 재생 가능."""
     import requests
     tok, _ = _creds()
     if not (tok and video_id):
-        return {"permalink": "", "thumbnail": ""}
+        return {"source": "", "permalink": "", "thumbnail": ""}
     try:
         r = requests.get(f"{GRAPH}/{video_id}", timeout=20,
-                         params={"fields": "permalink_url,thumbnails{uri,width,is_preferred}",
+                         params={"fields": "source,permalink_url,thumbnails{uri,width,is_preferred}",
                                  "access_token": tok})
         if r.status_code == 200:
             j = r.json()
@@ -159,10 +160,11 @@ def video_info(video_id: str) -> dict:
             ths = (j.get("thumbnails", {}) or {}).get("data", [])
             pref = [t for t in ths if t.get("is_preferred")]
             pool = pref or sorted(ths, key=lambda t: -(t.get("width") or 0))
-            return {"permalink": pl, "thumbnail": pool[0].get("uri", "") if pool else ""}
+            return {"source": j.get("source", "") or "", "permalink": pl,
+                    "thumbnail": pool[0].get("uri", "") if pool else ""}
     except Exception:  # noqa: BLE001
         pass
-    return {"permalink": "", "thumbnail": ""}
+    return {"source": "", "permalink": "", "thumbnail": ""}
 
 
 def index_by_name(ads: list[dict]) -> dict:

@@ -1139,23 +1139,27 @@ def _repurely_detail(r: dict) -> None:
     with left:
         _th = r.get("thumbnail_url") or ""
         _vid = r.get("video_id") or ""
-        permalink = ""
-        if _vid:   # Meta 영상 → 페이스북 비디오 플러그인으로 인앱 재생
+        permalink = mp4 = ""
+        if _vid:   # 자사 계정 영상 → 원본 mp4(source) 조회해 Meta 탭과 동일하게 st.video 재생
             try:
                 import repurely.meta_api as MAPI
                 vi = MAPI.video_info(_vid)
+                mp4 = vi.get("source", "")
                 permalink = vi.get("permalink", "")
                 _th = vi.get("thumbnail") or _th
             except Exception:  # noqa: BLE001
-                permalink = ""
-        if permalink:
+                pass
+        if mp4:                # 원본 mp4 → Meta 탭과 동일한 네이티브 플레이어(원본 화질)
+            st.video(mp4)
+        elif permalink:        # mp4 미제공 시 → FB 임베드로 인앱 재생(세로 9:16 맞춰 잘림 없이)
             from urllib.parse import quote
             src = (f"https://www.facebook.com/plugins/video.php?href={quote(permalink, safe='')}"
-                   f"&show_text=0&width=320")
-            stc.html(f"<iframe src='{src}' width='100%' height='430' style='border:none;"
+                   f"&show_text=0&width=300&height=533")
+            stc.html(f"<div style='display:flex;justify-content:center'>"
+                     f"<iframe src='{src}' width='300' height='533' style='border:none;"
                      f"border-radius:10px;overflow:hidden' scrolling='no' frameborder='0' "
                      f"allow='autoplay; clipboard-write; encrypted-media; picture-in-picture; "
-                     f"web-share' allowfullscreen></iframe>", height=440)
+                     f"web-share' allowfullscreen></iframe></div>", height=545)
         elif _th.startswith("http"):   # 이미지 소재 또는 영상 썸네일
             st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
                         f"aspect-ratio:9/16;max-height:430px;background:#0F172A'>"

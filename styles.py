@@ -79,8 +79,15 @@ def inject_css() -> None:
       header[data-testid="stHeader"] a {{pointer-events:auto !important;}}
       [data-testid="stSidebarCollapseButton"],
       [data-testid="stSidebarCollapsedControl"],
+      [data-testid="stExpandSidebarButton"],
       [data-testid="collapsedControl"] {{
-          visibility:visible !important; display:flex !important; opacity:1 !important;}}
+          visibility:visible !important; display:flex !important; opacity:1 !important;
+          pointer-events:auto !important; z-index:1000 !important;}}
+      /* 펼치기/접기 컨트롤 내부 버튼·아이콘까지 클릭 통과 보장(헤더 pointer-events:none 무시) */
+      [data-testid="stSidebarCollapseButton"] *,
+      [data-testid="stSidebarCollapsedControl"] *,
+      [data-testid="stExpandSidebarButton"] *,
+      [data-testid="collapsedControl"] * {{pointer-events:auto !important;}}
       .stApp {{background:{BG};}}
       .block-container {{padding-top:0.2rem; padding-bottom:2.5rem; max-width:1560px;}}
 
@@ -175,17 +182,19 @@ def inject_css() -> None:
           width:320px !important; min-width:320px !important;}}
       section[data-testid="stSidebar"] > div {{width:320px !important;}}
       section[data-testid="stSidebar"] .block-container {{padding:0 18px 1rem !important;}}
-      /* 사이드바 상단 기본 여백 제거 — 헤더를 최대한 위로 */
+      /* 사이드바 상단 여백 축소(헤더는 위로) — 단, << 접기 버튼 공간은 남김 */
       section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
-          height:0 !important; min-height:0 !important; padding:0 !important;}}
+          min-height:0 !important; padding:.35rem .4rem 0 !important;}}
+      /* << 접기 버튼이 잘리지 않게 살짝 아래로 */
+      section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{
+          margin-top:.35rem !important;}}
       section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{padding-top:0 !important;}}
       section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > div:first-child {{
           padding-top:0 !important;}}
-      /* Series Archive — 사이드바 최상단 sticky 헤더(브랜드 리스트만 아래로 스크롤) */
+      /* Series Archive — 사이드바 최상단 sticky 헤더(브랜드 리스트만 아래로 스크롤, 구분선 없음) */
       section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sa-sb-head) {{
           position:sticky; top:0; z-index:6; background:{CARD};
-          margin:-.6rem 0 0 !important; padding:.35rem 0 .55rem !important;
-          border-bottom:1px solid {BORDER};}}
+          margin:0 !important; padding:.2rem 0 .5rem !important;}}
       .sa-sb-head {{margin:0;}}
       section[data-testid="stSidebar"] .sa-logo {{font-size:19px;}}
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{gap:.4rem;}}

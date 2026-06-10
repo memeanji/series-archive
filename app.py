@@ -62,18 +62,22 @@ def _yt_counts():
     return database.youtube_candidate_counts()
 
 
-def _repurely_rows(force: bool = False):
-    """repurely 시트+API를 1시간 세션 캐시. _reload()의 cache_data.clear()에 안 날아가게
-    session_state에 보관 → 북마크/메모 등 다른 동작에도 재조회 안 함."""
-    import time as _t
-    c = st.session_state.get("_rep_cache")
-    if not force and c and (_t.time() - c["t"] < 3600):
-        return c["rows"]
+@st.cache_resource(ttl=3600, show_spinner="repurely 데이터 불러오는 중…")
+def _repurely_load_cached():
+    """repurely 시트+Meta API 통합 — 서버 전체에서 1시간 공유 캐시.
+    cache_resource라 _reload()의 cache_data.clear()/세션 리셋/새로고침에도 살아남음."""
     import repurely.insights as RI
-    with st.spinner("repurely 시트 불러오는 중…"):
-        rows = RI.load_all()
-    st.session_state["_rep_cache"] = {"t": _t.time(), "rows": rows}
-    return rows
+    return RI.load_all()
+
+
+def _repurely_rows(force: bool = False):
+    if force:
+        try:
+            _repurely_load_cached.clear()
+        except Exception:  # noqa: BLE001
+            pass
+    base = _repurely_load_cached()
+    return [dict(r) for r in base]   # 세션별 enrich 변형이 공유 캐시를 오염시키지 않게 복사
 
 
 @st.cache_data(ttl=60)
