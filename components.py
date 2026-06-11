@@ -1396,11 +1396,13 @@ def _repurely_detail(r: dict) -> None:
             _peers = [x for x in _all if x.get("platform") == plat
                       and x.get("winning_label") == "위닝 소재"
                       and x.get("creative_name") != r.get("creative_name")]
-            # 비교 기준 = 대시보드 시트 첫 요약행(매체별). 없으면 소재 평균 폴백
-            _bench = (st.session_state.get("_rep_benchmarks", {}) or {}).get(plat)
+            # 비교 기준 = 대시보드 시트 첫 요약행(매체+랜딩별). 없으면 소재 평균 폴백
+            _benches = (st.session_state.get("_rep_benchmarks", {}) or {}).get(plat) or {}
+            _ldg = r.get("landing_type") or ""
+            _bench = _benches.get(_ldg) if isinstance(_benches, dict) else None
             _av = _bench or st.session_state.get("_rep_av") or {}
             _av_meta = {
-                "source": ("대시보드 첫 행 전체 요약 지표" if _bench else f"repurely {plat} 소재 평균"),
+                "source": (f"대시보드 {_ldg} 전체 요약 지표" if _bench else f"repurely {plat} 소재 평균"),
                 "basis": "오늘 누적",
                 "roas": _av.get("roas", 0), "ctr": _av.get("ctr", 0),
                 "cpc": _av.get("cpc", 0), "cpm": _av.get("cpm", 0)}
@@ -1528,25 +1530,47 @@ def render_repurely_insights(rows: list[dict]) -> None:
         st.warning("Meta 시트 동기화 실패 · 마지막 정상 데이터 표시 중", icon="⚠️")
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-    # ── 매체 선택(매체별로 독립적으로 보기, 전체 없음 · 기본 Meta) ──
+    # ── 매체 선택 + 랜딩 구분(블로그/직접랜딩) ──
     plats = ["Meta", "TikTok", "Naver GFA"]
     sel_p = st.segmented_control("매체", plats, default="Meta", key="rep_plat",
                                  label_visibility="collapsed") or "Meta"
-    view = [r for r in rows if r.get("platform") == sel_p]
+    landings = [l for l in ("블로그", "직접랜딩")
+                if any(r.get("platform") == sel_p and r.get("landing_type") == l for r in rows)]
+    sel_l = None
+    if landings:
+        sel_l = st.segmented_control("랜딩 구분", landings, default=landings[0],
+                                     key=f"rep_landing_{sel_p}",
+                                     label_visibility="collapsed") or landings[0]
+    view = [r for r in rows if r.get("platform") == sel_p
+            and (not sel_l or r.get("landing_type") == sel_l)]
 
     # ── 섹션별 소재 (선택 매체) ──
     def _ended(r):   # 메타에서 이미 꺼진 소재(effective_status가 ACTIVE 계열이 아님)
         ms = (r.get("meta_status") or "").upper()
         return bool(ms) and not ms.startswith("ACTIVE")
     _is_win = lambda r: r["winning_label"] in ("위닝 소재", "위닝 후보")
-    sections = [
+    _base = [
         ("🏆 위닝 소재", [r for r in view if r["winning_label"] == "위닝 소재"]),
         ("✨ 위닝 후보", [r for r in view if r["winning_label"] == "위닝 후보"]),
         # OFF 후보·피로도는 '운영 중'인 소재만 — 이미 꺼진 건 아래 '종료됨'으로
         ("🔴 OFF 후보", [r for r in view if r.get("is_off") and not _ended(r)]),
         ("⚠️ 피로도 의심 소재", [r for r in view if r.get("is_fatigue") and not _ended(r)]),
-        ("⛔ 종료됨", [r for r in view if _ended(r) and not _is_win(r)]),
     ]
+    _shown = {id(r) for _, items in _base for r in items}
+    _ended_items = [r for r in view if _ended(r) and not _is_win(r)]
+    _ended_ids = {id(r) for r in _ended_items}
+    # 어느 섹션에도 안 든 '운영 중' 소재(애매한 신규/모니터링) → 누락 방지 fallback
+    _leftover = [r for r in view if id(r) not in _shown and id(r) not in _ended_ids]
+    sections = _base + [
+        ("📋 일반 운영 소재", _leftover),
+        ("⛔ 종료됨", _ended_items),
+    ]
+    # 섹션 분류 로그(콘솔) — 어떤 소재가 어디로 분류됐는지
+    import sys as _sys
+    for _t, _items in sections:
+        for _r in _items:
+            print(f"[insight-section] {_r.get('creative_name')} ({_r.get('landing_type','')}) "
+                  f"→ {_t} (ROAS {_r.get('roas',0)})", file=_sys.stderr)
     for title, items in sections:
         items = sorted(items, key=lambda x: -x.get("spend", 0))
         st.markdown(f"<div style='font-size:15px;font-weight:800;color:{S.TEXT};margin:1.1rem 0 .5rem'>"

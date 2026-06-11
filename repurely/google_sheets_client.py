@@ -56,18 +56,29 @@ def fetch_raw(sheet_id: str, gid: str) -> list[list[str]]:
     return []
 
 
-def fetch_rows(sheet_id: str, gid: str) -> list[dict]:
-    """헤더 자동탐지 후 dict 리스트. 빈 행 제외. 컬럼 없으면 빈 dict 안전 처리."""
-    raw = fetch_raw(sheet_id, gid)
-    if not raw:
-        return []
-    hidx = 0
+def _header_idx(raw: list) -> int:
+    """헤더 행 탐지(토큰 2개+ 포함). row0 요약/타임스탬프는 건너뜀. 못 찾으면 0."""
     for i, row in enumerate(raw[:6]):
         joined = "".join(c or "" for c in row)
         if sum(1 for t in _HEADER_TOKENS if t in joined) >= 2:
-            hidx = i
-            break
-    headers = [(h or "").strip() for h in raw[hidx]]
+            return i
+    return 0
+
+
+def _fill(headers: list, fill: list | None) -> list:
+    """헤더 행의 빈 칸을 표준 헤더(fill)로 위치 기반 보정. 있는 헤더는 유지.
+    (날짜탭은 광고비/매출 등 일부 헤더가 비어 와서 필요)."""
+    if not fill:
+        return headers
+    return [headers[j] if headers[j] else (fill[j] if j < len(fill) else "")
+            for j in range(len(headers))]
+
+
+def _rows_from_raw(raw: list, fill_headers: list | None = None) -> list[dict]:
+    if not raw:
+        return []
+    hidx = _header_idx(raw)
+    headers = _fill([(h or "").strip() for h in raw[hidx]], fill_headers)
     out = []
     for row in raw[hidx + 1:]:
         if not any((c or "").strip() for c in row):
@@ -76,21 +87,37 @@ def fetch_rows(sheet_id: str, gid: str) -> list[dict]:
     return out
 
 
-def fetch_benchmark(sheet_id: str, gid: str, mapping: dict) -> dict | None:
-    """헤더 바로 위의 '전체 요약/평균' 행(예: row0 합계)을 mapping으로 파싱한 기준 지표.
-    개별 소재가 아니라 대시보드 상단 요약 행이므로 평균 비교 기준으로만 쓴다. 없으면 None."""
-    raw = fetch_raw(sheet_id, gid)
+def fetch_raw_tab(sheet_id: str, tab_name: str) -> list[list[str]]:
+    """gviz API로 '탭 이름'을 지정해 읽기(날짜별 탭 'YYMMDD 블로그 조인결과' 등). 실패 시 []."""
+    import requests
+    try:
+        r = requests.get(f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq",
+                         params={"tqx": "out:csv", "sheet": tab_name}, timeout=25)
+        if r.status_code == 200 and "html" not in r.headers.get("content-type", ""):
+            return list(csv.reader(io.StringIO(r.content.decode("utf-8", errors="replace"))))
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def fetch_rows(sheet_id: str, gid: str) -> list[dict]:
+    """헤더 자동탐지 후 dict 리스트(gid 기반). 빈 행 제외."""
+    return _rows_from_raw(fetch_raw(sheet_id, gid))
+
+
+def fetch_rows_tab(sheet_id: str, tab_name: str, fill_headers: list | None = None) -> list[dict]:
+    """날짜별 탭 이름으로 dict 리스트. fill_headers로 빈 헤더 보정."""
+    return _rows_from_raw(fetch_raw_tab(sheet_id, tab_name), fill_headers)
+
+
+def _benchmark_from_raw(raw: list, mapping: dict, fill_headers: list | None = None) -> dict | None:
+    """헤더 바로 위의 '전체 요약/평균' 행을 mapping으로 파싱(개별 소재 아님, 평균 비교 기준)."""
     if not raw:
         return None
-    hidx = 0
-    for i, row in enumerate(raw[:6]):
-        joined = "".join(c or "" for c in row)
-        if sum(1 for t in _HEADER_TOKENS if t in joined) >= 2:
-            hidx = i
-            break
+    hidx = _header_idx(raw)
     if hidx == 0:
         return None                       # 헤더 위에 요약행이 없음
-    headers = [(h or "").strip() for h in raw[hidx]]
+    headers = _fill([(h or "").strip() for h in raw[hidx]], fill_headers)
     summ = raw[hidx - 1]                  # 헤더 바로 위 = 요약/합계 행
     row = {headers[j]: (summ[j] if j < len(summ) else "") for j in range(len(headers))}
 
@@ -111,6 +138,17 @@ def fetch_benchmark(sheet_id: str, gid: str, mapping: dict) -> dict | None:
             "spend": spend, "revenue": revenue,
             "conversions": to_num(g("conversions")),
             "impressions": impressions, "clicks": clicks}
+
+
+def fetch_benchmark(sheet_id: str, gid: str, mapping: dict) -> dict | None:
+    """헤더 위 '전체 요약/평균' 행을 평균 비교 기준으로(gid 기반). 없으면 None."""
+    return _benchmark_from_raw(fetch_raw(sheet_id, gid), mapping)
+
+
+def fetch_benchmark_tab(sheet_id: str, tab_name: str, mapping: dict,
+                        fill_headers: list | None = None) -> dict | None:
+    """날짜별 탭의 요약/평균 행. fill_headers로 빈 헤더 보정."""
+    return _benchmark_from_raw(fetch_raw_tab(sheet_id, tab_name), mapping, fill_headers)
 
 
 def to_num(v) -> float:

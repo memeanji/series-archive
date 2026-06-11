@@ -80,16 +80,18 @@ def load_all() -> list[dict]:
 
 
 def benchmarks() -> dict:
-    """매체별 대시보드 요약행(전체/평균 기준값) → {platform: {ctr,cpc,cpm,roas,...}}.
-    개별 소재가 아니라 시트 상단 요약 행이라 평균 비교 기준으로만 사용."""
+    """매체별 대시보드 요약행 → {platform: {landing: {ctr,cpc,cpm,roas,...}}}.
+    시트 상단 요약 행(랜딩별)이라 평균 비교 기준으로만 사용."""
     out: dict = {}
     import repurely.meta_sheet as meta
-    try:
-        b = meta.load_benchmark()
-        if b:
-            out["Meta"] = b
-    except Exception:  # noqa: BLE001
-        pass
+    import repurely.tiktok_sheet as tiktok
+    for plat, mod in (("Meta", meta), ("TikTok", tiktok)):
+        try:
+            b = mod.load_benchmark()
+            if b:
+                out[plat] = b
+        except Exception:  # noqa: BLE001
+            pass
     return out
 
 
