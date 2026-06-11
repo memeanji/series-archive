@@ -26,3 +26,8 @@ def load() -> list[dict]:
         if n:
             out.append(n)
     return out
+
+
+def load_benchmark() -> dict | None:
+    """대시보드 첫 요약행(전체 광고비·매출·평균 CPC/CPM/CTR·전체 ROAS)을 평균 비교 기준으로."""
+    return G.fetch_benchmark(SHEET_ID, GID, MAP)

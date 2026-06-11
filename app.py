@@ -91,6 +91,7 @@ def main() -> None:
     st.set_page_config(page_title="Series Archive", page_icon="📚", layout="wide",
                        initial_sidebar_state="expanded")
     styles.inject_css()
+    styles.block_hotkeys()
     database.init_db(seed_users=auth.get_secret_users())
 
     if not auth.require_login():

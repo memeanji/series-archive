@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config  # noqa: E402
 
 GRAPH = "https://graph.facebook.com/v21.0"
+_ROOT = os.path.dirname(os.path.dirname(__file__))
 
 
 def _creds() -> tuple[str, str]:
@@ -117,9 +118,62 @@ def load_ads() -> list[dict]:
     except Exception:  # noqa: BLE001
         pass
     if ok and out:        # 정상 응답 → 캐시 갱신 후 반환
+        prev = {a.get("ad_name"): a.get("thumb_local")
+                for a in _load_cache() if a.get("thumb_local")}
+        for a in out:     # 영구화된 로컬 썸네일 경로는 API 재호출에도 보존
+            if prev.get(a.get("ad_name")):
+                a["thumb_local"] = prev[a["ad_name"]]
         _save_cache(out)
         return out
     return _load_cache()  # 한도/실패 → 마지막 정상 소재로 폴백
+
+
+def _safe_name(name: str) -> str:
+    s = "".join(c for c in (name or "") if c.isalnum() or c in "_-")
+    if s:
+        return s
+    import hashlib
+    return hashlib.md5((name or "").encode()).hexdigest()[:14]
+
+
+def persist_thumbs(ads: list[dict], active_only: bool = True) -> int:
+    """fbcdn 썸네일(서명·만료되는 임시 URL)을 static/thumbnails/rep_*.png 로 영구 저장.
+    클라우드는 Meta API가 안 돌아 fbcdn URL이 깨지므로, 로컬 파일이라야 미리보기가 뜬다.
+    잡에서만 호출(화면 렌더에서 금지). 각 ad에 thumb_local 경로를 채우고 캐시(json) 갱신.
+    이미 받은 파일은 스킵. 새로 저장한 건수 반환."""
+    import requests
+    saved = 0
+    for a in ads:
+        if active_only and not (a.get("status") or "").upper().startswith("ACTIVE"):
+            continue
+        url = (a.get("thumbnail_url") or "").strip()
+        name = (a.get("ad_name") or "").strip()
+        vid = (a.get("video_id") or "").strip()
+        if vid:   # 영상 → 1080급 고해상도 썸네일 우선(작은 t15 프레임 대신 선명하게)
+            try:
+                hi = (video_info(vid) or {}).get("thumbnail") or ""
+                if hi.startswith("http"):
+                    url = hi
+            except Exception:  # noqa: BLE001
+                pass
+        if not url.startswith("http") or not name:
+            continue
+        rel = f"static/thumbnails/rep_{_safe_name(name)}.png"
+        fp = os.path.join(_ROOT, rel)
+        a["thumb_local"] = "app/" + rel
+        if os.path.exists(fp) and os.path.getsize(fp) > 0:
+            continue
+        try:
+            r = requests.get(url, timeout=25)
+            if r.status_code == 200 and r.content:
+                os.makedirs(os.path.dirname(fp), exist_ok=True)
+                with open(fp, "wb") as f:
+                    f.write(r.content)
+                saved += 1
+        except Exception:  # noqa: BLE001
+            pass
+    _save_cache(ads)
+    return saved
 
 
 def video_permalink(video_id: str) -> str:

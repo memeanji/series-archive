@@ -192,6 +192,23 @@ def get_display_thumbnail(ad: dict) -> dict:
     return {"src": None, "source": None, "method": "none", "exists": False}
 
 
+def _resolve_media(local: str, remote: str = "") -> str:
+    """repurely 썸네일 해석: 영구화 로컬파일(data URI) 우선 → 없으면 fbcdn 원격 URL 폴백.
+    클라우드는 로컬파일로, 로컬개발은 파일이 없을 때 fbcdn으로 뜬다. 둘 다 없으면 ''."""
+    loc = (local or "").strip()
+    if loc.startswith("http") or loc.startswith("data:"):
+        return loc
+    if loc:
+        rel = loc[4:] if loc.startswith("app/") else loc   # 'app/static/..' → 'static/..'
+        uri = _file_data_uri(rel)
+        if uri:
+            return uri
+    rem = (remote or "").strip()
+    if rem.startswith("http") or rem.startswith("data:"):
+        return rem
+    return ""
+
+
 def _do_extract(social_id: str, video_id: str) -> None:
     """버튼 클릭 시에만 단건 추출. ① YouTube 자막 → ② 실패 시 Gemini 영상 전사."""
     database.update_script(social_id, "", "extracting")
@@ -1124,23 +1141,117 @@ def _rep_win_badge(label: str) -> str:
             f"font-weight:700;padding:4px 9px;border-radius:999px'>{label}</span>")
 
 
+def _repurely_auto_script(r: dict) -> str:
+    """repurely 소재의 영상/썸네일을 AI가 자동 인식 → 스크립트(구간 JSON) 또는 썸네일 요약 텍스트.
+    영상: video_id→mp4(자사계정)→Gemini 3초 구간 분석. 실패/이미지: 썸네일 Vision. 둘 다 실패 시 ''."""
+    import services.script_gen as SG
+    ad_like = {"brand_name": "repurely",
+               "ad_copy": r.get("ad_copy") or r.get("campaign_name") or "", "cta": ""}
+    plat = r.get("platform", "")
+    vurl = ""
+    if plat == "TikTok":
+        vurl = (r.get("video_url") or "").strip()        # TikTok preview_url(mp4) 직접
+    else:
+        vid = (r.get("video_id") or "").strip()
+        if vid:
+            try:
+                import repurely.meta_api as MAPI
+                vurl = (MAPI.video_info(vid) or {}).get("source", "")
+            except Exception:  # noqa: BLE001
+                vurl = ""
+    if vurl.startswith("http"):
+        try:
+            status, text, _s, _e = SG._gemini_video_file(vurl, ad_like)
+            if status == "completed" and text:
+                return text
+        except Exception:  # noqa: BLE001
+            pass
+    # 영상 없음/실패 → 썸네일(이미지) 분석
+    try:
+        res = SG.analyze_thumbnail({**ad_like,
+                                    "thumbnail_url": r.get("thumbnail_url") or "",
+                                    "local_thumbnail_path": r.get("thumb_local") or ""})
+        if res.get("text"):
+            return res["text"]
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _render_ai_report(rep) -> None:
+    """AI 분석 결과(dict)를 최종 판단 배지 + 평균 기준 + 섹션 카드로 렌더. 구버전 문자열도 호환."""
+    import services.ai_insight as AI
+    if isinstance(rep, str):          # 이전 버전(단일 문자열) 캐시 호환
+        with st.container(border=True):
+            st.markdown(rep)
+        return
+    import html as _h
+    # ── 최종 판단 라벨(별도 줄, 아래 여백 충분히) ──
+    lab = rep.get("verdict")
+    col = rep.get("verdict_color", "#64748B")
+    if lab:
+        st.markdown(f"<div style='margin:2px 0 14px'>"
+                    f"<span style='display:inline-block;background:{col}1A;color:{col};"
+                    f"border:1.5px solid {col};font-size:14px;font-weight:800;padding:7px 18px;"
+                    f"border-radius:999px;line-height:1.5'>최종 판단 · {_h.escape(str(lab))}</span></div>",
+                    unsafe_allow_html=True)
+    # ── 비교 기준 — 항목별 정보 박스(그리드, 자동 줄바꿈) ──
+    am = rep.get("av_meta") or {}
+    if am:
+        _metrics = [("평균 ROAS", f"{am.get('roas',0):.0f}%"), ("평균 CTR", f"{am.get('ctr',0):.2f}%"),
+                    ("평균 CPC", f"{int(am.get('cpc',0)):,}원"), ("평균 CPM", f"{int(am.get('cpm',0)):,}원"),
+                    ("기준 방식", str(am.get("basis", "누적 합계")))]
+        _cells = "".join(
+            f"<div style='background:#fff;border:1px solid {S.BORDER};border-radius:8px;padding:8px 10px'>"
+            f"<div style='font-size:10.5px;color:{S.SUB};font-weight:600;margin-bottom:2px'>{k}</div>"
+            f"<div style='font-size:13.5px;color:{S.TEXT};font-weight:700;line-height:1.3;"
+            f"word-break:break-all'>{_h.escape(v)}</div></div>" for k, v in _metrics)
+        st.markdown(
+            f"<div style='background:#F8FAFC;border:1px solid {S.BORDER};border-radius:10px;"
+            f"padding:12px 13px;margin-bottom:16px'>"
+            f"<div style='font-size:12px;font-weight:800;color:{S.PRIMARY};margin-bottom:6px'>📐 비교 기준</div>"
+            f"<div style='font-size:12.5px;color:{S.TEXT};word-break:break-all;line-height:1.5;"
+            f"margin-bottom:9px'>기준: {_h.escape(str(am.get('source','-')))}</div>"
+            f"<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px'>{_cells}</div></div>",
+            unsafe_allow_html=True)
+    # ── 섹션 카드(제목 줄간격·본문 자동 줄바꿈) ──
+    for key, title in AI.FIELDS:
+        val = (rep.get(key) or "").strip()
+        if not val:
+            continue
+        with st.container(border=True):
+            st.markdown(f"<div style='font-size:13.5px;font-weight:800;color:{S.PRIMARY};"
+                        f"margin-bottom:6px;line-height:1.4'>{title}</div>", unsafe_allow_html=True)
+            st.markdown(val)
+    if isinstance(rep, dict) and rep.get("_source") != "gemini":
+        st.caption("규칙 기반 분석 · Gemini 키 설정 시 더 깊은 리포트 제공")
+
+
 @st.dialog("repurely 소재 상세", width="large")
 def _repurely_detail(r: dict) -> None:
     import html as _h
     plat = r.get("platform", "")
     pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
-    # ── 헤더: 브랜드(크게) — 소재명은 영상 위에 표기하지 않음(우측 메타 정보에 표시) ──
-    st.markdown(f"<div style='font-size:22px;font-weight:800;color:{S.PRIMARY}'>repurely</div>"
-                f"<div style='font-size:13px;font-weight:600;color:{S.SUB};margin-top:1px'>"
-                f"{plat} · 내부 소재 성과</div>", unsafe_allow_html=True)
+    # ── 헤더: 브랜드 + 채널 설명을 한 줄로(겹침 방지, 줄간격 확보) ──
+    st.markdown(
+        f"<div style='display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 12px'>"
+        f"<span style='font-size:22px;font-weight:800;color:{S.PRIMARY};line-height:1.4'>repurely</span>"
+        f"<span style='font-size:13px;font-weight:600;color:{S.SUB};line-height:1.4'>"
+        f"{plat} · 내부 소재 성과</span></div>", unsafe_allow_html=True)
 
-    left, right = st.columns([2, 3], gap="medium")
+    left, right = st.columns([2, 3], gap="large")
     # ── 좌: 소재 영상(인앱 재생)/이미지 + 원본 링크 ──
     with left:
-        _th = r.get("thumbnail_url") or ""
+        # 영상은 9:16 유지하되 너무 커지지 않게 높이 제한(폭 자동·가운데)
+        st.markdown("<style>[data-testid='stVideo'] video{max-height:480px !important;"
+                    "width:auto !important;max-width:100% !important;margin:0 auto;display:block;"
+                    "border-radius:12px;}</style>", unsafe_allow_html=True)
+        _th = _resolve_media(r.get("thumb_local"), r.get("thumbnail_url"))
         _vid = r.get("video_id") or ""
         permalink = mp4 = ""
-        if _vid:   # 자사 계정 영상 → 원본 mp4(source) 조회해 Meta 탭과 동일하게 st.video 재생
+        if plat == "TikTok" and (r.get("video_url") or "").startswith("http"):
+            mp4 = r.get("video_url")            # TikTok preview_url(mp4) 직접 재생
+        elif _vid:   # Meta 자사 계정 영상 → 원본 mp4(source) 조회해 st.video 재생
             try:
                 import repurely.meta_api as MAPI
                 vi = MAPI.video_info(_vid)
@@ -1160,9 +1271,10 @@ def _repurely_detail(r: dict) -> None:
                      f"border-radius:10px;overflow:hidden' scrolling='no' frameborder='0' "
                      f"allow='autoplay; clipboard-write; encrypted-media; picture-in-picture; "
                      f"web-share' allowfullscreen></iframe></div>", height=545)
-        elif _th.startswith("http"):   # 이미지 소재 또는 영상 썸네일
-            st.markdown(f"<div style='position:relative;border-radius:10px;overflow:hidden;"
-                        f"aspect-ratio:9/16;max-height:430px;background:#0F172A'>"
+        elif _th and (_th.startswith("http") or _th.startswith("data:")):   # 이미지 소재 또는 영상 썸네일
+            st.markdown(f"<div style='position:relative;border-radius:12px;overflow:hidden;"
+                        f"aspect-ratio:9/16;max-width:400px;max-height:480px;margin:0 auto;"
+                        f"background:#0F172A'>"
                         f"<img src='{_th}' style='width:100%;height:100%;object-fit:contain'/></div>",
                         unsafe_allow_html=True)
         else:
@@ -1194,28 +1306,54 @@ def _repurely_detail(r: dict) -> None:
                     f"color:{'#EF4444' if r.get('is_off') else '#10B981'};font-size:12px;font-weight:700;"
                     f"padding:3px 11px;border-radius:999px'>"
                     f"{'🔴 OFF 후보' if r.get('is_off') else '🟢 운영중'}</span></div>", unsafe_allow_html=True)
-        # 지표 카드
+        # ── 핵심 성과 카드(크게, 먼저) ──
         cards = [("광고비", _krw(r.get("spend")), "#03C75A"), ("매출", _krw(r.get("revenue")), "#EF4444"),
                  ("구매", f"{int(r.get('conversions',0))}건", "#0EA5E9"),
-                 ("ROAS", f"{r.get('roas',0):.0f}", "#10B981")]
-        html = "<div style='display:flex;gap:8px;margin:2px 0 6px'>"
+                 ("ROAS", f"{r.get('roas',0):.0f}%", "#10B981")]
+        html = "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:2px 0 9px'>"
         for lab, val, col in cards:
-            html += (f"<div style='flex:1;background:#F8FFFB;border:1px solid {S.BORDER};border-radius:12px;"
-                     f"padding:11px 6px;text-align:center'><div style='font-size:11px;color:{S.SUB};"
-                     f"font-weight:700'>{lab}</div><div style='font-size:19px;font-weight:900;color:{col};"
-                     f"line-height:1.3'>{val}</div></div>")
+            html += (f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:14px;"
+                     f"padding:15px 6px;text-align:center'><div style='font-size:12px;color:{S.SUB};"
+                     f"font-weight:700;margin-bottom:3px'>{lab}</div>"
+                     f"<div style='font-size:23px;font-weight:900;color:{col};line-height:1.2'>{val}</div></div>")
         st.markdown(html + "</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size:13px;color:{S.SUB};margin:4px 0 12px'>"
-                    f"CTR {r.get('ctr',0)}% · CPC {int(r.get('cpc',0)):,}원 · "
-                    f"CPM {int(r.get('cpm',0)):,}원</div>", unsafe_allow_html=True)
-        # 캠페인/그룹/소재/UTM
+        st.markdown(f"<div style='font-size:13px;color:{S.SUB};margin:2px 0 14px'>"
+                    f"CTR <b style='color:{S.TEXT}'>{r.get('ctr',0)}%</b> · "
+                    f"CPC <b style='color:{S.TEXT}'>{int(r.get('cpc',0)):,}원</b> · "
+                    f"CPM <b style='color:{S.TEXT}'>{int(r.get('cpm',0)):,}원</b></div>", unsafe_allow_html=True)
+        # TikTok 매칭 영상지표(조회/완료율/시청시간/인게이지먼트)
+        _tt = r.get("tt_metrics") or {}
+        if _tt:
+            _pv = _tt.get("video_play_actions", 0) or 0
+            _comp = f"{(_tt.get('video_views_p100',0) or 0)/_pv*100:.0f}%" if _pv else "-"
+            _items = [("👁 재생", _kabbr(_pv)), ("2초 조회", _kabbr(_tt.get("video_watched_2s", 0))),
+                      ("6초 조회", _kabbr(_tt.get("video_watched_6s", 0))), ("완료율", _comp),
+                      ("평균시청", f"{_tt.get('average_video_play',0):.0f}초"),
+                      ("❤ 좋아요", int(_tt.get("likes", 0))), ("💬 댓글", int(_tt.get("comments", 0))),
+                      ("↗ 공유", int(_tt.get("shares", 0)))]
+            _chips = "".join(
+                f"<div style='background:#F8FAFC;border:1px solid {S.BORDER};border-radius:11px;"
+                f"padding:10px 6px;text-align:center'>"
+                f"<div style='font-size:11.5px;color:{S.SUB};font-weight:600;margin-bottom:2px'>{lab}</div>"
+                f"<div style='font-size:18px;font-weight:800;color:{S.TEXT};line-height:1.2'>{val}</div></div>"
+                for lab, val in _items)
+            st.markdown(f"<div style='margin:6px 0 16px'><div style='font-size:14px;font-weight:800;"
+                        f"color:{S.PRIMARY};margin-bottom:8px'>📱 TikTok 영상 지표 (최근 30일)</div>"
+                        f"<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px'>{_chips}</div></div>",
+                        unsafe_allow_html=True)
+        # ── 소재 정보(캠페인/광고그룹/소재명/UTM) — 핵심 지표 아래 별도 섹션 ──
         meta = [("캠페인", r.get("campaign_name")), ("광고그룹", r.get("ad_group_name")),
                 ("소재명", r.get("creative_name")), ("UTM", r.get("utm_value"))]
-        st.markdown("".join(
-            f"<div style='display:flex;gap:8px;padding:3px 0;font-size:12.5px'>"
-            f"<span style='flex:0 0 64px;color:{S.SUB};font-weight:600'>{k}</span>"
-            f"<span style='color:{S.TEXT};word-break:break-all'>{_h.escape(str(v or '-'))}</span></div>"
-            for k, v in meta), unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='background:#F8FAFC;border:1px solid {S.BORDER};border-radius:12px;"
+            f"padding:16px 18px;margin:2px 0 12px'>"
+            f"<div style='font-size:12px;font-weight:700;color:{S.SUB};margin-bottom:10px'>소재 정보</div>"
+            + "".join(
+                f"<div style='display:flex;gap:12px;padding:6px 0;font-size:14px;line-height:1.55'>"
+                f"<span style='flex:0 0 74px;color:{S.TEXT};font-weight:800'>{k}</span>"
+                f"<span style='flex:1;color:{S.TEXT};word-break:break-all'>{_h.escape(str(v or '-'))}</span></div>"
+                for k, v in meta)
+            + "</div>", unsafe_allow_html=True)
         # 자동 상태 요약
         st.markdown(f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:10px;"
                     f"padding:11px 13px;font-size:13px;color:{S.TEXT};line-height:1.6;margin-top:10px'>"
@@ -1224,24 +1362,61 @@ def _repurely_detail(r: dict) -> None:
                     f"margin:18px 0 6px'>날짜별 추이는 매일 스냅샷이 누적되면 표시됩니다. "
                     f"현재 시트 값은 누적 합계 기준입니다.</div>", unsafe_allow_html=True)
 
-    # ── AI 소재 분석(전체 폭) ──
+    # ── AI 상세 분석 리포트(전체 폭) ──
     st.divider()
     import services.ai_insight as AI
     ac = st.columns([5, 1.4], vertical_alignment="center")
-    ac[0].markdown(f"<div style='font-size:15px;font-weight:800;color:{S.TEXT}'>🤖 AI 소재 분석</div>"
-                   f"<div style='font-size:11.5px;color:{S.SUB};margin-top:1px'>"
-                   f"{'Gemini' if AI.enabled() else '규칙 기반'} · 성과 지표 기반 진단·추천</div>",
+    ac[0].markdown(f"<div style='font-size:15px;font-weight:800;color:{S.TEXT};line-height:1.5'>"
+                   f"🤖 AI 상세 분석 리포트</div>"
+                   f"<div style='font-size:11.5px;color:{S.SUB};margin-top:5px;line-height:1.5'>"
+                   f"{'Gemini' if AI.enabled() else '규칙 기반'} · 후킹·스크립트·전환 구조까지 진단</div>",
                    unsafe_allow_html=True)
+    skey = f"_repscript_{plat}_{r.get('creative_name','')}"
+    with st.expander("🎬 영상 스크립트/대본 입력 (선택 — 넣으면 장면 흐름·이탈 구간까지 분석)"):
+        st.text_area("자막·대사·장면 흐름", key=skey, height=130, label_visibility="collapsed",
+                     placeholder="(0~3초) 첫 장면/자막 …\n(3~10초) 문제 제기 …\n(중반) 공감·해결책·제품 …\nCTA: …")
     aikey = f"_repai_{plat}_{r.get('creative_name','')}"
+    dbkey = f"{plat}::{r.get('creative_name','')}"
     cache = st.session_state.setdefault("_repai_cache", {})
-    if ac[1].button("AI 분석 실행", key=f"aibtn_{aikey}", use_container_width=True, type="primary"):
-        with st.spinner("소재 성과를 분석하는 중…"):
-            cache[aikey] = AI.analyze(r)
+    # 저장된 이전 분석을 DB에서 로드(세션에 없을 때) — 새로고침/재접속해도 계속 보임
+    if aikey not in cache:
+        _saved = database.get_repurely_report(dbkey)
+        if _saved:
+            cache[aikey] = _saved["report"]
+            st.session_state[aikey + "_at"] = _saved.get("updated_at", "")
+    _btn_label = "🔄 AI 재분석" if cache.get(aikey) else "AI 분석 실행"
+    if ac[1].button(_btn_label, key=f"aibtn_{aikey}", use_container_width=True, type="primary"):
+        with st.spinner("영상 인식 + 분석 중… (자막·장면·후킹·전환)"):
+            # 영상/썸네일 자동 인식 — 수동 입력이 있으면 그걸 우선, 없으면 AI가 자동 추출
+            _script = (st.session_state.get(skey, "") or "").strip()
+            if not _script:
+                _script = _repurely_auto_script(r)
+                st.session_state[aikey + "_script"] = _script   # 추출 원본 보관(표시용)
+            _all = st.session_state.get("_rep_rows_all", [])
+            _peers = [x for x in _all if x.get("platform") == plat
+                      and x.get("winning_label") == "위닝 소재"
+                      and x.get("creative_name") != r.get("creative_name")]
+            # 비교 기준 = 대시보드 시트 첫 요약행(매체별). 없으면 소재 평균 폴백
+            _bench = (st.session_state.get("_rep_benchmarks", {}) or {}).get(plat)
+            _av = _bench or st.session_state.get("_rep_av") or {}
+            _av_meta = {
+                "source": ("대시보드 첫 행 전체 요약 지표" if _bench else f"repurely {plat} 소재 평균"),
+                "basis": "오늘 누적",
+                "roas": _av.get("roas", 0), "ctr": _av.get("ctr", 0),
+                "cpc": _av.get("cpc", 0), "cpm": _av.get("cpm", 0)}
+            _rep = AI.analyze(r, peers=_peers, av=_av, av_meta=_av_meta, script=_script)
+            cache[aikey] = _rep
+            database.save_repurely_report(dbkey, plat, r.get("creative_name", ""), _rep, _script)
+            from datetime import datetime, timezone
+            st.session_state[aikey + "_at"] = datetime.now(timezone.utc).isoformat()
     if cache.get(aikey):
-        with st.container(border=True):
-            st.markdown(cache[aikey])   # 마크다운(진단/근거/액션) 렌더
+        _at = st.session_state.get(aikey + "_at", "")
+        if _at:
+            st.caption(f"💾 저장된 분석 · {_at[:16].replace('T',' ')} · 재분석하면 최신 데이터로 갱신")
+        _render_ai_report(cache[aikey])
     else:
-        st.caption("‘AI 분석 실행’을 누르면 이 소재의 진단·근거·다음 액션을 제안합니다.")
+        st.caption("‘AI 분석 실행’을 누르면 종합 진단·성과 해석·후킹·스크립트·강약점·피로도·"
+                   "개선 카피·다음 테스트까지 리포트로 보여줍니다.")
 
     # ── 분석 메모(전체 폭) ──
     st.divider()
@@ -1261,12 +1436,13 @@ def _repurely_card(r: dict, key: str) -> None:
     pc, pb = _REP_PLAT.get(plat, ("#6B7280", "#F1F5F9"))
     status = ("🔴 OFF 후보" if r.get("is_off") else
               ("⚠️ 피로도 의심" if r.get("is_fatigue") else "🟢 운영중"))
-    th = r.get("thumbnail_url") or ""
+    th = _resolve_media(r.get("thumb_local"), r.get("thumbnail_url"))
     is_meta = plat == "Meta"
     is_video = bool(r.get("video_id"))
-    # Meta 탭 카드와 동일한 썸네일 컴포넌트(sa-thumb sa-thumb-meta = 3:4·cover·center·radius 통일)
-    meta_cls = " sa-thumb-meta" if is_meta else ""
-    if th.startswith("http"):
+    # Insight 카드 = Meta 탭과 같은 3:4 박스, 단 영상 썸네일은 contain으로 전체 표시
+    # (cover로 꽉 채우면 좌우가 잘려 확대·흐림). sa-thumb-rep = 3:4 + contain + 어두운 여백.
+    meta_cls = " sa-thumb-rep"
+    if th:
         play = "<div class='sa-play'>▶</div>" if is_video else ""
         media_label = ("▶ 영상" if is_video else "🖼 이미지") if is_meta else plat
         thumb_html = (f"<div class='sa-thumb{meta_cls}'><img src='{th}'/>{play}"
@@ -1322,22 +1498,31 @@ def render_repurely_insights(rows: list[dict]) -> None:
                     f"확인해주세요.</div></div>", unsafe_allow_html=True)
         return
     rows, av = RI.enrich(rows)
+    st.session_state["_rep_rows_all"] = rows   # AI 분석 위너 비교용
+    st.session_state["_rep_av"] = av
+    if "_rep_benchmarks" not in st.session_state:   # 매체별 시트 요약행(평균 기준값)
+        st.session_state["_rep_benchmarks"] = RI.benchmarks()
 
     # ── 헤더 + 동기화 상태 + 새로고침 ──
     last_sync = max((r.get("collected_at", "") for r in rows), default="-")
     from datetime import datetime as _dt, timedelta as _td
     try:
-        nxt = (_dt.strptime(last_sync, "%Y-%m-%d %H:%M") + _td(minutes=30)).strftime("%H:%M")
+        nxt = (_dt.strptime(last_sync, "%Y-%m-%d %H:%M") + _td(hours=1)).strftime("%H:%M")
     except Exception:  # noqa: BLE001
         nxt = "-"
     hc = st.columns([4, 1.3])
     hc[0].markdown(f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin:.2rem 0 0'>"
                    f"🏢 repurely 내부 소재 성과</div>"
-                   f"<div style='font-size:11px;color:{S.SUB};margin-top:1px'>마지막 동기화 "
-                   f"<b>{last_sync}</b> · 다음 자동 갱신 ~{nxt} · 30분 캐시</div>", unsafe_allow_html=True)
-    if hc[1].button("🔄 Meta 데이터 새로고침", use_container_width=True):
-        st.session_state.pop("_rep_cache", None)   # 세션 캐시 비우고 재조회
+                   f"<div style='font-size:11.5px;color:{S.SUB};margin-top:3px;line-height:1.7'>"
+                   f"📊 분석 기준 <b style='color:{S.TEXT}'>오늘 누적 데이터</b> · "
+                   f"마지막 갱신 <b style='color:{S.TEXT}'>{last_sync}</b> · "
+                   f"다음 갱신 ~{nxt} · <b>1시간 주기</b></div>", unsafe_allow_html=True)
+    if hc[1].button("🔄 지금 갱신", use_container_width=True):
+        st.session_state.pop("_rep_cache", None)
+        st.session_state.pop("_rep_benchmarks", None)   # 평균 기준도 재로딩
+        st.session_state.pop("_rep_last_good", None)
         st.cache_data.clear()
+        st.cache_resource.clear()                       # repurely 1시간 캐시 강제 갱신
         st.rerun()
     if stale:
         st.warning("Meta 시트 동기화 실패 · 마지막 정상 데이터 표시 중", icon="⚠️")
@@ -1350,12 +1535,17 @@ def render_repurely_insights(rows: list[dict]) -> None:
     view = [r for r in rows if r.get("platform") == sel_p]
 
     # ── 섹션별 소재 (선택 매체) ──
+    def _ended(r):   # 메타에서 이미 꺼진 소재(effective_status가 ACTIVE 계열이 아님)
+        ms = (r.get("meta_status") or "").upper()
+        return bool(ms) and not ms.startswith("ACTIVE")
+    _is_win = lambda r: r["winning_label"] in ("위닝 소재", "위닝 후보")
     sections = [
         ("🏆 위닝 소재", [r for r in view if r["winning_label"] == "위닝 소재"]),
         ("✨ 위닝 후보", [r for r in view if r["winning_label"] == "위닝 후보"]),
-        ("🧪 신규 테스트 소재", [r for r in view if r.get("is_new_test")]),
-        ("⚠️ 피로도 의심 소재", [r for r in view if r.get("is_fatigue")]),
-        ("🔴 OFF 후보", [r for r in view if r.get("is_off")]),
+        # OFF 후보·피로도는 '운영 중'인 소재만 — 이미 꺼진 건 아래 '종료됨'으로
+        ("🔴 OFF 후보", [r for r in view if r.get("is_off") and not _ended(r)]),
+        ("⚠️ 피로도 의심 소재", [r for r in view if r.get("is_fatigue") and not _ended(r)]),
+        ("⛔ 종료됨", [r for r in view if _ended(r) and not _is_win(r)]),
     ]
     for title, items in sections:
         items = sorted(items, key=lambda x: -x.get("spend", 0))

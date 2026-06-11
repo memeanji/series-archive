@@ -138,6 +138,11 @@ def inject_css() -> None:
       .sa-thumb-meta {{aspect-ratio:3/4 !important;}}
       .sa-thumb-meta::before {{display:none;}}
       .sa-thumb-meta img {{object-fit:cover; object-position:center;}}
+      /* repurely(Insight): Meta 탭과 같은 3:4 박스 크기, 단 영상 썸네일이라 contain
+         (cover로 꽉 채우면 좌우가 잘려 확대·흐림) + 어두운 여백 */
+      .sa-thumb-rep {{aspect-ratio:3/4 !important; background:#0F172A !important;}}
+      .sa-thumb-rep::before {{display:none;}}
+      .sa-thumb-rep img {{object-fit:contain;}}
       .sa-badge {{position:absolute; top:8px; left:8px; color:#fff; font-weight:700; font-size:11px;
                   padding:2px 7px; border-radius:999px; box-shadow:0 1px 4px rgba(0,0,0,.2); z-index:2;}}
       .sa-dot {{position:absolute; top:9px; right:9px; width:9px; height:9px; border-radius:50%;
@@ -231,3 +236,27 @@ def inject_css() -> None:
       /* 탭(segmented) 라운드 */
     </style>
     """, unsafe_allow_html=True)
+
+
+def block_hotkeys() -> None:
+    """Streamlit 기본 단축키(C=clear cache, R=rerun) 차단 — 소재명 등 텍스트를 복사할 때
+    'Clear cache?' 팝업이 뜨던 오작동 방지. 복사(Ctrl+C)는 copy 이벤트라 영향 없음."""
+    import streamlit.components.v1 as _stc
+    _stc.html("""
+    <script>
+    try {
+      const doc = window.parent.document;
+      if (!doc._saHotkeyBlock) {
+        doc._saHotkeyBlock = true;
+        const block = function(e){
+          const t = e.target;
+          const typing = t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable);
+          if (!typing && (e.key==='c' || e.key==='C' || e.key==='r' || e.key==='R')) {
+            e.stopImmediatePropagation();   // Streamlit 핫키만 차단(복사·기본동작 유지)
+          }
+        };
+        ['keydown','keypress','keyup'].forEach(function(ev){ doc.addEventListener(ev, block, true); });
+      }
+    } catch (err) { /* iframe sandbox 등으로 부모 접근 불가 시 무시 */ }
+    </script>
+    """, height=0)

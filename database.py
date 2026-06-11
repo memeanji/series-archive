@@ -1387,3 +1387,47 @@ def stats(ads: list[dict]) -> dict:
     return {"total": len(ads),
             "last_update": max((str(a.get("updated_at") or a.get("created_at") or "")
                                 for a in ads), default="")[:16].replace("T", " ")}
+
+
+# ── repurely AI 분석 리포트 영구 저장(상세보기에서 다시 꺼내보기) ──
+def _ensure_repurely_ai_table(conn) -> None:
+    conn.execute("""CREATE TABLE IF NOT EXISTS repurely_ai_reports(
+        key TEXT PRIMARY KEY, platform TEXT, creative_name TEXT,
+        report_json TEXT, script_text TEXT, created_at TEXT, updated_at TEXT)""")
+
+
+def save_repurely_report(key: str, platform: str, creative_name: str,
+                         report: dict, script: str = "") -> None:
+    """AI 분석 리포트(dict)를 key(=platform::소재명) 기준으로 저장/갱신. created_at은 보존."""
+    import json
+    from datetime import datetime, timezone
+    conn = get_conn()
+    _ensure_repurely_ai_table(conn)
+    now = datetime.now(timezone.utc).isoformat()
+    old = conn.execute("SELECT created_at FROM repurely_ai_reports WHERE key=?", (key,)).fetchone()
+    created = old["created_at"] if old else now
+    conn.execute("""INSERT OR REPLACE INTO repurely_ai_reports
+        (key, platform, creative_name, report_json, script_text, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?)""",
+                 (key, platform, creative_name, json.dumps(report, ensure_ascii=False),
+                  script or "", created, now))
+    conn.commit()
+    conn.close()
+
+
+def get_repurely_report(key: str) -> dict | None:
+    """저장된 AI 리포트 반환 {report, script, updated_at}. 없으면 None."""
+    import json
+    conn = get_conn()
+    _ensure_repurely_ai_table(conn)
+    row = conn.execute(
+        "SELECT report_json, script_text, updated_at FROM repurely_ai_reports WHERE key=?",
+        (key,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    try:
+        return {"report": json.loads(row["report_json"]), "script": row["script_text"] or "",
+                "updated_at": row["updated_at"]}
+    except Exception:  # noqa: BLE001
+        return None

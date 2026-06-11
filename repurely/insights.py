@@ -14,6 +14,7 @@ def load_all() -> list[dict]:
     import repurely.meta_sheet as meta
     import repurely.tiktok_sheet as tiktok
     import repurely.meta_api as MAPI
+    import repurely.tiktok_api as TTAPI
     from concurrent.futures import ThreadPoolExecutor
 
     def _safe(fn):
@@ -22,14 +23,16 @@ def load_all() -> list[dict]:
         except Exception:  # noqa: BLE001
             return []
     rows: list[dict] = []
-    # 3개 시트 + Meta API 소재를 동시에 fetch(속도↑)
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    # 3개 시트 + Meta/TikTok API 소재를 동시에 fetch(속도↑)
+    with ThreadPoolExecutor(max_workers=5) as ex:
         f_gfa = ex.submit(_safe, gfa.load)
         f_meta = ex.submit(_safe, meta.load)
         f_tik = ex.submit(_safe, tiktok.load)
         f_api = ex.submit(_safe, MAPI.load_ads)
+        f_ttapi = ex.submit(_safe, TTAPI.load_ads)
         rows = f_gfa.result() + f_meta.result() + f_tik.result()
         idx = MAPI.index_by_name(f_api.result())
+        tt_idx = TTAPI.index_by_name(f_ttapi.result())
 
     # Meta 행에 API 소재(썸네일/영상/이미지/랜딩/상태) 매칭 — 소재명 또는 UTM 기준
     if idx:
@@ -39,13 +42,55 @@ def load_all() -> list[dict]:
             for key in (r.get("utm_value"), r.get("creative_name")):
                 a = idx.get((key or "").strip().lower())
                 if a:
-                    r["thumbnail_url"] = a.get("thumbnail_url") or ""
+                    r["thumbnail_url"] = a.get("thumbnail_url") or ""   # fbcdn(로컬 폴백)
+                    r["thumb_local"] = a.get("thumb_local") or ""       # 영구화 로컬경로(클라우드)
                     r["video_id"] = a.get("video_id") or ""
                     r["landing"] = a.get("landing") or ""
                     r["media_type"] = "video" if a.get("video_id") else "image"
                     r["meta_status"] = a.get("status") or ""
                     break
+
+    # TikTok 행에 소재 매칭 — 우선순위: (video_id/ad_id) > UTM > 광고명(소재) > 캠페인.
+    # 매칭되면 썸네일·영상·조회/완료율/시청시간/인게이지먼트 지표를 행에 결합.
+    if tt_idx:
+        miss = 0
+        for r in rows:
+            if r.get("platform") != "TikTok":
+                continue
+            matched = None
+            for key in (r.get("utm_value"), r.get("creative_name"), r.get("campaign_name")):
+                a = tt_idx.get((key or "").strip().lower())
+                if a:
+                    matched = a
+                    break
+            if matched:
+                r["thumbnail_url"] = matched.get("thumbnail_url") or ""
+                r["thumb_local"] = matched.get("thumb_local") or ""
+                r["video_url"] = matched.get("video_url") or ""
+                r["video_id"] = matched.get("video_id") or ""
+                r["tt_metrics"] = matched.get("metrics") or {}
+                r["media_type"] = "video"
+            else:
+                miss += 1
+                print(f"[tiktok-match-fail] creative={r.get('creative_name')!r} "
+                      f"utm={r.get('utm_value')!r} campaign={r.get('campaign_name')!r}")
+        if miss:
+            print(f"[tiktok-match] TikTok 소재 매칭 실패 {miss}건 (위 로그 참고)")
     return rows
+
+
+def benchmarks() -> dict:
+    """매체별 대시보드 요약행(전체/평균 기준값) → {platform: {ctr,cpc,cpm,roas,...}}.
+    개별 소재가 아니라 시트 상단 요약 행이라 평균 비교 기준으로만 사용."""
+    out: dict = {}
+    import repurely.meta_sheet as meta
+    try:
+        b = meta.load_benchmark()
+        if b:
+            out["Meta"] = b
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 def averages(rows: list[dict]) -> dict:

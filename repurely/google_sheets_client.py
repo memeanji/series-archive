@@ -76,6 +76,43 @@ def fetch_rows(sheet_id: str, gid: str) -> list[dict]:
     return out
 
 
+def fetch_benchmark(sheet_id: str, gid: str, mapping: dict) -> dict | None:
+    """헤더 바로 위의 '전체 요약/평균' 행(예: row0 합계)을 mapping으로 파싱한 기준 지표.
+    개별 소재가 아니라 대시보드 상단 요약 행이므로 평균 비교 기준으로만 쓴다. 없으면 None."""
+    raw = fetch_raw(sheet_id, gid)
+    if not raw:
+        return None
+    hidx = 0
+    for i, row in enumerate(raw[:6]):
+        joined = "".join(c or "" for c in row)
+        if sum(1 for t in _HEADER_TOKENS if t in joined) >= 2:
+            hidx = i
+            break
+    if hidx == 0:
+        return None                       # 헤더 위에 요약행이 없음
+    headers = [(h or "").strip() for h in raw[hidx]]
+    summ = raw[hidx - 1]                  # 헤더 바로 위 = 요약/합계 행
+    row = {headers[j]: (summ[j] if j < len(summ) else "") for j in range(len(headers))}
+
+    def g(field):
+        src = mapping.get(field)
+        if isinstance(src, (list, tuple)):
+            return _pick(row, *src)
+        return row.get(src, "") if src else ""
+
+    spend = to_num(g("spend")); revenue = to_num(g("revenue"))
+    impressions = to_num(g("impressions")); clicks = to_num(g("clicks"))
+    ctr = to_num(g("ctr")); cpc = to_num(g("cpc")); cpm = to_num(g("cpm")); roas = to_num(g("roas"))
+    if not roas and spend and revenue:    # 요약행에 ROAS 없으면 전체 매출/광고비로 보강
+        roas = round(revenue / spend * 100, 1)
+    if not (ctr or cpc or cpm or roas):
+        return None
+    return {"ctr": ctr, "cpc": cpc, "cpm": cpm, "roas": roas,
+            "spend": spend, "revenue": revenue,
+            "conversions": to_num(g("conversions")),
+            "impressions": impressions, "clicks": clicks}
+
+
 def to_num(v) -> float:
     """쉼표·원·%·공백 제거 후 숫자형. 빈값/오류는 0.0."""
     if v is None:
