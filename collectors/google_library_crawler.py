@@ -59,7 +59,9 @@ def _norm(s: str) -> str:
 
 
 def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 30,
-                 headless: bool = True, shot: bool = False) -> tuple[list[dict], dict]:
+                 headless: bool = True, shot: bool = False,
+                 advertiser_id: str = "") -> tuple[list[dict], dict]:
+    """advertiser_id를 주면 검색/자동완성 대신 광고주 페이지로 직접 진입해 전체 광고를 수집."""
     from playwright.sync_api import sync_playwright
 
     log = {"found": 0, "kept": 0, "excluded_search_text": 0,
@@ -74,17 +76,27 @@ def search_brand(brand: str, region: str = "KR", scrolls: int = 5, limit: int = 
                              viewport={"width": 1440, "height": 1100}, device_scale_factor=2)
         page = ctx.new_page()
         try:
-            page.goto(f"https://adstransparency.google.com/?region={region}",
-                      wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(4000)
-            for sel in ('input[aria-label]', 'input[type="text"]', 'input'):
-                el = page.query_selector(sel)
-                if el and el.is_visible():
-                    el.click(); el.fill(brand); page.wait_for_timeout(2500)
-                    opt = page.query_selector('[role="option"]')
-                    opt.click() if opt else page.keyboard.press("Enter")
-                    page.wait_for_timeout(5000)
-                    break
+            if advertiser_id:
+                # advertiser ID로 광고주 페이지 직접 진입(검색/자동완성 우회)
+                page.goto(f"https://adstransparency.google.com/advertiser/{advertiser_id}?region={region}",
+                          wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(4000)
+                try:
+                    page.wait_for_selector('a[href*="/creative/"]', timeout=20000)
+                except Exception:  # noqa: BLE001
+                    pass
+            else:
+                page.goto(f"https://adstransparency.google.com/?region={region}",
+                          wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(4000)
+                for sel in ('input[aria-label]', 'input[type="text"]', 'input'):
+                    el = page.query_selector(sel)
+                    if el and el.is_visible():
+                        el.click(); el.fill(brand); page.wait_for_timeout(2500)
+                        opt = page.query_selector('[role="option"]')
+                        opt.click() if opt else page.keyboard.press("Enter")
+                        page.wait_for_timeout(5000)
+                        break
             for _ in range(scrolls):
                 page.mouse.wheel(0, 6000)
                 page.wait_for_timeout(2000)
