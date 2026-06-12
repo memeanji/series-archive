@@ -1438,16 +1438,40 @@ def _repurely_detail(r: dict) -> None:
         st.caption("‘AI 분석 실행’을 누르면 종합 진단·성과 해석·후킹·스크립트·강약점·피로도·"
                    "개선 카피·다음 테스트까지 리포트로 보여줍니다.")
 
-    # ── 분석 메모(전체 폭) ──
+    # ── 분석 메모 + 이미지 첨부(전체 폭) — DB 영구 저장(세션 휘발 방지) ──
     st.divider()
     st.markdown("##### 📝 분석 메모")
     mkey = f"repmemo_{plat}_{r.get('creative_name','')}"
+    _memos = _rep_memos_cached()
+    _cur = _memos.get(mkey) or {"memo": "", "images": []}
     st.text_area("메모", key=mkey, label_visibility="collapsed",
                  placeholder="이 소재의 후킹/카피/구성 포인트, 운영 판단을 기록하세요",
-                 value=st.session_state.get("_repmemo", {}).get(mkey, ""))
+                 value=_cur.get("memo", ""))
+    _imgs = _cur.get("images", [])
+    if _imgs:
+        from pathlib import Path as _P
+        _ic = st.columns(min(len(_imgs), 4))
+        for _j, _ip in enumerate(_imgs):
+            if _P(_ip).exists():
+                _ic[_j % 4].image(_ip, use_container_width=True)
+    _up = st.file_uploader("🖼️ 이미지 첨부(참고 캡처·레퍼런스 등)",
+                           type=["png", "jpg", "jpeg", "webp"],
+                           accept_multiple_files=True, key=f"upimg_{mkey}")
     if st.button("💾 메모 저장", key=f"repsave_{mkey}"):
-        st.session_state.setdefault("_repmemo", {})[mkey] = st.session_state[mkey]
-        st.toast("메모 저장됨(세션)")
+        import database as _DB, hashlib
+        from pathlib import Path as _P
+        _saved = list(_imgs)
+        if _up:
+            _d = _P("static/memo_images"); _d.mkdir(parents=True, exist_ok=True)
+            _safe = hashlib.md5(mkey.encode("utf-8")).hexdigest()[:10]
+            for _k, _f in enumerate(_up):
+                _ext = (_f.name.rsplit(".", 1)[-1] if "." in _f.name else "png").lower()
+                _p = _d / f"{_safe}_{len(_saved) + _k}.{_ext}"
+                _p.write_bytes(_f.getbuffer())
+                _saved.append(str(_p).replace("\\", "/"))
+        _DB.save_repurely_memo(mkey, st.session_state.get(mkey, ""), _saved)
+        _rep_memos_cached.clear()
+        st.toast("메모·이미지 저장됨")
 
 
 def _repurely_card(r: dict, key: str) -> None:
@@ -1501,6 +1525,12 @@ def _repurely_card(r: dict, key: str) -> None:
 def _rep_daily_cached():
     import repurely.insights as RI
     return RI.daily_by_segment(21)   # 직전 완결 주 + 그 전 주(전주 대비)까지 커버
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _rep_memos_cached():
+    import database as _DB
+    return _DB.get_repurely_memos()
 
 
 def _render_kpi(k: dict) -> None:

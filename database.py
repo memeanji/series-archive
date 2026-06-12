@@ -1466,3 +1466,37 @@ def get_repurely_bookmarks() -> set:
     rows = conn.execute("SELECT key FROM repurely_bookmarks").fetchall()
     conn.close()
     return {r[0] for r in rows}
+
+
+def _ensure_repurely_memo_table(conn) -> None:
+    conn.execute("CREATE TABLE IF NOT EXISTS repurely_memos("
+                 "key TEXT PRIMARY KEY, memo TEXT, images TEXT, updated_at TEXT)")
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(repurely_memos)").fetchall()]
+    if "images" not in cols:  # 기존 테이블 마이그레이션
+        conn.execute("ALTER TABLE repurely_memos ADD COLUMN images TEXT")
+
+
+def save_repurely_memo(key: str, memo: str, images: Optional[list] = None) -> None:
+    """repurely 소재 분석 메모+첨부이미지를 영구 저장(세션 휘발 방지)."""
+    conn = get_conn()
+    _ensure_repurely_memo_table(conn)
+    conn.execute("INSERT OR REPLACE INTO repurely_memos(key, memo, images, updated_at) VALUES(?,?,?,?)",
+                 (key, memo, json.dumps(images or [], ensure_ascii=False), _now()))
+    conn.commit()
+    conn.close()
+
+
+def get_repurely_memos() -> dict:
+    """{key: {"memo": str, "images": [경로...]}}"""
+    conn = get_conn()
+    _ensure_repurely_memo_table(conn)
+    rows = conn.execute("SELECT key, memo, images FROM repurely_memos").fetchall()
+    conn.close()
+    out = {}
+    for r in rows:
+        try:
+            imgs = json.loads(r[2]) if r[2] else []
+        except Exception:  # noqa: BLE001
+            imgs = []
+        out[r[0]] = {"memo": r[1] or "", "images": imgs}
+    return out
