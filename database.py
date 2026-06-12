@@ -155,6 +155,7 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("yt_views", "INTEGER DEFAULT 0"), ("yt_likes", "INTEGER DEFAULT 0"),
                  ("yt_comments", "INTEGER DEFAULT 0"), ("detail_status", "TEXT DEFAULT ''"),
                  ("yt_embeddable", "INTEGER"),   # 1=임베드가능 0=제한 NULL=미확인(지연조회)
+                 ("is_excluded", "INTEGER DEFAULT 0"),   # 사용자가 '제외'한 잘못 수집 광고
                  ("fatigue_status", "TEXT")):    # 성장중/안정/정체/피로도의심/회복중/종료(일별잡이 계산)
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
@@ -306,6 +307,7 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
         w.append("a.ad_format NOT IN ('search_text','unknown')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")
         w.append("COALESCE(a.detail_status,'')<>'unavailable'")   # 기본 목록에선 제외
+    w.append("COALESCE(a.is_excluded,0)=0")   # '제외'한 광고는 모든 탭에서 숨김
     if f.get("brand") and f["brand"] != "전체":
         w.append("a.brand_name=?"); p.append(f["brand"])
     if f.get("platforms"):
@@ -1191,6 +1193,15 @@ def update_bookmark(ad_id: str, value: bool, username: str = "") -> None:
         BS.add(ad_id, username) if value else BS.remove(ad_id)
     except Exception:  # noqa: BLE001
         pass
+
+
+def exclude_ad(ad_id: str, value: bool = True) -> None:
+    """잘못 수집된 광고를 archive 목록에서 숨김(모든 탭). 되돌리려면 value=False."""
+    conn = get_conn()
+    conn.execute("UPDATE ad_library_ads SET is_excluded=?, updated_at=? WHERE id=?",
+                 (1 if value else 0, _now(), ad_id))
+    conn.commit()
+    conn.close()
 
 
 def restore_bookmarks_from_store() -> int:

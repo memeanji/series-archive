@@ -645,7 +645,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
             f"<div class='sa-meta'><span>{media_chip} {plat_badge}</span>{status_html}</div>"
             f"<div style='height:16px'></div>",
             unsafe_allow_html=True)
-        b = st.columns([3, 1])
+        b = st.columns([3, 1, 1])
         if b[0].button("상세 보기", key=f"open_{aid}_{idx}", use_container_width=True):
             full = database.get_ad_full(aid)   # 상세 클릭 시에만 1건 전체 로드
             if full:
@@ -655,6 +655,10 @@ def render_ad_card(ad: dict, idx: int) -> None:
                        use_container_width=True, type=("primary" if marked else "secondary"),
                        help="북마크 해제" if marked else "북마크 저장"):
             database.update_bookmark(aid, not marked, st.session_state.get('username',''))
+            _reload()
+        if b[2].button("🚫", key=f"exc_{aid}_{idx}", use_container_width=True,
+                       help="잘못 수집된 광고 — archive에서 제외(숨김)"):
+            database.exclude_ad(aid, True)
             _reload()
         if st.session_state.get("f_devhidden"):
             st.caption(f"🔧 id={aid} · {plat} · src={th['source']} · "
@@ -1486,17 +1490,8 @@ def _repurely_card(r: dict, key: str) -> None:
             f"<div style='font-size:12px;color:{S.TEXT};margin-top:8px'>오늘 광고비 "
             f"<b>{_krw(r.get('spend'))}</b> · 매출 <b>{_krw(r.get('revenue'))}</b> · "
             f"ROAS <b style='color:#10B981'>{r.get('roas',0):.0f}%</b> · 구매 {int(r.get('conversions',0))}</div>"
-            f"<div style='font-size:12px;color:{S.SUB};margin-top:3px'>7일 광고비 "
-            f"<b style='color:{S.TEXT}'>{_krw(r.get('week_spend'))}</b> · 매출 "
-            f"<b style='color:{S.TEXT}'>{_krw(r.get('week_revenue'))}</b> · ROAS "
-            f"<b style='color:{S.TEXT}'>{r.get('week_roas',0):.0f}%</b> · 구매 {int(r.get('week_conversions',0))}</div>"
-            f"<div style='font-size:11px;color:{S.SUB};margin-top:3px'>CTR {r.get('ctr',0)}% · "
-            f"CPC {int(r.get('cpc',0)):,}원 · CPM {int(r.get('cpm',0)):,}원</div>"
-            f"<div style='font-size:10px;color:{S.SUB};margin-top:4px;opacity:.8'>🕐 업데이트 "
+            f"<div style='font-size:10px;color:{S.SUB};margin-top:6px;opacity:.8'>🕐 업데이트 "
             f"{str(r.get('collected_at') or '-')[:16]}</div>"
-            f"<div style='margin-top:9px;display:flex;gap:6px;align-items:center'>"
-            f"{_rep_win_badge(r.get('winning_label','-'))}"
-            f"<span style='font-size:11px;color:{S.SUB}'>{status}</span></div>"
             f"<div style='height:9px'></div>", unsafe_allow_html=True)
         if st.button("상세 보기", key=f"repbtn_{key}", use_container_width=True):
             _repurely_detail(r)
