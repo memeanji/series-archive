@@ -174,13 +174,16 @@ def daily_by_segment(days: int = 14) -> dict:
 
 
 def kpi_from_daily_seg(seg: dict, platform: str, landing, view_rows: list) -> dict:
-    """선택 매체·랜딩 기준 요약 KPI: 분류 개수(view) + 오늘 + 이번주(월~오늘) + 전일·전주(월~일) 대비 ROAS."""
+    """선택 매체·랜딩 기준 요약 KPI: 분류 개수(view) + 오늘 + 직전 완결 주(월~일) + 전일·전주 대비 ROAS.
+    주간은 '진행중 이번 주'가 아니라 데이터가 다 찬 '직전 완결 주(지난 월~일)'를 기준으로 한다."""
     import datetime
     kst = datetime.timezone(datetime.timedelta(hours=9))
     today = datetime.datetime.now(kst).date()
-    monday = today - datetime.timedelta(days=today.weekday())        # 이번 주 월요일(weekday: 월=0)
-    last_monday = monday - datetime.timedelta(days=7)
-    last_sunday = monday - datetime.timedelta(days=1)
+    this_monday = today - datetime.timedelta(days=today.weekday())    # 이번 주 월요일(진행중 → 미집계)
+    week_mon = this_monday - datetime.timedelta(days=7)               # 직전 '완결' 주(월)
+    week_sun = this_monday - datetime.timedelta(days=1)               # 직전 완결 주(일)
+    pweek_mon = week_mon - datetime.timedelta(days=7)                 # 그 전 주(월)
+    pweek_sun = week_mon - datetime.timedelta(days=1)                 # 그 전 주(일)
 
     def _ds(start, end):                       # start~end 날짜를 YYMMDD 리스트로
         out = []; d = start
@@ -200,8 +203,10 @@ def kpi_from_daily_seg(seg: dict, platform: str, landing, view_rows: list) -> di
 
     t_s, t_r = period([today.strftime("%y%m%d")])
     y_s, y_r = period([(today - datetime.timedelta(days=1)).strftime("%y%m%d")])
-    w_s, w_r = period(_ds(monday, today))               # 이번 주(월~오늘 누적)
-    pw_s, pw_r = period(_ds(last_monday, last_sunday))   # 지난 주(월~일)
+    w_s, w_r = period(_ds(week_mon, week_sun))           # 직전 완결 주(월~일)
+    pw_s, pw_r = period(_ds(pweek_mon, pweek_sun))       # 그 전 주(월~일)
+    week_label = f"{week_mon.strftime('%m/%d')}~{week_sun.strftime('%m/%d')}"
+    pweek_label = f"{pweek_mon.strftime('%m/%d')}~{pweek_sun.strftime('%m/%d')}"
 
     def chg(cur, prev):
         return round((cur - prev) / prev * 100, 1) if prev else None
@@ -212,6 +217,7 @@ def kpi_from_daily_seg(seg: dict, platform: str, landing, view_rows: list) -> di
         "cnt_sustained": sum(1 for r in view_rows if r.get("is_sustained")),
         "today_spend": t_s, "today_revenue": t_r, "today_roas": roas(t_s, t_r),
         "week_spend": w_s, "week_revenue": w_r, "week_roas": roas(w_s, w_r),
+        "week_label": week_label, "pweek_label": pweek_label,
         "roas_vs_yday": chg(roas(t_s, t_r), roas(y_s, y_r)),
         "roas_vs_pweek": chg(roas(w_s, w_r), roas(pw_s, pw_r)),
     }

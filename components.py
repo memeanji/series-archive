@@ -1500,7 +1500,7 @@ def _repurely_card(r: dict, key: str) -> None:
 @st.cache_resource(ttl=3600, show_spinner=False)
 def _rep_daily_cached():
     import repurely.insights as RI
-    return RI.daily_by_segment(14)
+    return RI.daily_by_segment(21)   # 직전 완결 주 + 그 전 주(전주 대비)까지 커버
 
 
 def _render_kpi(k: dict) -> None:
@@ -1517,9 +1517,9 @@ def _render_kpi(k: dict) -> None:
         ("오늘 광고비", _krw(k['today_spend']), S.TEXT),
         ("오늘 매출", _krw(k['today_revenue']), S.TEXT),
         ("오늘 ROAS", f"{k['today_roas']:.0f}%", "#10B981"),
-        ("이번주 광고비", _krw(k['week_spend']), S.TEXT),
-        ("이번주 매출", _krw(k['week_revenue']), S.TEXT),
-        ("이번주 ROAS", f"{k['week_roas']:.0f}%", "#10B981"),
+        ("주간 광고비", _krw(k['week_spend']), S.TEXT),
+        ("주간 매출", _krw(k['week_revenue']), S.TEXT),
+        ("주간 ROAS", f"{k['week_roas']:.0f}%", "#10B981"),
     ]
     html = "<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:2px 0 6px'>"
     for lab, val, col in cells:
@@ -1531,7 +1531,9 @@ def _render_kpi(k: dict) -> None:
     st.markdown(html, unsafe_allow_html=True)
     st.markdown(f"<div style='font-size:12.5px;color:{S.SUB};margin:0 0 12px'>"
                 f"전일 대비 ROAS {_chg(k['roas_vs_yday'])} &nbsp;·&nbsp; "
-                f"전주 대비 ROAS {_chg(k['roas_vs_pweek'])}</div>", unsafe_allow_html=True)
+                f"전주 대비 ROAS {_chg(k['roas_vs_pweek'])}<br>"
+                f"<span style='font-size:11.5px'>주간 = {k.get('week_label','')} (지난 월~일 완결 주) · 전주 = {k.get('pweek_label','')}</span>"
+                f"</div>", unsafe_allow_html=True)
 
 
 def render_repurely_insights(rows: list[dict]) -> None:
