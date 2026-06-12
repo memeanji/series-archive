@@ -422,8 +422,6 @@ def render_sidebar(counts: list, total: int) -> str:
     sb.markdown(f"<div class='sa-sb-head'>"
                 f"<div class='sa-logo'>Series Archive</div>"
                 f"<div class='sa-sub'>Ad Reference Library</div></div>", unsafe_allow_html=True)
-    sb.markdown(f"<div style='font-weight:800;color:{S.TEXT};font-size:15px;"
-                f"margin:0 0 .4rem'>브랜드</div>", unsafe_allow_html=True)
     render_add_brand()
     sb.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
     q = sb.text_input("브랜드 검색", placeholder="브랜드 검색", label_visibility="collapsed").strip().lower()
@@ -455,13 +453,9 @@ def render_sidebar(counts: list, total: int) -> str:
                 _select(b)
         sb.markdown(f"<hr style='margin:.5rem 0 .6rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
 
-    # ── 브랜드 목록: 🟢 라이브 점 + Ⓜ 메타 · Ⓖ 구글 광고수 ──
-    shown = [r for r in counts if not q or q in (r["name"] or "").lower()]
-    if not q:
-        shown = shown[:20]   # 검색 없을 땐 상위 20개만 렌더(성능)
-    for r in shown:
+    # ── 브랜드 목록(🟢 라이브 + Ⓜ 메타 · Ⓖ 구글 광고수) ──
+    def _brand_btn(r, container=sb):
         b = r["name"]
-        dot = "🟢" if r.get("live") else "⚪"
         m, g = r.get("meta", 0), r.get("google", 0)
         seg = []
         if m:
@@ -469,13 +463,38 @@ def render_sidebar(counts: list, total: int) -> str:
         if g:
             seg.append(f"Ⓖ {g}")
         cnt = "   ".join(seg)
+        dot = "🟢" if r.get("live") else "⚪"
         tip = (f"메타 광고 {m} · 구글 투명성센터 {g} · 소셜 승인 {r['approved']} "
                f"(검토필요 {r['needs']} · 제외 {r['rejected']})")
-        if sb.button(f"{dot} {b}   {cnt}", key=f"b_{b}", help=tip,
-                     type=("primary" if b == sel else "secondary")):
+        if container.button(f"{dot} {b}   {cnt}", key=f"b_{b}", help=tip,
+                            type=("primary" if b == sel else "secondary")):
             _select(b)
-    if not q and len(counts) > 20:
-        sb.caption(f"… 외 {len(counts) - 20}개 · 검색으로 찾기")
+
+    def _norm(s):
+        return (s or "").lower().replace(" ", "")
+
+    if q:
+        nq = _norm(q)
+        hit = [r for r in counts if nq in _norm(r["name"])]
+        for r in hit:
+            _brand_btn(r)
+        # 연관 브랜드: 검색어 앞 2글자/끝 2글자가 겹치는 느슨한 매칭
+        related = [r for r in counts if r not in hit and len(nq) >= 2
+                   and (nq[:2] in _norm(r["name"]) or _norm(r["name"])[:2] in nq)]
+        if related:
+            sb.markdown(f"<div style='font-size:11px;font-weight:700;color:{S.OFF_GRAY};"
+                        f"margin:.6rem 0 .2rem 2px'>🔗 연관 브랜드</div>", unsafe_allow_html=True)
+            for r in related[:8]:
+                _brand_btn(r)
+        if not hit and not related:
+            sb.caption("일치하는 브랜드가 없습니다.")
+    else:
+        for r in counts[:15]:
+            _brand_btn(r)
+        if len(counts) > 15:   # 나머지는 펼쳐서 전체 확인
+            _exp = sb.expander(f"📋 전체 브랜드 {len(counts)}개 보기")
+            for r in counts[15:]:
+                _brand_btn(r, _exp)
     return sel
 
 
@@ -902,28 +921,17 @@ def _render_video_script(ad: dict) -> None:
 
 
 def _render_trend_section(ad: dict, aid: str) -> None:
-    """조회수 추이 분석 — 피로도 상태 + 기간선택 + 누적/일별증가량/좋아요 차트."""
+    """조회수 추이 — 핵심 숫자 카드 + 일별 조회수 증가량 차트(크게)."""
     import services.trend as TR
     import pandas as _pd
     snaps = database.get_ad_snapshots(aid, days=120)
-    fat = TR.classify_fatigue(snaps, ad.get("status"))
-    st.markdown("<hr style='margin:30px 0 0;border:none;border-top:1px solid #E5E7EB'>",
+    st.markdown("<hr style='margin:30px 0 16px;border:none;border-top:1px solid #E5E7EB'>",
                 unsafe_allow_html=True)
-    # '데이터 부족'일 땐 상태 배지·사유 문구 숨김(헤더 + 안내만)
-    show_badge = fat["label"] != "데이터 부족"
-    badge = (f"<span style='background:{fat['color']}22;color:{fat['color']};"
-             f"border:1px solid {fat['color']}88;font-size:10px;font-weight:700;padding:1px 7px;"
-             f"border-radius:999px;margin-left:8px'>{fat['emoji']} {fat['label']}</span>"
-             if show_badge else "")
-    st.markdown(
-        f"<div style='margin:18px 0 4px'>"
-        f"<span style='font-size:12px;font-weight:700;color:#6B7280'>📈 조회수 추이 · 소재 상태</span>"
-        f"{badge}</div>", unsafe_allow_html=True)
-    if show_badge:
-        st.caption(fat["reason"])
+    st.markdown("<div style='font-size:14px;font-weight:800;color:#1E293B;margin-bottom:8px'>"
+                "📈 조회수 추이</div>", unsafe_allow_html=True)
     if len(snaps) < 2:
-        st.markdown(f"<div style='font-size:11.5px;color:#94A3B8;line-height:1.5;margin-top:4px;"
-                    f"padding:9px 11px;background:{S.BG};border:1px solid {S.BORDER};border-radius:9px'>"
+        st.markdown(f"<div style='font-size:12px;color:#94A3B8;line-height:1.5;"
+                    f"padding:11px 13px;background:{S.BG};border:1px solid {S.BORDER};border-radius:10px'>"
                     f"{'오늘치(1일) 수집됨 · 내일 한 번 더 쌓이면 추이가 표시돼요.' if snaps else '아직 추이 데이터가 없습니다.'}"
                     f"</div>", unsafe_allow_html=True)
         return
@@ -932,18 +940,18 @@ def _render_trend_section(ad: dict, aid: str) -> None:
     dmap = {"최근 7일": 7, "최근 14일": 14, "최근 30일": 30, "전체": 120}
     rows = TR.with_deltas(snaps)[-dmap[period]:]
     df = _pd.DataFrame(rows).rename(columns={"snapshot_date": "날짜"}).set_index("날짜")
-    st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700;margin:8px 0 1px'>"
-                "누적 조회수</div>", unsafe_allow_html=True)
-    st.line_chart(df[["views"]].rename(columns={"views": "조회수"}), height=130)
-    st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700;margin:6px 0 1px'>"
+    # 핵심 숫자 카드
+    _total = int(df["views"].iloc[-1]) if len(df) else 0
+    _recent = int(df["daily_view_delta"].iloc[-1]) if len(df) else 0
+    _avg = int(df["daily_view_delta"].clip(lower=0).mean()) if len(df) else 0
+    mc = st.columns(3)
+    mc[0].metric("누적 조회수", _kabbr(_total))
+    mc[1].metric("최근 일 증가", f"+{_kabbr(_recent)}")
+    mc[2].metric("일 평균 증가", f"+{_kabbr(_avg)}")
+    st.markdown("<div style='font-size:12px;color:#64748B;font-weight:700;margin:10px 0 2px'>"
                 "일별 조회수 증가량</div>", unsafe_allow_html=True)
-    st.bar_chart(df[["daily_view_delta"]].rename(columns={"daily_view_delta": "증가량"}),
-                 height=130, color="#03C75A")
-    if df["likes"].max() > 0:
-        st.markdown("<div style='font-size:11px;color:#64748B;font-weight:700;margin:6px 0 1px'>"
-                    "일별 좋아요 증가량</div>", unsafe_allow_html=True)
-        st.bar_chart(df[["daily_like_delta"]].rename(columns={"daily_like_delta": "좋아요"}),
-                     height=110, color="#EF4444")
+    st.bar_chart(df[["daily_view_delta"]].rename(columns={"daily_view_delta": "조회수"}),
+                 height=240, color="#03C75A")
 
 
 @st.dialog("광고 상세", width="large")
@@ -1239,6 +1247,12 @@ def _repurely_detail(r: dict) -> None:
         f"<span style='font-size:13px;font-weight:600;color:{S.SUB};line-height:1.4'>"
         f"{plat} · 내부 소재 성과</span></div>", unsafe_allow_html=True)
 
+    _bmkey = f"{plat}::{r.get('creative_name')}"
+    _isbm = _bmkey in database.get_repurely_bookmarks()
+    if st.button("⭐ 북마크됨 — 해제" if _isbm else "☆ 북마크 추가", key=f"repbm_{_bmkey}"):
+        database.toggle_repurely_bookmark(_bmkey, not _isbm)
+        st.rerun()
+
     left, right = st.columns([2, 3], gap="large")
     # ── 좌: 소재 영상(인앱 재생)/이미지 + 원본 링크 ──
     with left:
@@ -1466,20 +1480,63 @@ def _repurely_card(r: dict, key: str) -> None:
             f"padding:2px 8px;border-radius:6px'>{plat}</span></span></div>"
             f"<div style='font-size:13.5px;font-weight:700;color:{S.TEXT};margin:7px 0 1px;"
             f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"
-            f"{_h.escape(r.get('creative_name') or '-')}</div>"
+            f"{'⭐ ' if r.get('is_bm') else ''}{_h.escape(r.get('creative_name') or '-')}</div>"
             f"<div style='font-size:11px;color:{S.SUB};white-space:nowrap;overflow:hidden;"
             f"text-overflow:ellipsis'>{_h.escape(r.get('campaign_name') or '')}</div>"
-            f"<div style='font-size:12.5px;color:{S.TEXT};margin-top:8px'>광고비 "
-            f"<b>{_krw(r.get('spend'))}</b> · 구매 <b>{int(r.get('conversions',0))}건</b> · "
-            f"ROAS <b>{r.get('roas',0):.0f}</b></div>"
-            f"<div style='font-size:11px;color:{S.SUB};margin-top:2px'>CTR {r.get('ctr',0)}% · "
+            f"<div style='font-size:12px;color:{S.TEXT};margin-top:8px'>오늘 광고비 "
+            f"<b>{_krw(r.get('spend'))}</b> · 매출 <b>{_krw(r.get('revenue'))}</b> · "
+            f"ROAS <b style='color:#10B981'>{r.get('roas',0):.0f}%</b> · 구매 {int(r.get('conversions',0))}</div>"
+            f"<div style='font-size:12px;color:{S.SUB};margin-top:3px'>7일 광고비 "
+            f"<b style='color:{S.TEXT}'>{_krw(r.get('week_spend'))}</b> · 매출 "
+            f"<b style='color:{S.TEXT}'>{_krw(r.get('week_revenue'))}</b> · ROAS "
+            f"<b style='color:{S.TEXT}'>{r.get('week_roas',0):.0f}%</b> · 구매 {int(r.get('week_conversions',0))}</div>"
+            f"<div style='font-size:11px;color:{S.SUB};margin-top:3px'>CTR {r.get('ctr',0)}% · "
             f"CPC {int(r.get('cpc',0)):,}원 · CPM {int(r.get('cpm',0)):,}원</div>"
+            f"<div style='font-size:10px;color:{S.SUB};margin-top:4px;opacity:.8'>🕐 업데이트 "
+            f"{str(r.get('collected_at') or '-')[:16]}</div>"
             f"<div style='margin-top:9px;display:flex;gap:6px;align-items:center'>"
             f"{_rep_win_badge(r.get('winning_label','-'))}"
             f"<span style='font-size:11px;color:{S.SUB}'>{status}</span></div>"
             f"<div style='height:9px'></div>", unsafe_allow_html=True)
         if st.button("상세 보기", key=f"repbtn_{key}", use_container_width=True):
             _repurely_detail(r)
+
+
+@st.cache_resource(ttl=3600, show_spinner=False)
+def _rep_daily_cached():
+    import repurely.insights as RI
+    return RI.daily_by_segment(14)
+
+
+def _render_kpi(k: dict) -> None:
+    """상단 요약 KPI — 분류 개수 + 오늘/7일 전체 + 전일·전주 대비 ROAS."""
+    def _chg(v):
+        if v is None:
+            return f"<span style='color:{S.SUB}'>–</span>"
+        c = "#10B981" if v >= 0 else "#EF4444"
+        return f"<span style='color:{c};font-weight:700'>{'▲' if v >= 0 else '▼'} {abs(v)}%</span>"
+    cells = [
+        ("🔥 금일 효율", f"{k['cnt_today']}개", S.PRIMARY),
+        ("📈 주간 효율", f"{k['cnt_week']}개", "#0EA5E9"),
+        ("⭐ 지속 효율", f"{k['cnt_sustained']}개", "#10B981"),
+        ("오늘 광고비", _krw(k['today_spend']), S.TEXT),
+        ("오늘 매출", _krw(k['today_revenue']), S.TEXT),
+        ("오늘 ROAS", f"{k['today_roas']:.0f}%", "#10B981"),
+        ("7일 광고비", _krw(k['week_spend']), S.TEXT),
+        ("7일 매출", _krw(k['week_revenue']), S.TEXT),
+        ("7일 ROAS", f"{k['week_roas']:.0f}%", "#10B981"),
+    ]
+    html = "<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:2px 0 6px'>"
+    for lab, val, col in cells:
+        html += (f"<div style='background:#F8FFFB;border:1px solid {S.BORDER};border-radius:12px;"
+                 f"padding:12px 8px;text-align:center'>"
+                 f"<div style='font-size:11px;color:{S.SUB};font-weight:600;margin-bottom:3px'>{lab}</div>"
+                 f"<div style='font-size:18px;font-weight:900;color:{col};line-height:1.2'>{val}</div></div>")
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:12.5px;color:{S.SUB};margin:0 0 12px'>"
+                f"전일 대비 ROAS {_chg(k['roas_vs_yday'])} &nbsp;·&nbsp; "
+                f"전주 대비 ROAS {_chg(k['roas_vs_pweek'])}</div>", unsafe_allow_html=True)
 
 
 def render_repurely_insights(rows: list[dict]) -> None:
@@ -1500,6 +1557,9 @@ def render_repurely_insights(rows: list[dict]) -> None:
                     f"확인해주세요.</div></div>", unsafe_allow_html=True)
         return
     rows, av = RI.enrich(rows)
+    _bms = database.get_repurely_bookmarks()
+    for r in rows:
+        r["is_bm"] = f"{r.get('platform')}::{r.get('creative_name')}" in _bms
     st.session_state["_rep_rows_all"] = rows   # AI 분석 위너 비교용
     st.session_state["_rep_av"] = av
     if "_rep_benchmarks" not in st.session_state:   # 매체별 시트 요약행(평균 기준값)
@@ -1541,38 +1601,28 @@ def render_repurely_insights(rows: list[dict]) -> None:
         sel_l = st.segmented_control("랜딩 구분", landings, default=landings[0],
                                      key=f"rep_landing_{sel_p}",
                                      label_visibility="collapsed") or landings[0]
+    only_bm = st.checkbox("⭐ 북마크한 소재만 보기", key="rep_only_bm")
     view = [r for r in rows if r.get("platform") == sel_p
-            and (not sel_l or r.get("landing_type") == sel_l)]
+            and (not sel_l or r.get("landing_type") == sel_l)
+            and (not only_bm or r.get("is_bm"))]
 
-    # ── 섹션별 소재 (선택 매체) ──
-    def _ended(r):   # 메타에서 이미 꺼진 소재(effective_status가 ACTIVE 계열이 아님)
-        ms = (r.get("meta_status") or "").upper()
-        return bool(ms) and not ms.startswith("ACTIVE")
-    _is_win = lambda r: r["winning_label"] in ("위닝 소재", "위닝 후보")
-    _base = [
-        ("🏆 위닝 소재", [r for r in view if r["winning_label"] == "위닝 소재"]),
-        ("✨ 위닝 후보", [r for r in view if r["winning_label"] == "위닝 후보"]),
-        # OFF 후보·피로도는 '운영 중'인 소재만 — 이미 꺼진 건 아래 '종료됨'으로
-        ("🔴 OFF 후보", [r for r in view if r.get("is_off") and not _ended(r)]),
-        ("⚠️ 피로도 의심 소재", [r for r in view if r.get("is_fatigue") and not _ended(r)]),
+    # ── 상단 요약 KPI(접기/펴기 · 선택 매체·랜딩 기준) ──
+    with st.expander(f"📊 {sel_p}{' · ' + sel_l if sel_l else ''} 요약 KPI", expanded=False):
+        try:
+            import repurely.insights as _RI
+            _render_kpi(_RI.kpi_from_daily_seg(_rep_daily_cached(), sel_p, sel_l, view))
+        except Exception:  # noqa: BLE001
+            st.caption("요약 데이터를 불러오는 중…")
+
+    # ── 효율 3분류: 금일 / 주간 / 지속 (효율 좋은 소재만 — 기타/종료 섹션 제거) ──
+    sections = [
+        ("🔥 금일 효율 좋은 소재", [r for r in view if r.get("is_today_eff")]),
+        ("📈 주간 효율 좋은 소재", [r for r in view if r.get("is_week_eff")]),
+        ("⭐ 지속 효율 소재", [r for r in view if r.get("is_sustained")]),
     ]
-    _shown = {id(r) for _, items in _base for r in items}
-    _ended_items = [r for r in view if _ended(r) and not _is_win(r)]
-    _ended_ids = {id(r) for r in _ended_items}
-    # 어느 섹션에도 안 든 '운영 중' 소재(애매한 신규/모니터링) → 누락 방지 fallback
-    _leftover = [r for r in view if id(r) not in _shown and id(r) not in _ended_ids]
-    sections = _base + [
-        ("📋 일반 운영 소재", _leftover),
-        ("⛔ 종료됨", _ended_items),
-    ]
-    # 섹션 분류 로그(콘솔) — 어떤 소재가 어디로 분류됐는지
-    import sys as _sys
-    for _t, _items in sections:
-        for _r in _items:
-            print(f"[insight-section] {_r.get('creative_name')} ({_r.get('landing_type','')}) "
-                  f"→ {_t} (ROAS {_r.get('roas',0)})", file=_sys.stderr)
     for title, items in sections:
-        items = sorted(items, key=lambda x: -x.get("spend", 0))
+        items = sorted(items, key=lambda x: -(x.get("roas", 0) or 0))   # 오늘 ROAS 내림차순
+
         st.markdown(f"<div style='font-size:15px;font-weight:800;color:{S.TEXT};margin:1.1rem 0 .5rem'>"
                     f"{title} <span style='color:{S.SUB};font-size:13px;font-weight:600'>"
                     f"{len(items)}개</span></div>", unsafe_allow_html=True)
@@ -1600,11 +1650,9 @@ def render_brand_trend_summary(brand: str) -> None:
     """브랜드 단위 추이 요약: 총 조회수 · 운영중 · 피로도 의심 · 성장 중 + 일별 총 조회수."""
     s = database.get_brand_trend_summary(brand)
     with st.expander(f"📊 {brand} 추이 요약", expanded=False):
-        m = st.columns(4)
+        m = st.columns(2)
         m[0].metric("브랜드 총 조회수", _kabbr(s["total_views"]) if s["total_views"] else "-")
         m[1].metric("운영 중 광고", f"{s['live']}개")
-        m[2].metric("⚠️ 피로도 의심", f"{s['fatigue']}개")
-        m[3].metric("📈 성장 중", f"{s['growing']}개")
         if len(s["daily"]) >= 2:
             import pandas as _pd
             df = (_pd.DataFrame(s["daily"]).rename(columns={"snapshot_date": "날짜", "views": "총 조회수"})

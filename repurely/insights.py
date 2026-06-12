@@ -76,6 +76,20 @@ def load_all() -> list[dict]:
                       f"utm={r.get('utm_value')!r} campaign={r.get('campaign_name')!r}")
         if miss:
             print(f"[tiktok-match] TikTok 소재 매칭 실패 {miss}건 (위 로그 참고)")
+
+    # 주간(7일) 집계 결합 — 각 소재에 week_* 지표(금일/주간/지속 분류용)
+    try:
+        wk = weekly_metrics(7)
+        for r in rows:
+            key = (r.get("platform"),
+                   (r.get("creative_name") or r.get("utm_value") or "").strip().lower())
+            w = wk.get(key) or {}
+            r["week_spend"] = w.get("spend", 0.0)
+            r["week_revenue"] = w.get("revenue", 0.0)
+            r["week_conversions"] = w.get("conversions", 0.0)
+            r["week_roas"] = w.get("roas", 0.0)
+    except Exception:  # noqa: BLE001
+        pass
     return rows
 
 
@@ -93,6 +107,101 @@ def benchmarks() -> dict:
         except Exception:  # noqa: BLE001
             pass
     return out
+
+
+def _recent_dates(n: int = 7) -> list[str]:
+    """최근 N일(오늘 포함) YYMMDD 리스트 — KST 기준."""
+    import datetime
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    today = datetime.datetime.now(kst).date()
+    return [(today - datetime.timedelta(days=i)).strftime("%y%m%d") for i in range(n)]
+
+
+def _tab_tasks(days: int) -> list:
+    """병렬 fetch 작업 목록 (mod, plat, dstr, landing, kind, hdrs)."""
+    import repurely.meta_sheet as meta
+    import repurely.tiktok_sheet as tiktok
+    tasks = []
+    for mod, plat in ((meta, "Meta"), (tiktok, "TikTok")):
+        for dstr in _recent_dates(days):
+            for landing, kind, hdrs in mod.LANDING_TABS:
+                tasks.append((mod, plat, dstr, landing, kind, hdrs))
+    return tasks
+
+
+def _fetch_norm(task) -> tuple:
+    from repurely import google_sheets_client as G
+    mod, plat, dstr, landing, kind, hdrs = task
+    out = []
+    for r in G.fetch_rows_tab(mod.SHEET_ID, f"{dstr} {kind}", hdrs):
+        n = G.normalize(r, mod.MAP, plat, mod.SHEET_ID, "")
+        if n:
+            out.append(n)
+    return (plat, landing, dstr, out)
+
+
+def weekly_metrics(days: int = 7) -> dict:
+    """최근 N일 소재별 누적 지표 {(platform, 소재명): {spend,revenue,...,roas}}. 병렬 fetch."""
+    from concurrent.futures import ThreadPoolExecutor
+    agg: dict = {}
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        for plat, _landing, _dstr, items in ex.map(_fetch_norm, _tab_tasks(days)):
+            for n in items:
+                name = (n.get("creative_name") or n.get("utm_value") or "").strip().lower()
+                if not name:
+                    continue
+                a = agg.setdefault((plat, name), {"spend": 0.0, "revenue": 0.0,
+                                                  "conversions": 0.0, "clicks": 0.0, "impressions": 0.0})
+                a["spend"] += n["spend"]; a["revenue"] += n["revenue"]
+                a["conversions"] += n["conversions"]; a["clicks"] += n["clicks"]
+                a["impressions"] += n["impressions"]
+    for a in agg.values():
+        a["roas"] = round(a["revenue"] / a["spend"] * 100, 1) if a["spend"] else 0.0
+    return agg
+
+
+def daily_by_segment(days: int = 14) -> dict:
+    """최근 days일 (매체, 랜딩, 날짜)별 합 {(platform, landing, YYMMDD): {spend,revenue,conversions}}.
+    병렬 fetch. KPI를 선택 매체·랜딩 기준으로 계산하는 데 사용."""
+    from concurrent.futures import ThreadPoolExecutor
+    seg: dict = {}
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        for plat, landing, dstr, items in ex.map(_fetch_norm, _tab_tasks(days)):
+            d = seg.setdefault((plat, landing, dstr), {"spend": 0.0, "revenue": 0.0, "conversions": 0.0})
+            for n in items:
+                d["spend"] += n["spend"]; d["revenue"] += n["revenue"]; d["conversions"] += n["conversions"]
+    return seg
+
+
+def kpi_from_daily_seg(seg: dict, platform: str, landing, view_rows: list) -> dict:
+    """선택 매체·랜딩 기준 요약 KPI: 분류 개수(view) + 오늘/7일 + 전일·전주 대비 ROAS."""
+    dates = _recent_dates(14)
+
+    def roas(s, r):
+        return round(r / s * 100, 1) if s else 0.0
+
+    def period(ds):
+        s = r = 0.0
+        for d in ds:
+            x = seg.get((platform, landing, d), {})
+            s += x.get("spend", 0); r += x.get("revenue", 0)
+        return s, r
+
+    t_s, t_r = period(dates[0:1]); y_s, y_r = period(dates[1:2])
+    w_s, w_r = period(dates[0:7]); pw_s, pw_r = period(dates[7:14])
+
+    def chg(cur, prev):
+        return round((cur - prev) / prev * 100, 1) if prev else None
+
+    return {
+        "cnt_today": sum(1 for r in view_rows if r.get("is_today_eff")),
+        "cnt_week": sum(1 for r in view_rows if r.get("is_week_eff")),
+        "cnt_sustained": sum(1 for r in view_rows if r.get("is_sustained")),
+        "today_spend": t_s, "today_revenue": t_r, "today_roas": roas(t_s, t_r),
+        "week_spend": w_s, "week_revenue": w_r, "week_roas": roas(w_s, w_r),
+        "roas_vs_yday": chg(roas(t_s, t_r), roas(y_s, y_r)),
+        "roas_vs_pweek": chg(roas(w_s, w_r), roas(pw_s, pw_r)),
+    }
 
 
 def averages(rows: list[dict]) -> dict:
@@ -169,6 +278,14 @@ def enrich(rows: list[dict]) -> tuple[list[dict], dict]:
         r["is_new_test"] = is_new_test(r)
         r["is_fatigue"] = is_fatigue(r, av)
         r["status_text"] = status_summary(r, av)
+        # 3분류: 금일/주간/지속 효율 (매체별 ROAS 기준 + 매출·전환 동반 — 단순 노출/클릭 제외)
+        thr = 70 if r.get("platform") == "TikTok" else 100
+        _today_ok = (r.get("roas", 0) >= thr) and (r.get("revenue", 0) > 0 or r.get("conversions", 0) > 0)
+        _week_ok = (r.get("week_roas", 0) >= thr) and (r.get("week_revenue", 0) > 0)
+        r["is_today_eff"] = bool(_today_ok)
+        r["is_week_eff"] = bool(_week_ok)
+        # 지속: 오늘·주간 둘 다 효율 + 주간 광고비 10만 이상(확장 가능 핵심)
+        r["is_sustained"] = bool(_today_ok and _week_ok and r.get("week_spend", 0) >= 100000)
     return rows, av
 
 

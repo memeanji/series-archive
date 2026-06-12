@@ -22,8 +22,9 @@ FIELDS = [
     ("conversion", "🛒 전환 설득 구조 분석"),
     ("fatigue", "😮‍💨 소재 피로도 가능성"),
     ("improvements", "🛠 개선 카피 제안"),
-    ("remake", "♻️ 리메이크 방향"),
+    ("remake", "♻️ 응용 소재 방향"),
     ("next_tests", "🧪 다음 테스트 소재 아이디어"),
+    ("producer_memo", "✍️ 제작자 전달 기획 메모"),
 ]
 
 
@@ -148,7 +149,9 @@ _PROMPT = (
     '  "fatigue": "피로도 가능성 — CPM 상승만으로 단정 금지. CTR 하락+CPC 상승+ROAS 하락이 함께 나타나는지로 판단하고 동반 여부를 명시",\n'
     '  "improvements": "실제 개선 카피 문구 제안 불릿",\n'
     '  "remake": "재활용 시 어떤 구간을 유지/교체할지 리메이크 방향 불릿",\n'
-    '  "next_tests": "다음 테스트 소재 아이디어 불릿"\n'
+    '  "next_tests": "다음 테스트 소재 아이디어 불릿",\n'
+    '  "producer_memo": "제작 담당자에게 전달할 기획 메모 — 이 소재가 왜 효율이 좋은지 핵심 성공 요소, '
+    '타깃이 반응한 포인트, 다음 제작에서 살릴 방향을 바로 실행 가능하게 3~4줄(불릿)"\n'
     "}}\n\n"
     "[이 소재]\n{ctx}\n\n[비교 평균]\n{avg}\n\n[같은 매체 위너 소재]\n{peers}\n\n"
     "[영상 스크립트/대본(자동 추출 — 없으면 카피·썸네일로 추론)]\n{script}"
@@ -318,6 +321,12 @@ def _rule_based(r: dict, av: dict | None, peers: list | None, script: str) -> di
         "improvements": improvements,
         "remake": remake,
         "next_tests": "\n".join(nxt),
+        "producer_memo": (
+            f"- 분류: {verdict_label(r, av)[0]} (오늘 ROAS {roas:.0f}%)\n"
+            + ("- 성공 요소: 후킹(CTR)이 평균 이상 — 첫 화면·썸네일이 클릭을 유도\n" if hi_ctr
+               else "- 약점: 후킹이 약함 — 첫 화면부터 개선 필요\n")
+            + "- 다음 제작: 효율 요소는 유지하고 약한 구간을 보강한 응용 소재\n"
+            + "- 제작자 전달: 위 '응용 소재 방향'·'개선 카피' 참고"),
         "_source": "rule",
     }
 

@@ -14,7 +14,7 @@ import config  # noqa: E402
 import database  # noqa: E402
 from collectors import google_library_crawler, meta_library_crawler  # noqa: E402
 
-GOOGLE_LIMIT = 80
+GOOGLE_LIMIT = 300
 
 
 def _now():
@@ -54,7 +54,7 @@ def crawl_one(display: str) -> dict:
     # 구글: 법인명(google_advertiser_name)으로 1회 검색
     t0 = _now()
     try:
-        gads, glog = google_library_crawler.search_brand(google_term, limit=GOOGLE_LIMIT)
+        gads, glog = google_library_crawler.search_brand(google_term, limit=GOOGLE_LIMIT, scrolls=25)
         gads = [{**a, "brand_name": display} for a in gads]
         saved = database.ingest_ad_library(gads)
         database.log_brand_collection(bid, "google", google_term, "success", glog["found"], saved,

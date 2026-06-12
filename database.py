@@ -1431,3 +1431,27 @@ def get_repurely_report(key: str) -> dict | None:
                 "updated_at": row["updated_at"]}
     except Exception:  # noqa: BLE001
         return None
+
+
+# ── repurely(Insight) 소재 북마크 — key=platform::소재명 ──
+def _ensure_repurely_bm_table(conn) -> None:
+    conn.execute("CREATE TABLE IF NOT EXISTS repurely_bookmarks(key TEXT PRIMARY KEY, created_at TEXT)")
+
+
+def toggle_repurely_bookmark(key: str, value: bool) -> None:
+    conn = get_conn()
+    _ensure_repurely_bm_table(conn)
+    if value:
+        conn.execute("INSERT OR IGNORE INTO repurely_bookmarks(key, created_at) VALUES(?,?)", (key, _now()))
+    else:
+        conn.execute("DELETE FROM repurely_bookmarks WHERE key=?", (key,))
+    conn.commit()
+    conn.close()
+
+
+def get_repurely_bookmarks() -> set:
+    conn = get_conn()
+    _ensure_repurely_bm_table(conn)
+    rows = conn.execute("SELECT key FROM repurely_bookmarks").fetchall()
+    conn.close()
+    return {r[0] for r in rows}
