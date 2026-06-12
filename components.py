@@ -1105,10 +1105,33 @@ def render_ad_detail(ad: dict) -> None:
     st.markdown("##### 📝 내 분석 메모")
     memo = st.text_area("메모", value=ad.get("memo") or "", label_visibility="collapsed",
                         key=f"memo_{aid}", placeholder="이 소재의 후킹/카피/구성 포인트를 기록하세요")
+    # 이미지 첨부(참고 캡처·레퍼런스) — DB 영구 저장
+    _aimgs = database.get_attach_images(f"ad::{aid}")
+    if _aimgs:
+        from pathlib import Path as _P
+        _aic = st.columns(min(len(_aimgs), 4))
+        for _j, _ip in enumerate(_aimgs):
+            if _P(_ip).exists():
+                _aic[_j % 4].image(_ip, use_container_width=True)
+    _aup = st.file_uploader("🖼️ 이미지 첨부(참고 캡처·레퍼런스 등)",
+                            type=["png", "jpg", "jpeg", "webp"],
+                            accept_multiple_files=True, key=f"adimg_{aid}")
     ac = st.columns([1, 1.5, 1.5])
     if ac[0].button("💾 메모 저장", use_container_width=True, key=f"sm_{aid}"):
         database.update_memo(aid, memo)
-        st.toast("메모 저장됨")
+        _asaved = list(_aimgs)
+        if _aup:
+            import hashlib
+            from pathlib import Path as _P
+            _d = _P("static/memo_images"); _d.mkdir(parents=True, exist_ok=True)
+            _safe = hashlib.md5(f"ad::{aid}".encode("utf-8")).hexdigest()[:10]
+            for _k, _f in enumerate(_aup):
+                _ext = (_f.name.rsplit(".", 1)[-1] if "." in _f.name else "png").lower()
+                _p = _d / f"{_safe}_{len(_asaved) + _k}.{_ext}"
+                _p.write_bytes(_f.getbuffer())
+                _asaved.append(str(_p).replace("\\", "/"))
+            database.save_attach_images(f"ad::{aid}", _asaved)
+        st.toast("메모·이미지 저장됨")
         _reload()
     src_url = (normalize_google_transparency_url(ad.get("transparency_url") or ad.get("original_ad_url"))
                if plat == "google" else ad.get("original_ad_url"))

@@ -1500,3 +1500,31 @@ def get_repurely_memos() -> dict:
             imgs = []
         out[r[0]] = {"memo": r[1] or "", "images": imgs}
     return out
+
+
+def _ensure_attach_table(conn) -> None:
+    conn.execute("CREATE TABLE IF NOT EXISTS attach_images("
+                 "key TEXT PRIMARY KEY, images TEXT, updated_at TEXT)")
+
+
+def save_attach_images(key: str, images: list) -> None:
+    """광고 카드(메타/구글) 등 임의 항목에 참고 이미지 첨부를 영구 저장."""
+    conn = get_conn()
+    _ensure_attach_table(conn)
+    conn.execute("INSERT OR REPLACE INTO attach_images(key, images, updated_at) VALUES(?,?,?)",
+                 (key, json.dumps(images or [], ensure_ascii=False), _now()))
+    conn.commit()
+    conn.close()
+
+
+def get_attach_images(key: str) -> list:
+    conn = get_conn()
+    _ensure_attach_table(conn)
+    r = conn.execute("SELECT images FROM attach_images WHERE key=?", (key,)).fetchone()
+    conn.close()
+    if not r or not r[0]:
+        return []
+    try:
+        return json.loads(r[0])
+    except Exception:  # noqa: BLE001
+        return []
