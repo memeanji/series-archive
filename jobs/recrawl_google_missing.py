@@ -23,7 +23,7 @@ for i, row in enumerate(missing):
     b = con.execute("SELECT google_advertiser_name FROM brands WHERE display_name=?", (brand,)).fetchone()
     term = (b["google_advertiser_name"] if b and b["google_advertiser_name"] else brand)
     try:
-        gads, glog = G.search_brand(term, limit=300, scrolls=25, headless=True)
+        gads, glog = G.search_brand(term, limit=500, scrolls=60, headless=True)
         gads = [{**a, "brand_name": brand} for a in gads]
         saved = database.ingest_ad_library(gads)
         after = con.execute(

@@ -174,8 +174,19 @@ def daily_by_segment(days: int = 14) -> dict:
 
 
 def kpi_from_daily_seg(seg: dict, platform: str, landing, view_rows: list) -> dict:
-    """선택 매체·랜딩 기준 요약 KPI: 분류 개수(view) + 오늘/7일 + 전일·전주 대비 ROAS."""
-    dates = _recent_dates(14)
+    """선택 매체·랜딩 기준 요약 KPI: 분류 개수(view) + 오늘 + 이번주(월~오늘) + 전일·전주(월~일) 대비 ROAS."""
+    import datetime
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    today = datetime.datetime.now(kst).date()
+    monday = today - datetime.timedelta(days=today.weekday())        # 이번 주 월요일(weekday: 월=0)
+    last_monday = monday - datetime.timedelta(days=7)
+    last_sunday = monday - datetime.timedelta(days=1)
+
+    def _ds(start, end):                       # start~end 날짜를 YYMMDD 리스트로
+        out = []; d = start
+        while d <= end:
+            out.append(d.strftime("%y%m%d")); d += datetime.timedelta(days=1)
+        return out
 
     def roas(s, r):
         return round(r / s * 100, 1) if s else 0.0
@@ -187,8 +198,10 @@ def kpi_from_daily_seg(seg: dict, platform: str, landing, view_rows: list) -> di
             s += x.get("spend", 0); r += x.get("revenue", 0)
         return s, r
 
-    t_s, t_r = period(dates[0:1]); y_s, y_r = period(dates[1:2])
-    w_s, w_r = period(dates[0:7]); pw_s, pw_r = period(dates[7:14])
+    t_s, t_r = period([today.strftime("%y%m%d")])
+    y_s, y_r = period([(today - datetime.timedelta(days=1)).strftime("%y%m%d")])
+    w_s, w_r = period(_ds(monday, today))               # 이번 주(월~오늘 누적)
+    pw_s, pw_r = period(_ds(last_monday, last_sunday))   # 지난 주(월~일)
 
     def chg(cur, prev):
         return round((cur - prev) / prev * 100, 1) if prev else None

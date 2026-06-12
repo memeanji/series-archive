@@ -510,7 +510,7 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                                  format_func=lambda x: {"video": "🎬 영상", "image": "🖼 이미지"}.get(x, x),
                                  key="f_media")
         sort = c[1].selectbox("정렬",
-                              ["최근 수집순", "오래된순", "조회수 높은순", "게재기간 긴순",
+                              ["조회수 높은순", "최근 수집순", "오래된순", "게재기간 긴순",
                                "게재기간 짧은순", "저장 많은순"], index=0, key="f_sort")
         period = c[2].selectbox("기간(게재 시작)", ["전체", "7일", "30일", "90일"], key="f_period")
         if c[3].button("초기화", use_container_width=True, help="필터 초기화"):
@@ -1517,9 +1517,9 @@ def _render_kpi(k: dict) -> None:
         ("오늘 광고비", _krw(k['today_spend']), S.TEXT),
         ("오늘 매출", _krw(k['today_revenue']), S.TEXT),
         ("오늘 ROAS", f"{k['today_roas']:.0f}%", "#10B981"),
-        ("7일 광고비", _krw(k['week_spend']), S.TEXT),
-        ("7일 매출", _krw(k['week_revenue']), S.TEXT),
-        ("7일 ROAS", f"{k['week_roas']:.0f}%", "#10B981"),
+        ("이번주 광고비", _krw(k['week_spend']), S.TEXT),
+        ("이번주 매출", _krw(k['week_revenue']), S.TEXT),
+        ("이번주 ROAS", f"{k['week_roas']:.0f}%", "#10B981"),
     ]
     html = "<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:2px 0 6px'>"
     for lab, val, col in cells:
