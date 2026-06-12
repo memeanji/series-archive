@@ -753,6 +753,23 @@ def _render_script_segments(text: str):
             f"padding:6px 14px;max-height:420px;overflow:auto'>{''.join(rows)}</div>")
 
 
+def _script_plaintext(text: str) -> str:
+    """구간 JSON이면 각 구간 대사(script)를 순서대로 이어붙인 통짜 스크립트, 아니면 원문 그대로."""
+    import json as _json
+    t = (text or "").strip()
+    if not (t.startswith("[") and t.endswith("]")):
+        return t
+    try:
+        segs = _json.loads(t)
+        if not isinstance(segs, list) or not segs or not isinstance(segs[0], dict):
+            return t
+    except Exception:  # noqa: BLE001
+        return t
+    parts = [(s.get("script") or "").strip() for s in segs]
+    parts = [p for p in parts if p]
+    return "\n".join(parts) if parts else t
+
+
 def _render_thumb_analysis(text: str) -> str:
     """이미지 소재 썸네일 분석 JSON({thumbnail_text,visual_summary,main_subject,hook_type,ad_angle})을 카드로."""
     import html as _h
@@ -915,7 +932,11 @@ def _render_video_script(ad: dict) -> None:
             st.caption("🤖 Gemini가 영상을 분석한 추정 대본 — 실제 대사와 다를 수 있습니다.")
         else:
             st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}")
-        st.markdown(_render_script_body(cur["text"]), unsafe_allow_html=True)
+        with st.expander("📝 구간별 자막 (타임코드별)", expanded=True):
+            st.markdown(_render_script_body(cur["text"]), unsafe_allow_html=True)
+        with st.expander("📄 전체 스크립트 (이어붙임 · 복붙용)", expanded=False):
+            st.text_area("전체 스크립트", value=_script_plaintext(cur["text"]), height=240,
+                         label_visibility="collapsed", key=f"scfull_{aid}")
     elif completed and edit:
         new = st.text_area("스크립트 편집", value=cur["text"], height=260, key=f"scredit_{aid}",
                            label_visibility="collapsed")
