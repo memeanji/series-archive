@@ -1121,7 +1121,7 @@ def render_ad_detail(ad: dict) -> None:
         st.caption(f"⬆️ 올린 이미지 {len(_aup)}장 — 아래 **💾 메모·이미지 저장**을 눌러야 보관돼요")
         _pc = st.columns(3)
         for _j, _f in enumerate(_aup):
-            _pc[_j % 3].image(_f, use_container_width=True)
+            _pc[_j % 3].image(_f, width=120)
     ac = st.columns([1, 1.5, 1.5])
     if ac[0].button("💾 메모·이미지 저장", use_container_width=True, key=f"sm_{aid}"):
         database.update_memo(aid, memo)
@@ -1491,7 +1491,7 @@ def _repurely_detail(r: dict) -> None:
         st.caption(f"⬆️ 올린 이미지 {len(_up)}장 — 아래 **💾 메모·이미지 저장**을 눌러야 보관돼요")
         _pc = st.columns(3)
         for _j, _f in enumerate(_up):
-            _pc[_j % 3].image(_f, use_container_width=True)
+            _pc[_j % 3].image(_f, width=120)
     if st.button("💾 메모·이미지 저장", key=f"repsave_{mkey}"):
         import database as _DB, hashlib
         from pathlib import Path as _P
