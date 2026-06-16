@@ -357,7 +357,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     "ad_variant_count": parsed.get("variant_count", 1),
                     "platforms": ", ".join(r.get("platforms") or []),
                     "scrape_status": status, "error_message": err,
-                    "page_id": page_id or r.get("page_id") or "",   # 수집한 page_id / 카드 추출 후보
+                    "page_id": page_id or r.get("page_id") or cand_pid or "",  # 수집/카드/HTML스캔 후보
                     "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
                 })
         finally:
