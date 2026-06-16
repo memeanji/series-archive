@@ -205,9 +205,11 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     bcols = [r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()]
     for c, t in (("meta_page_id", "TEXT"),
                  ("page_id_status", "TEXT DEFAULT 'none'"),   # none/candidate/confirmed
-                 ("meta_reported_count", "INTEGER DEFAULT 0")):  # 라이브러리 표기 결과수(수집률 비교)
+                 ("meta_reported_count", "INTEGER DEFAULT 0"),  # 라이브러리 표기 결과수(수집률 비교)
+                 ("sort_order", "INTEGER")):   # 사이드바/요일그룹 정렬 순서(기본 id, 수동 교체용)
         if c not in bcols:
             conn.execute(f"ALTER TABLE brands ADD COLUMN {c} {t}")
+    conn.execute("UPDATE brands SET sort_order=id WHERE sort_order IS NULL")  # 최초 1회 백필
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
     for c, t in (("video_id", "TEXT"), ("embed_url", "TEXT"), ("title", "TEXT"),
                  ("channel_title", "TEXT"),
@@ -1068,7 +1070,8 @@ def brand_index_groups() -> dict:
        브랜드 추가/삭제 시 자동 재분배. 반환 {display_name: {index, weekday(0~6), group}}."""
     conn = get_conn()
     names = [r[0] for r in conn.execute(
-        "SELECT display_name FROM brands WHERE COALESCE(is_active,1)=1 ORDER BY id").fetchall()]
+        "SELECT display_name FROM brands WHERE COALESCE(is_active,1)=1 "
+        "ORDER BY COALESCE(sort_order, id), id").fetchall()]
     conn.close()
     n = len(names) or 1
     out = {}
@@ -1076,6 +1079,23 @@ def brand_index_groups() -> dict:
         wd = min(6, (p * 7) // n)        # 0=월 .. 6=일, 연속 균등 분배
         out[b] = {"index": p + 1, "weekday": wd, "group": _WEEKDAYS[wd]}
     return out
+
+
+def swap_brand_order(a: str, b: str) -> bool:
+    """두 브랜드의 정렬 순서(sort_order) 교체 — 사이드바/요일그룹 순서 자리바꿈."""
+    conn = get_conn()
+    ra = conn.execute("SELECT sort_order, id FROM brands WHERE display_name=?", (a,)).fetchone()
+    rb = conn.execute("SELECT sort_order, id FROM brands WHERE display_name=?", (b,)).fetchone()
+    if not ra or not rb:
+        conn.close()
+        return False
+    sa = ra[0] if ra[0] is not None else ra[1]
+    sb = rb[0] if rb[0] is not None else rb[1]
+    conn.execute("UPDATE brands SET sort_order=? WHERE display_name=?", (sb, a))
+    conn.execute("UPDATE brands SET sort_order=? WHERE display_name=?", (sa, b))
+    conn.commit()
+    conn.close()
+    return True
 
 
 def brands_for_weekday(wd: int) -> list:
