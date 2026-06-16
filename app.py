@@ -116,6 +116,23 @@ def main() -> None:
         _footer(t0)
         return
 
+    # ── 광고 ID 다중 검색(Meta Ad Library 공유 광고 빠른 조회) ──
+    with st.expander("🔎 광고 ID로 찾기 (여러 개·링크 붙여넣기 가능)", expanded=False):
+        id_raw = st.text_area(
+            "광고 ID 또는 Meta Ad Library 링크", key="id_search_raw", height=80,
+            label_visibility="collapsed",
+            placeholder="예) 1234567890, 9876543210  또는  https://www.facebook.com/ads/library/?id=1234567890\n"
+                        "(쉼표·공백·줄바꿈으로 여러 개, 링크 여러 개도 가능)")
+        sc = st.columns([1, 1, 4])
+        sc[0].button("검색", type="primary", use_container_width=True)   # 누르면 rerun→아래서 렌더
+        if sc[1].button("초기화", use_container_width=True):
+            st.session_state.pop("id_search_raw", None)
+            st.rerun()
+    if (id_raw or "").strip():
+        C.render_id_search(id_raw)
+        _footer(t0)
+        return
+
     # ── 광고 탭(전체/Meta/Google) — SQL 페이지 로딩 ──
     tabkey = TAB_KEY.get(tab, "all")
     f = C.render_filters(_filter_options(), header, _social_count())
@@ -138,9 +155,10 @@ def main() -> None:
         f"<div class='sa-info'>광고 <b>{total}</b>건 · {scope} · 페이지 <b>{page}/{total_pages}</b> · "
         f"최근수집 <b>{last or '-'}</b> · <span style='color:{styles.SUB}'>조회수·등급은 매칭된 소셜 원본 기준</span></div>",
         unsafe_allow_html=True)
-    st.session_state.sa_psize = info[1].selectbox("페이지당", [12, 24],
-                                                  index=0 if page_size == 12 else 1,
-                                                  label_visibility="collapsed")
+    _opts = [20, 40, 60]
+    st.session_state.sa_psize = info[1].selectbox(
+        "페이지당", _opts, index=_opts.index(page_size) if page_size in _opts else 0,
+        label_visibility="collapsed")
 
     if f["brand"] != "전체":   # 특정 브랜드 선택 시 추이 요약
         C.render_brand_trend_summary(f["brand"])

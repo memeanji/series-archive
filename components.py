@@ -1840,6 +1840,76 @@ def render_brand_trend_summary(brand: str) -> None:
             st.caption("일별 추이는 스냅샷이 2일치 이상 쌓이면 표시됩니다.")
 
 
+def parse_ad_ids(raw: str) -> list:
+    """입력 텍스트에서 광고 ID 추출. 지원: 쉼표/공백/줄바꿈 구분, Meta Ad Library URL(여러 개),
+       숫자 라이브러리 ID, UUID. 순서 유지 + 중복 제거."""
+    raw = raw or ""
+    ids: list = []
+    seen: set = set()
+
+    def _add(v: str) -> None:
+        v = (v or "").strip()
+        if v and v not in seen:
+            seen.add(v)
+            ids.append(v)
+
+    # 1) URL(여러 개 가능) 안의 id= 값 먼저 추출
+    for m in re.findall(r"[?&]id=([0-9A-Za-z\-]+)", raw):
+        _add(m)
+    # 2) URL 제거 후 남은 토큰을 구분자(쉼표/공백/줄바꿈)로 분리
+    text = re.sub(r"https?://\S+", " ", raw)
+    for tok in re.split(r"[\s,]+", text):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if tok.isdigit() and len(tok) >= 6:                       # 숫자 라이브러리 ID
+            _add(tok)
+        elif re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F-]{4,}", tok):  # UUID 형식
+            _add(tok)
+    return ids
+
+
+def render_id_search(raw: str) -> None:
+    """광고 ID 다중 검색 결과 — 매칭/미수집 요약 + 카드 그리드."""
+    ids = parse_ad_ids(raw)
+    if not ids:
+        st.warning("인식된 광고 ID가 없어요. 숫자 ID나 Meta Ad Library 링크를 붙여넣어 주세요.")
+        return
+    rows = database.get_ads_by_ids(ids)
+    found_ids = {str(r.get("id")) for r in rows}
+    matched = [i for i in ids if i in found_ids]
+    missing = [i for i in ids if i not in found_ids]
+
+    st.markdown(
+        f"<div class='sa-info'>🔎 ID 검색 · 입력 <b>{len(ids)}</b>개 · "
+        f"<span style='color:{S.LIVE}'>검색됨 <b>{len(matched)}</b></span> / "
+        f"<span style='color:{S.END_RED}'>미수집 <b>{len(missing)}</b></span></div>",
+        unsafe_allow_html=True)
+    if matched:
+        st.caption("✅ 매칭된 ID: " + ", ".join(matched))
+    if missing:
+        st.caption("⚠️ 미수집 ID: " + ", ".join(missing))
+
+    if not rows:
+        st.info("현재 수집된 데이터에 없는 광고 ID입니다. "
+                "브랜드 재크롤 또는 원본 Meta Ad Library 확인이 필요합니다.")
+        # 미수집 ID는 라이브러리에서 바로 확인할 수 있게 링크 제공
+        links = "".join(
+            f"<a href='https://www.facebook.com/ads/library/?id={i}' target='_blank' "
+            f"style='font-size:12px;color:{S.SUB};border:1px solid {S.BORDER};border-radius:8px;"
+            f"padding:4px 11px;text-decoration:none'>{i} ↗</a>" for i in missing)
+        if links:
+            st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:6px'>{links}</div>",
+                        unsafe_allow_html=True)
+        return
+
+    for i in range(0, len(rows), 4):
+        cols = st.columns(4)
+        for col, ad in zip(cols, rows[i:i + 4]):
+            with col:
+                render_ad_card(ad, i)
+
+
 def render_ad_grid(rows: list[dict], total: int, page: int, page_size: int) -> None:
     """rows 는 이미 잘린 현재 페이지(SQL LIMIT/OFFSET)."""
     if not rows:

@@ -397,6 +397,21 @@ def load_ads_page(tab: str, f: dict, page: int = 1, page_size: int = 12) -> list
     return [dict(r) for r in rows]
 
 
+def get_ads_by_ids(ids: list) -> list[dict]:
+    """광고 ID 다중 검색 — id(=메타 라이브러리 ID 저장 컬럼) 일치 광고만 카드 포맷으로.
+       (스키마상 메타 광고 ID는 ad_library_ads.id 에만 저장됨)."""
+    ids = [str(i).strip() for i in (ids or []) if str(i).strip()]
+    if not ids:
+        return []
+    conn = get_conn()
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"SELECT {_SUMMARY_COLS} {_JOIN} WHERE a.id IN ({ph}) "
+        f"GROUP BY a.id ORDER BY a.collected_at DESC", ids).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_ad_full(ad_id: str) -> Optional[dict]:
     """상세 모달용 — 1건 전체 + 매칭 소셜 + 등급."""
     conn = get_conn()
