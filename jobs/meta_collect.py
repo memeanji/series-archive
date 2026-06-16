@@ -13,15 +13,13 @@ import database  # noqa: E402
 from collectors import meta_library_crawler  # noqa: E402
 
 
-def collect_meta(display: str, force_keyword: bool = False) -> dict:
-    """단일 브랜드 Meta 수집. 반환: {method,found,new,updated,page_id,status}."""
-    run_start = datetime.now(timezone.utc).isoformat()
+def crawl_brand_meta(display: str, force_keyword: bool = False) -> dict:
+    """브랜드 Meta 광고 크롤(키워드→page_id 자동추출·연쇄). 적재/후처리는 하지 않음.
+       반환 {ads, method, page_id}."""
     b = database.get_brand(display) or {}
-    bid = b.get("id") or 0
     pid = (b.get("meta_page_id") or "").strip()
     use_pid = bool(pid) and not force_keyword
     method = "page_id" if use_pid else "keyword"
-
     ads: list = []
     if use_pid:
         ads = meta_library_crawler.search_brand("", page_id=pid)
@@ -31,7 +29,7 @@ def collect_meta(display: str, force_keyword: bool = False) -> dict:
                 ads += meta_library_crawler.search_brand(kw)
             except Exception as e:  # noqa: BLE001
                 print(f"  [meta] '{kw}' 실패: {str(e)[:90]}", flush=True)
-        # page_id 후보 추출(HTML 스캔으로 ads 에 실린 값 중 최빈) → 저장 + 즉시 page_id 깊은 수집 연쇄
+        # page_id 후보(HTML 스캔 최빈) → 저장 + 즉시 page_id 깊은 수집 연쇄
         cands = Counter(a.get("page_id") for a in ads if (a.get("page_id") or "").strip())
         if cands and not pid:
             cand = cands.most_common(1)[0][0]
@@ -48,9 +46,17 @@ def collect_meta(display: str, force_keyword: bool = False) -> dict:
                 print(f"  [meta] page_id 수집 실패: {str(e)[:90]}", flush=True)
         elif not cands:
             print("  [meta] page_id 자동추출 실패 — 관리화면에서 수동 입력/ID로 찾기 필요", flush=True)
-
     for a in ads:
         a["brand_name"] = display
+    return {"ads": ads, "method": method, "page_id": (database.get_brand(display) or {}).get("meta_page_id") or ""}
+
+
+def collect_meta(display: str, force_keyword: bool = False) -> dict:
+    """단일 브랜드 Meta 수집(크롤+적재+후처리). 반환: {method,found,new,updated,page_id,status}."""
+    run_start = datetime.now(timezone.utc).isoformat()
+    bid = (database.get_brand(display) or {}).get("id") or 0
+    cr = crawl_brand_meta(display, force_keyword=force_keyword)
+    ads, method = cr["ads"], cr["method"]
     ids = list(dict.fromkeys(a.get("platform_ad_id") for a in ads if a.get("platform_ad_id")))
     before = database.existing_ad_ids(ids)
     database.ingest_ad_library(ads)
