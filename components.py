@@ -300,19 +300,38 @@ def _domain_ok(d: str) -> bool:
     return bool(re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", d))
 
 
-def _run_meta_collect(display: str) -> None:
-    """선택 브랜드를 page_id(있으면) 기반으로 깊게 재수집."""
-    with st.spinner(f"'{display}' Meta 재수집 중… (page_id 기반 전체 크롤, 1~3분)"):
+def _run_meta_collect(display: str) -> str:
+    """선택 브랜드를 page_id(있으면) 기반으로 깊게 재수집. 마지막 결과줄 반환."""
+    out = "완료"
+    with st.spinner(f"'{display}' 광고주 전체 광고 재수집 중… (page_id 기반, 1~3분)"):
         try:
             r = subprocess.run([sys.executable, str(ROOT / "jobs" / "meta_collect.py"), display],
                                capture_output=True, text=True, timeout=900, cwd=str(ROOT))
-            tail = [l for l in (r.stdout or r.stderr).strip().splitlines() if l.strip()][-1:] or ["완료"]
-            st.success(f"재수집 완료 — {tail[0]}")
+            lines = [l for l in (r.stdout or r.stderr).strip().splitlines() if l.strip()]
+            out = lines[-1] if lines else "완료"
         except subprocess.TimeoutExpired:
-            st.error("시간 초과")
+            out = "시간 초과"
         except Exception as e:  # noqa: BLE001
-            st.error(f"재수집 실패: {e}")
-    _reload()
+            out = f"실패: {e}"
+    return out
+
+
+def _find_page_id(arg: str) -> dict:
+    """라이브러리 ID/링크 → {library_id, page_id, page_name} (subprocess)."""
+    res = {"library_id": "", "page_id": "", "page_name": ""}
+    try:
+        r = subprocess.run([sys.executable, str(ROOT / "jobs" / "find_page_id.py"), arg],
+                           capture_output=True, text=True, timeout=120, cwd=str(ROOT))
+        for ln in (r.stdout or "").splitlines():
+            if ln.startswith("LIBID:"):
+                res["library_id"] = ln[6:].strip()
+            elif ln.startswith("PAGEID:"):
+                res["page_id"] = ln[7:].strip()
+            elif ln.startswith("PAGENAME:"):
+                res["page_name"] = ln[9:].strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return res
 
 
 _STATUS_COLOR = {"정상": "#10B981", "얕은 수집": "#F59E0B", "확인 필요": "#EF4444",
@@ -338,27 +357,61 @@ def render_brand_collection_admin() -> None:
             st.write(f"{s['brand']} · {s['method']} · {s['count']}개 · {s['status']}")
 
     st.markdown("---")
-    # 브랜드 선택 → page_id 입력/저장 + 재수집
     names = [s["brand"] for s in stats]
     sel = st.selectbox("브랜드 선택", names, key="bca_sel")
     cur = database.get_brand(sel) or {}
-    cc = st.columns([3, 1.2])
-    pid = cc[0].text_input("Meta page_id (광고주 페이지 ID)", value=cur.get("meta_page_id") or "",
-                           key=f"bca_pid_{sel}",
-                           placeholder="예: 100xxxxxxxxxxx — 라이브러리에서 광고주 페이지 ID")
-    if cc[1].button("💾 page_id 저장", key=f"bca_save_{sel}", use_container_width=True):
-        database.set_brand_page_id(sel, pid, "confirmed" if pid.strip() else "none")
-        st.success("저장됨")
-        _reload()
-    bb = st.columns(2)
-    if bb[0].button(f"🔄 '{sel}' 재수집 (page_id 깊게)", key=f"bca_re_{sel}",
-                    type="primary", use_container_width=True):
-        _run_meta_collect(sel)
-    cand = (cur.get("page_id_status") == "candidate")
-    if bb[1].button("page_id 후보→확정", key=f"bca_conf_{sel}", disabled=not cand,
-                    use_container_width=True, help="키워드 수집에서 자동 추출한 후보를 확정"):
-        database.set_brand_page_id(sel, cur.get("meta_page_id") or "", "confirmed")
-        _reload()
+    _pid_now = (cur.get("meta_page_id") or "").strip()
+    st.caption(f"현재 page_id: **{_pid_now or '없음'}** · 상태: {cur.get('page_id_status') or 'none'}")
+
+    # ── 기본: 광고 링크/라이브러리 ID 로 광고주 찾기 ──
+    raw = st.text_input("Meta 광고 라이브러리 ID 또는 공유 링크", key=f"bca_lib_{sel}",
+                        placeholder="예: https://www.facebook.com/ads/library/?id=1234567890  또는  1234567890")
+    fc = st.columns(2)
+    if fc[0].button("🔎 광고 링크/ID로 광고주 찾기", key=f"bca_find_{sel}",
+                    type="primary", use_container_width=True, disabled=not raw.strip()):
+        with st.spinner("광고 원본에서 광고주(page_id)를 찾는 중… (~30초)"):
+            r = _find_page_id(raw.strip())
+        if r.get("page_id"):
+            database.set_brand_page_id(sel, r["page_id"], "confirmed")
+        st.session_state[f"bca_found_{sel}"] = r   # 결과 표시용
+        st.rerun()
+
+    found = st.session_state.get(f"bca_found_{sel}")
+    if found:
+        ok = bool(found.get("page_id"))
+        st.markdown(
+            f"- 입력 라이브러리 ID: **{found.get('library_id') or '-'}**\n"
+            f"- 추출 page_id: **{found.get('page_id') or '실패'}**\n"
+            f"- 광고주(page_name): **{found.get('page_name') or '-'}**\n"
+            f"- 브랜드 매칭: **{sel}**\n"
+            f"- page_id 저장: **{'✅ 저장됨' if ok else '❌ 못 찾음'}**")
+        if not ok:
+            st.warning("광고주 page_id를 못 찾았어요. 다른 광고의 ID/링크로 다시 시도하거나, "
+                       "아래 고급 설정에서 page_id를 직접 입력하세요.")
+        if fc[1].button("📥 광고주 전체 광고 재수집", key=f"bca_re_{sel}",
+                        type="primary", use_container_width=True, disabled=not ok):
+            res = _run_meta_collect(sel)
+            st.session_state[f"bca_recol_{sel}"] = res
+            st.rerun()
+    recol = st.session_state.get(f"bca_recol_{sel}")
+    if recol:
+        st.success(f"재수집 결과 — {recol}")
+
+    # page_id 이미 있으면 바로 재수집 버튼 노출
+    if _pid_now and not found:
+        if st.button("📥 광고주 전체 광고 재수집", key=f"bca_re2_{sel}", type="primary"):
+            res = _run_meta_collect(sel)
+            st.session_state[f"bca_recol_{sel}"] = res
+            st.rerun()
+
+    # ── 고급 설정: page_id 직접 입력 ──
+    with st.expander("고급 설정: page_id 직접 입력", expanded=False):
+        pid = st.text_input("Meta page_id (광고주 페이지 ID)", value=_pid_now,
+                            key=f"bca_pid_{sel}", placeholder="예: 100xxxxxxxxxxx")
+        if st.button("💾 page_id 저장", key=f"bca_save_{sel}"):
+            database.set_brand_page_id(sel, pid, "confirmed" if pid.strip() else "none")
+            st.success("저장됨")
+            _reload()
 
 
 def _collect_ids(ids: list) -> None:

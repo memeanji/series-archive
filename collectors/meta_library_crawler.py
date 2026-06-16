@@ -139,6 +139,41 @@ _JS_EXTRACT = r"""
 """
 
 
+def resolve_page_id(ad_id_or_url: str, country: str = "KR", headless: bool = True) -> dict:
+    """라이브러리 ID(또는 링크)로 광고주 page_id·page_name 해석.
+       반환 {library_id, page_id, page_name}. 실패 시 page_id=''."""
+    import re as _re
+    from collections import Counter as _Counter
+    from playwright.sync_api import sync_playwright
+    m = _re.search(r"id=(\d{6,})", ad_id_or_url) or _re.search(r"(\d{6,})", ad_id_or_url)
+    if not m:
+        return {"library_id": "", "page_id": "", "page_name": ""}
+    lib = m.group(1)
+    url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
+           f"&country={country}&id={lib}&media_type=all")
+    with sync_playwright() as p:
+        br = p.chromium.launch(headless=headless)
+        pg = br.new_context(locale="ko-KR", user_agent=UA,
+                            viewport={"width": 1440, "height": 1000}).new_page()
+        try:
+            pg.goto(url, wait_until="domcontentloaded", timeout=60000)
+            try:
+                pg.wait_for_selector("text=/라이브러리 ID|Library ID/", timeout=15000)
+            except Exception:  # noqa: BLE001
+                pass
+            pg.wait_for_timeout(2500)
+            html = pg.content()
+        except Exception:  # noqa: BLE001
+            return {"library_id": lib, "page_id": "", "page_name": ""}
+        finally:
+            br.close()
+    hits = _re.findall(r'(?:view_all_page_id["\\=:%\s]*?|"page_id"\s*:\s*")(\d{6,})', html)
+    pid = _Counter(hits).most_common(1)[0][0] if hits else ""
+    nm = _re.findall(r'"page_name"\s*:\s*"([^"]{1,80})"', html)
+    pname = _Counter(nm).most_common(1)[0][0] if nm else ""
+    return {"library_id": lib, "page_id": pid, "page_name": pname}
+
+
 def _pick_landing(links: list[str]) -> str:
     """l.facebook.com 리다이렉트(u=)를 풀어 실제 랜딩 URL을 고른다."""
     for href in links:
@@ -269,6 +304,19 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
             page.mouse.wheel(0, 200000)  # 다시 끝까지(레이아웃 확정)
             page.wait_for_timeout(1500)
             rows = page.evaluate(_JS_EXTRACT)
+
+            # 광고주 page_id 후보 — 페이지 전체 HTML에서 view_all_page_id= 스캔(카드 링크보다 안정적)
+            cand_pid = page_id or ""
+            if not cand_pid:
+                try:
+                    import re as _re
+                    from collections import Counter as _Counter
+                    html = page.content()
+                    hits = _re.findall(r'(?:view_all_page_id["\\=:%\s]*?|"page_id"\s*:\s*")(\d{6,})', html)
+                    if hits:
+                        cand_pid = _Counter(hits).most_common(1)[0][0]
+                except Exception:  # noqa: BLE001
+                    cand_pid = ""
 
             for r in rows:
                 cid = r["library_id"]

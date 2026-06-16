@@ -31,12 +31,23 @@ def collect_meta(display: str, force_keyword: bool = False) -> dict:
                 ads += meta_library_crawler.search_brand(kw)
             except Exception as e:  # noqa: BLE001
                 print(f"  [meta] '{kw}' 실패: {str(e)[:90]}", flush=True)
-        # page_id 후보 추출(카드에서 가장 흔한 값) → 저장(candidate)
+        # page_id 후보 추출(HTML 스캔으로 ads 에 실린 값 중 최빈) → 저장 + 즉시 page_id 깊은 수집 연쇄
         cands = Counter(a.get("page_id") for a in ads if (a.get("page_id") or "").strip())
         if cands and not pid:
             cand = cands.most_common(1)[0][0]
             database.set_brand_page_id(display, cand, "candidate")
-            print(f"  [meta] page_id 후보 추출: {cand} (다음부터 page_id 수집 가능)", flush=True)
+            print(f"  [meta] page_id 자동추출: {cand} → page_id 전체 수집 연쇄", flush=True)
+            try:
+                pid_ads = meta_library_crawler.search_brand("", page_id=cand)
+                if pid_ads:
+                    ads += pid_ads
+                    method = "keyword→page_id"
+                    database.set_brand_page_id(display, cand, "confirmed")
+                    print(f"  [meta] page_id 수집 +{len(pid_ads)}건 (확정)", flush=True)
+            except Exception as e:  # noqa: BLE001
+                print(f"  [meta] page_id 수집 실패: {str(e)[:90]}", flush=True)
+        elif not cands:
+            print("  [meta] page_id 자동추출 실패 — 관리화면에서 수동 입력/ID로 찾기 필요", flush=True)
 
     for a in ads:
         a["brand_name"] = display
