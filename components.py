@@ -259,14 +259,20 @@ def render_script_section(social_id: str, video_id: str = "") -> None:
 
 # ════════════════════════════════════════════════════════════
 def render_header(ads=None) -> dict:
-    # 상단: 큰 탭(직관적) + 우측 유저. 제목(Series Archive)은 사이드바로 이동.
-    tc = st.columns([5, 1], vertical_alignment="center")
+    # 상단: 큰 탭(직관적) + 새로고침 + 우측 유저. 제목(Series Archive)은 사이드바로 이동.
+    tc = st.columns([5, 1, 1], vertical_alignment="center")
     with tc[0]:
         tabs = ["Meta", "Google", "Insight", "북마크"]
         tab = st.segmented_control("메뉴", tabs, default="Meta", key="nav_tab",
                                    label_visibility="collapsed") or "Meta"
+    # 캐시 강제 초기화(5시 크롤·demo.db 갱신 후 옛 상태가 캐시로 남는 것 방지)
+    if tc[1].button("🔄 새로고침", key="hdr_refresh", use_container_width=True,
+                    help="최신 데이터로 캐시를 비우고 다시 불러옵니다"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.rerun()
     user = st.session_state.get("username", "guest")
-    tc[1].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
+    tc[2].markdown(f"<div style='text-align:right;font-size:12px;color:{S.SUB}'>"
                    f"👤 <b>{user}</b></div>", unsafe_allow_html=True)
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     return {"search": "", "tab": tab}
