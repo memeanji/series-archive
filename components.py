@@ -349,7 +349,9 @@ def render_brand_collection_admin() -> None:
     try:
         import pandas as pd
         df = pd.DataFrame([{"브랜드": s["brand"], "방식": s["method"], "page_id": s["page_id"] or "-",
-                            "광고수": s["count"], "영상": s["video"], "사라짐": s["gone"],
+                            "앱수집": s["count"], "라이브러리": s.get("reported") or "-",
+                            "수집률%": s.get("rate") if s.get("rate") is not None else "-",
+                            "영상": s["video"], "사라짐": s["gone"],
                             "마지막수집": s["last"] or "-", "상태": s["status"]} for s in stats])
         st.dataframe(df, use_container_width=True, hide_index=True, height=320)
     except Exception:  # noqa: BLE001

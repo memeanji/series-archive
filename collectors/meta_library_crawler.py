@@ -230,21 +230,25 @@ def _parse_card(r: dict, brand: str) -> dict:
 def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                  headless: bool = True, shot: bool = False, retries: int = 1,
                  page_id: str = "", ad_id: str = "",
-                 max_scroll: int = 80, no_new_ads_limit: int = 5) -> list[dict]:
+                 max_scroll: int = 80, no_new_ads_limit: int = 5,
+                 media_type: str = "all", publisher_platform: str = "") -> list[dict]:
     """Playwright 렌더 → 다단계 썸네일 추출 → 실패 시 카드 screenshot 폴백.
-    page_id 주면 해당 페이지의 전체 광고를 크롤(키워드 검색 대신 — 영상 mp4 정확 수집).
-    ad_id 주면 라이브러리 ID 단건 페이지를 크롤(공유받은 광고 ID 즉시 수집)."""
+    page_id 주면 광고주 전체 크롤, ad_id 주면 단건. media_type=all/video/image,
+    publisher_platform=facebook/instagram 로 경로 다중화(수집률↑)."""
     from playwright.sync_api import sync_playwright
 
+    _pf = f"&publisher_platforms[0]={publisher_platform}" if publisher_platform else ""
     if ad_id:
         url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
-               f"&country={country}&id={ad_id}&media_type=all")
+               f"&country={country}&id={ad_id}&media_type={media_type}{_pf}")
     elif page_id:
-        url = (f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all"
-               f"&country={country}&view_all_page_id={page_id}&search_type=page&media_type=all")
+        url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
+               f"&country={country}&view_all_page_id={page_id}&search_type=page"
+               f"&media_type={media_type}{_pf}")
     else:
         url = (f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all"
-               f"&country={country}&q={quote(brand)}&search_type=keyword_unordered&media_type=all")
+               f"&country={country}&q={quote(brand)}&search_type=keyword_unordered"
+               f"&media_type={media_type}{_pf}")
     rows: list[dict] = []
     ads: list[dict] = []
     stats = {"img": 0, "poster": 0, "bg": 0, "screenshot": 0, "failed": 0}
@@ -279,7 +283,11 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                 last_cnt, stale = 0, 0
                 for i in range(max_scroll):
                     page.mouse.wheel(0, 6000)
-                    page.wait_for_timeout(2000)
+                    page.wait_for_timeout(2800)              # 로딩 여유(보수적)
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=4000)  # 스피너/요청 종료 대기
+                    except Exception:  # noqa: BLE001
+                        pass
                     try:
                         cnt = page.evaluate(_JS_COUNT)
                     except Exception:  # noqa: BLE001
@@ -289,6 +297,16 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     else:
                         stale, last_cnt = 0, cnt
                     if stale >= no_new_ads_limit:
+                        # 종료 직전 한 번 더 끝까지 + 재스캔(누락 방지)
+                        page.mouse.wheel(0, 400000)
+                        page.wait_for_timeout(2500)
+                        try:
+                            cnt2 = page.evaluate(_JS_COUNT)
+                        except Exception:  # noqa: BLE001
+                            cnt2 = last_cnt
+                        if cnt2 > last_cnt:
+                            last_cnt, stale = cnt2, 0
+                            continue
                         break
                 done_scrolls = i + 1
                 print(f"  [meta-scroll] '{brand or page_id or ad_id}' "
@@ -305,18 +323,25 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
             page.wait_for_timeout(1500)
             rows = page.evaluate(_JS_EXTRACT)
 
-            # 광고주 page_id 후보 — 페이지 전체 HTML에서 view_all_page_id= 스캔(카드 링크보다 안정적)
+            # 광고주 page_id 후보 + 라이브러리 표기 결과수
             cand_pid = page_id or ""
-            if not cand_pid:
-                try:
-                    import re as _re
-                    from collections import Counter as _Counter
-                    html = page.content()
+            reported = 0
+            try:
+                import re as _re
+                from collections import Counter as _Counter
+                html = page.content()
+                if not cand_pid:
                     hits = _re.findall(r'(?:view_all_page_id["\\=:%\s]*?|"page_id"\s*:\s*")(\d{6,})', html)
                     if hits:
                         cand_pid = _Counter(hits).most_common(1)[0][0]
-                except Exception:  # noqa: BLE001
-                    cand_pid = ""
+                txt = page.inner_text("body")
+                rm = (_re.search(r"약\s*([\d,]+)\s*개", txt)
+                      or _re.search(r"~?\s*([\d,]+)\s*results", txt, _re.I)
+                      or _re.search(r"([\d,]+)\s*개의?\s*(?:광고|결과)", txt))
+                if rm:
+                    reported = int(rm.group(1).replace(",", ""))
+            except Exception:  # noqa: BLE001
+                pass
 
             for r in rows:
                 cid = r["library_id"]
@@ -358,6 +383,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     "platforms": ", ".join(r.get("platforms") or []),
                     "scrape_status": status, "error_message": err,
                     "page_id": page_id or r.get("page_id") or cand_pid or "",  # 수집/카드/HTML스캔 후보
+                    "reported_count": reported,   # 이 경로에서 라이브러리가 표기한 결과 수
                     "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
                 })
         finally:

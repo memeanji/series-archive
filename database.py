@@ -204,7 +204,8 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     # brands 테이블 page_id 컬럼
     bcols = [r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()]
     for c, t in (("meta_page_id", "TEXT"),
-                 ("page_id_status", "TEXT DEFAULT 'none'")):   # none/candidate/confirmed
+                 ("page_id_status", "TEXT DEFAULT 'none'"),   # none/candidate/confirmed
+                 ("meta_reported_count", "INTEGER DEFAULT 0")):  # 라이브러리 표기 결과수(수집률 비교)
         if c not in bcols:
             conn.execute(f"ALTER TABLE brands ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -981,7 +982,7 @@ def all_brand_collection_status() -> list[dict]:
     """전 브랜드 Meta 수집 상태를 1패스로 계산(관리 화면용)."""
     conn = get_conn()
     brands = conn.execute(
-        "SELECT display_name, meta_page_id, page_id_status FROM brands "
+        "SELECT display_name, meta_page_id, page_id_status, meta_reported_count FROM brands "
         "WHERE COALESCE(is_active,1)=1").fetchall()
     rows = conn.execute(
         "SELECT brand_name, media_type, video_status, last_seen_at, collected_at "
@@ -1004,7 +1005,11 @@ def all_brand_collection_status() -> list[dict]:
         a = agg.get(name, {"total": 0, "vid": 0, "gone": 0, "last": ""})
         has_pid = bool((b["meta_page_id"] or "").strip())
         ratio = (a["gone"] / a["vid"]) if a["vid"] else 0.0
-        if a["total"] < 20 and not has_pid:
+        reported = int(b["meta_reported_count"] or 0)
+        rate = (a["total"] / reported) if reported else None
+        if reported and rate is not None and rate < 0.7:
+            label = "누락 의심"
+        elif a["total"] < 20 and not has_pid:
             label = "page_id 확인 필요"
         elif a["total"] < 20:
             label = "확인 필요"
@@ -1016,8 +1021,9 @@ def all_brand_collection_status() -> list[dict]:
             label = "얕은 수집"
         out.append({"brand": name, "method": "page_id" if has_pid else "keyword",
                     "page_id": b["meta_page_id"] or "", "count": a["total"], "video": a["vid"],
-                    "gone": a["gone"], "last": a["last"], "status": label})
-    order = {"page_id 확인 필요": 0, "확인 필요": 1, "얕은 수집": 2, "만료 많음": 3, "정상": 4}
+                    "gone": a["gone"], "last": a["last"], "status": label,
+                    "reported": reported, "rate": (round(rate * 100) if rate is not None else None)})
+    order = {"누락 의심": 0, "page_id 확인 필요": 1, "확인 필요": 2, "얕은 수집": 3, "만료 많음": 4, "정상": 5}
     out.sort(key=lambda x: (order.get(x["status"], 9), -x["count"]))
     return out
 
@@ -1027,6 +1033,17 @@ def set_brand_page_id(display_name: str, page_id: str, status: str = "confirmed"
     conn = get_conn()
     conn.execute("UPDATE brands SET meta_page_id=?, page_id_status=?, updated_at=? WHERE display_name=?",
                  (str(page_id).strip(), status, _now(), display_name))
+    conn.commit()
+    conn.close()
+
+
+def set_brand_reported(display_name: str, reported: int) -> None:
+    """라이브러리 표기 결과수 저장(최댓값 유지) — 수집률 비교용."""
+    if not reported:
+        return
+    conn = get_conn()
+    conn.execute("UPDATE brands SET meta_reported_count=MAX(COALESCE(meta_reported_count,0),?) "
+                 "WHERE display_name=?", (int(reported), display_name))
     conn.commit()
     conn.close()
 
@@ -1058,8 +1075,12 @@ def brand_collection_status(display_name: str) -> dict:
     gone = sum(1 for r in vids if (r["video_status"] or "") in ("expired_url", "private_or_deleted", "not_found"))
     gone_ratio = (gone / len(vids)) if vids else 0.0
     last = max((str(r["last_seen_at"] or r["collected_at"] or "") for r in rows), default="")[:16]
-    # 상태 판정(우선순위)
-    if total < 20 and not has_pid:
+    reported = int(b.get("meta_reported_count") or 0)
+    rate = (total / reported) if reported else None
+    # 상태 판정(우선순위): 누락의심 > page_id확인 > 확인필요 > 만료많음 > 얕은수집 > 정상
+    if reported and rate is not None and rate < 0.7:
+        label = "누락 의심"
+    elif total < 20 and not has_pid:
         label = "page_id 확인 필요"
     elif total < 20:
         label = "확인 필요"
@@ -1071,7 +1092,8 @@ def brand_collection_status(display_name: str) -> dict:
         label = "얕은 수집"
     return {"brand": display_name, "method": "page_id" if has_pid else "keyword",
             "page_id": b.get("meta_page_id") or "", "page_id_status": b.get("page_id_status") or "none",
-            "count": total, "video": len(vids), "gone": gone,
+            "count": total, "video": len(vids), "gone": gone, "reported": reported,
+            "rate": (round(rate * 100) if rate is not None else None),
             "gone_ratio": round(gone_ratio, 2), "last": last, "status": label}
 
 
