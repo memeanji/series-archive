@@ -1042,6 +1042,30 @@ def set_brand_page_id(display_name: str, page_id: str, status: str = "confirmed"
     conn.close()
 
 
+_WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def brand_index_groups() -> dict:
+    """전 브랜드에 안정적 인덱스(1..N, brands.id 순) + 요일 그룹(월~일 균등분배) 부여.
+       브랜드 추가/삭제 시 자동 재분배. 반환 {display_name: {index, weekday(0~6), group}}."""
+    conn = get_conn()
+    names = [r[0] for r in conn.execute(
+        "SELECT display_name FROM brands WHERE COALESCE(is_active,1)=1 ORDER BY id").fetchall()]
+    conn.close()
+    n = len(names) or 1
+    out = {}
+    for p, b in enumerate(names):
+        wd = min(6, (p * 7) // n)        # 0=월 .. 6=일, 연속 균등 분배
+        out[b] = {"index": p + 1, "weekday": wd, "group": _WEEKDAYS[wd]}
+    return out
+
+
+def brands_for_weekday(wd: int) -> list:
+    """해당 요일(0=월..6=일)에 수집할 브랜드 목록(인덱스 순)."""
+    g = brand_index_groups()
+    return [b for b, info in sorted(g.items(), key=lambda x: x[1]["index"]) if info["weekday"] == wd]
+
+
 def set_brand_reported(display_name: str, reported: int) -> None:
     """라이브러리 표기 결과수 저장(최댓값 유지) — 수집률 비교용."""
     if not reported:

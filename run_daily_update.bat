@@ -6,4 +6,5 @@ set PYTHONIOENCODING=utf-8
 cd /d "C:\Users\894플러스\ad-reference-collector"
 set "PY=C:\Users\894플러스\AppData\Local\Programs\Python\Python314\python.exe"
 if not exist logs mkdir logs
-"%PY%" jobs\scheduled_update.py >> "logs\daily_update.log" 2>&1
+REM 요일별 분할 수집(오늘 요일 그룹만) — 약 12~15개 브랜드 안정적 갱신
+"%PY%" jobs\daily_group_update.py >> "logs\daily_update.log" 2>&1
