@@ -61,14 +61,9 @@ def main() -> None:
         _log(f"영상 상태 확정 실패: {e}")
     _log(f"크롤 완료 · 누적 갱신 {grand}")
 
-    # demo.db 갱신
+    # demo.db 갱신(WAL 체크포인트 포함)
     try:
-        shutil.copy(ROOT / "data" / "series_archive.db", ROOT / "sample_data" / "demo.db")
-        con = sqlite3.connect(ROOT / "sample_data" / "demo.db")
-        con.isolation_level = None
-        con.execute("DELETE FROM users")
-        con.execute("VACUUM")
-        con.close()
+        database.regenerate_demo_db()
         _log("demo.db 갱신 완료")
     except Exception as e:  # noqa: BLE001
         _log(f"demo.db 갱신 실패: {e}")

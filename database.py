@@ -819,16 +819,21 @@ def expired_video_brands() -> list[str]:
     return [b for b, _ in sorted(cnt.items(), key=lambda x: -x[1])]
 
 
-def finalize_meta_video_status(run_start: str) -> dict:
+def finalize_meta_video_status(run_start: str, brands: Optional[list] = None) -> dict:
     """크롤 직후 호출: meta 영상 row 의 video_status 를 확정.
        - 이번 실행에서 신선한 URL로 갱신됨 → ok
        - 이번 실행에서 다시 안 잡힘(last_crawled_at < run_start) + 만료/URL없음 → private_or_deleted
        - 크롤됐는데도 URL 없음/만료 → unavailable / expired_url
+       brands 지정 시 해당 브랜드만(부분 크롤에서 다른 브랜드를 오판하지 않도록).
     """
     from services.urls import meta_video_state
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM ad_library_ads "
-                        "WHERE platform='meta' AND media_type='video'").fetchall()
+    q = "SELECT * FROM ad_library_ads WHERE platform='meta' AND media_type='video'"
+    params: list = []
+    if brands:
+        q += " AND brand_name IN (%s)" % ",".join("?" * len(brands))
+        params = list(brands)
+    rows = conn.execute(q, params).fetchall()
     counts: dict = {}
     for r in rows:
         d = dict(r)
@@ -845,6 +850,27 @@ def finalize_meta_video_status(run_start: str) -> dict:
     conn.commit()
     conn.close()
     return counts
+
+
+def regenerate_demo_db() -> None:
+    """배포용 clean 데모 DB 생성. WAL 체크포인트 후 복사(미체크포인트 최신 커밋 누락 방지)
+       → users 제거 → VACUUM. 잡에서 git push 전에 호출."""
+    import shutil
+    # WAL 의 미반영 커밋을 본 .db 파일로 합치고(TRUNCATE) 복사 — 안 하면 demo.db 가 옛 데이터
+    conn = get_conn()
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        conn.close()
+    sample = ROOT / "sample_data"
+    sample.mkdir(parents=True, exist_ok=True)
+    demo = sample / "demo.db"
+    shutil.copy(DB_PATH, demo)
+    con = sqlite3.connect(demo)
+    con.isolation_level = None
+    con.execute("DELETE FROM users")
+    con.execute("VACUUM")
+    con.close()
 
 
 def get_brand(display_name: str) -> Optional[dict]:
