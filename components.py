@@ -665,6 +665,8 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                                       help="구글 텍스트/검색광고·썸네일 없는 광고는 기본 숨김(개발·디버그용).")
             only_unavail = st.checkbox("상세 확인 불가 광고만 보기", value=False, key="f_unavail",
                                        help="상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고만 모아 봅니다.")
+            merge_variants = st.checkbox("A/B 변형 묶기(같은 문구 1장으로)", value=False, key="f_merge",
+                                         help="끄면 라이브러리처럼 광고 1건당 카드 1장. 켜면 같은 문구의 A/B 변형을 묶어 표시.")
 
     # 탭 → 매체/북마크 매핑
     tab = header["tab"]
@@ -695,6 +697,7 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
         "only_bookmark": only_bm,
         "show_hidden": show_hidden,
         "only_unavailable": only_unavail,
+        "merge_variants": merge_variants,
     }
 
 

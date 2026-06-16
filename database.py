@@ -414,10 +414,15 @@ _DEDUP = ("a.brand_name || '|' || a.media_type || '|' || "
           "NULLIF(a.thumbnail_url,''), a.id)")
 
 
+def _group_key(f: dict) -> str:
+    """카드 묶음 기준. 기본은 광고별(a.id)로 모두 노출, 토글 시 A/B(문구) 묶기."""
+    return _DEDUP if f.get("merge_variants") else "a.id"
+
+
 def count_ads(tab: str, f: dict) -> int:
     where, p = _where(tab, f)
     conn = get_conn()
-    n = conn.execute(f"SELECT COUNT(DISTINCT {_DEDUP}) {_JOIN} WHERE {where}", p).fetchone()[0]
+    n = conn.execute(f"SELECT COUNT(DISTINCT {_group_key(f)}) {_JOIN} WHERE {where}", p).fetchone()[0]
     conn.close()
     return n
 
@@ -428,7 +433,7 @@ def load_ads_page(tab: str, f: dict, page: int = 1, page_size: int = 12) -> list
     conn = get_conn()
     rows = conn.execute(
         f"SELECT {_SUMMARY_COLS} {_JOIN} WHERE {where} "
-        f"GROUP BY {_DEDUP} {order} LIMIT ? OFFSET ?",
+        f"GROUP BY {_group_key(f)} {order} LIMIT ? OFFSET ?",
         p + [page_size, max(0, (page - 1) * page_size)]).fetchall()
     conn.close()
     return [dict(r) for r in rows]
