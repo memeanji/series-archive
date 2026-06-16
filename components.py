@@ -14,7 +14,7 @@ import streamlit.components.v1 as stc
 import database
 import services.youtube as YT
 import styles as S
-from services.urls import is_valid_external_url, normalize_google_transparency_url
+from services.urls import is_valid_external_url, meta_video_state, normalize_google_transparency_url
 
 ROOT = Path(__file__).resolve().parent
 
@@ -602,6 +602,15 @@ def render_ad_card(ad: dict, idx: int) -> None:
     yt_blocked = (ad.get("yt_embeddable") == 0) and ("youtu" in (ad.get("video_url") or ""))
     play_badge = ("<div class='sa-badge' style='background:rgba(180,83,9,.92);top:7px;left:7px'>"
                   "🔒 외부재생</div>" if yt_blocked else "")
+    # Meta 영상 재생불가 상태 배지(만료/비공개)
+    if plat == "meta" and is_video and not yt_blocked:
+        _mst = meta_video_state(ad)
+        if _mst == "expired_url":
+            play_badge = ("<div class='sa-badge' style='background:rgba(202,138,4,.95);top:7px;left:7px'>"
+                          "⚠ URL 만료</div>")
+        elif _mst in ("private_or_deleted", "unavailable"):
+            play_badge = ("<div class='sa-badge' style='background:rgba(100,116,139,.95);top:7px;left:7px'>"
+                          "재생 불가</div>")
     dot = S.status_color(ad.get("status"))
 
     # ── 핵심 지표(우선순위 2) ──
@@ -682,6 +691,9 @@ def _render_source_buttons(ad: dict) -> None:
             links.append(("🔎 투명성센터", turl))
     elif is_valid_external_url(ad.get("original_ad_url")):
         links.append(("🔗 원본 광고", ad["original_ad_url"]))
+    elif plat == "meta" and ad.get("id"):
+        # 원본 URL 없어도(만료/비공개) Ad Library 검색링크는 항상 유지
+        links.append(("🔗 원본 광고", f"https://www.facebook.com/ads/library/?id={ad['id']}"))
     if is_valid_external_url(ad.get("landing_url")):
         links.append(("🛒 랜딩", ad["landing_url"]))
     if links:
@@ -1016,6 +1028,31 @@ def render_ad_detail(ad: dict) -> None:
         elif yt_vid:
             # 그 외 — Player API로 재생 시도, 실제 차단(onError) 시 자동 fallback 전환
             _yt_smart_player(ad, yt_vid)
+        elif plat == "meta" and (ad.get("media_type") == "video"):
+            # Meta fbcdn 영상 URL 은 만료되는 임시값 → 동적 판정 후 상태별 렌더
+            mstate = meta_video_state(ad)
+            if mstate == "ok":
+                st.video(vurl)
+            elif mstate == "expired_url":
+                # 재생 실패(URL 만료) → expired_url 기록(다음 5시 크롤 우선 갱신) + 썸네일/안내
+                if ad.get("video_status") != "expired_url":
+                    try:
+                        database.mark_video_expired(aid)
+                    except Exception:  # noqa: BLE001
+                        pass
+                if th["src"]:
+                    st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
+                                f"object-fit:contain;background:#0F172A;border-radius:10px'/>",
+                                unsafe_allow_html=True)
+                st.warning("⚠ 영상 URL이 만료돼 재생할 수 없어요. 매일 05:00 자동 수집 때 "
+                           "우선 갱신됩니다. 지금은 아래 ‘원본 광고’에서 확인하세요.")
+            else:  # private_or_deleted / unavailable
+                if th["src"]:
+                    st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
+                                f"object-fit:contain;background:#0F172A;border-radius:10px'/>",
+                                unsafe_allow_html=True)
+                st.info("영상을 가져올 수 없어요 — 비공개·삭제됐거나 더 이상 게재되지 않는 "
+                        "광고일 수 있어요. 아래 ‘원본 광고’에서 확인하세요.")
         elif vurl:
             st.video(vurl)
         elif th["src"]:

@@ -1,66 +1,67 @@
-"""
-매일 자동 수집 파이프라인 (Windows 작업 스케줄러가 매일 05:00 호출).
-[모든 브랜드 메타+구글 크롤 → 매칭/재등급 → demo.db 갱신 → git 커밋·푸시(Cloud 반영)]
-매일 재크롤로 만료되는 fbcdn 영상/썸네일 서명 URL도 갱신됨.
-사용:  python jobs/scheduled_update.py
+"""전 브랜드 메타 광고만 재크롤 → 만료된 fbcdn 영상/썸네일 서명 URL 일괄 갱신.
+   (구글/유튜브는 건드리지 않음 — '메타만' 복구용)
+   완료 후 demo.db 갱신 + git push 로 클라우드 반영.
 """
 import shutil
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import database  # noqa: E402
-from jobs.crawl_brand import crawl_one  # noqa: E402
+from collectors import meta_library_crawler  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _log(msg: str) -> None:
-    print(f"[{datetime.now():%Y-%m-%d %H:%M}] {msg}", flush=True)
+def _log(m: str) -> None:
+    print(f"[{datetime.now():%H:%M:%S}] {m}", flush=True)
 
 
 def main() -> None:
-    from datetime import timezone
     database.init_db()
-    run_start = datetime.now(timezone.utc).isoformat()   # 갱신여부 판정 기준
+    run_start = datetime.now(timezone.utc).isoformat()
     conn = database.get_conn()
     brands = [r[0] for r in conn.execute(
         "SELECT display_name FROM brands WHERE COALESCE(is_active,1)=1 ORDER BY display_name").fetchall()]
     conn.close()
-    # 만료/재생불가 영상이 있는 브랜드를 앞으로 — 우선 갱신
     try:
         priority = database.expired_video_brands()
         if priority:
             pset = set(priority)
             brands = priority + [b for b in brands if b not in pset]
-            _log(f"우선 갱신 대상(만료 영상 보유) {len(priority)}개 브랜드 먼저 처리")
+            _log(f"우선 갱신(만료 영상 보유) {len(priority)}개 브랜드 먼저")
     except Exception as e:  # noqa: BLE001
         _log(f"우선순위 계산 건너뜀: {e}")
-    _log(f"=== 매일 수집 시작: {len(brands)}개 브랜드 ===")
-    total = 0
+    _log(f"=== 메타 전체 재크롤 시작: {len(brands)}개 브랜드 ===")
+    grand = 0
     for i, b in enumerate(brands, 1):
-        try:
-            r = crawl_one(b)
-            total += r["ad"]
-            _log(f"[{i}/{len(brands)}] {b}: 광고 {r['ad']} · 소셜 {r['social']}")
-        except Exception as e:  # noqa: BLE001
-            _log(f"[{i}/{len(brands)}] {b}: 실패 {str(e)[:80]}")
+        kws = database.get_brand_keywords(b) if database.brand_exists(b) else [b]
+        saved_b = 0
+        for kw in kws:
+            try:
+                ads = [{**a, "brand_name": b}
+                       for a in meta_library_crawler.search_brand(kw, scrolls=10, retries=2)]
+                saved = database.ingest_ad_library(ads)
+                saved_b += saved
+            except Exception as e:  # noqa: BLE001
+                _log(f"  [{b}] '{kw}' 실패: {str(e)[:80]}")
+        grand += saved_b
+        _log(f"[{i}/{len(brands)}] {b}: 갱신 {saved_b}")
     database.compute_matches()
     database.regrade()
     database.migrate_brands()
-    # 크롤 후 Meta 영상 재생상태 확정(ok/expired_url/private_or_deleted/unavailable)
     try:
         vs = database.finalize_meta_video_status(run_start)
         _log(f"영상 상태: {vs}")
     except Exception as e:  # noqa: BLE001
         _log(f"영상 상태 확정 실패: {e}")
-    _log(f"크롤 완료 · 누적 적재 {total}")
+    _log(f"크롤 완료 · 누적 갱신 {grand}")
 
-    # demo.db 갱신(계정 제거 + VACUUM)
+    # demo.db 갱신
     try:
         shutil.copy(ROOT / "data" / "series_archive.db", ROOT / "sample_data" / "demo.db")
         con = sqlite3.connect(ROOT / "sample_data" / "demo.db")
@@ -72,16 +73,18 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         _log(f"demo.db 갱신 실패: {e}")
 
-    # git 커밋·푸시(Cloud 자동 반영)
-    msg = f"auto: 매일 수집 갱신 {datetime.now():%Y-%m-%d}"
+    # git push
+    msg = f"메타 전체 영상 URL 재크롤 갱신 {datetime.now():%Y-%m-%d %H:%M}"
     for cmd in (["git", "add", "sample_data/demo.db"],
                 ["git", "commit", "-m", msg],
                 ["git", "push", "origin", "main"]):
         try:
-            subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=120)
+            r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=180)
+            if r.returncode != 0 and cmd[1] != "commit":
+                _log(f"git {cmd[1]}: {r.stderr[:120]}")
         except Exception as e:  # noqa: BLE001
             _log(f"git 실패({cmd[1]}): {e}")
-    _log("=== 완료(배포 푸시) ===")
+    _log("=== 완료(클라우드 푸시) ===")
 
 
 if __name__ == "__main__":

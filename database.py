@@ -36,6 +36,8 @@ AD_COLS = [
     "script_text", "script_source", "script_status", "script_error_message",
     "script_created_at", "script_updated_at", "cta", "ad_variant_count",
     "yt_views", "yt_likes", "yt_comments", "detail_status",
+    # Meta fbcdn video_url 은 만료되는 임시값 → 갱신시각/마지막크롤/재생상태를 추적
+    "video_url_updated_at", "last_crawled_at", "video_status",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -156,7 +158,10 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("yt_comments", "INTEGER DEFAULT 0"), ("detail_status", "TEXT DEFAULT ''"),
                  ("yt_embeddable", "INTEGER"),   # 1=임베드가능 0=제한 NULL=미확인(지연조회)
                  ("is_excluded", "INTEGER DEFAULT 0"),   # 사용자가 '제외'한 잘못 수집 광고
-                 ("fatigue_status", "TEXT")):    # 성장중/안정/정체/피로도의심/회복중/종료(일별잡이 계산)
+                 ("fatigue_status", "TEXT"),    # 성장중/안정/정체/피로도의심/회복중/종료(일별잡이 계산)
+                 ("video_url_updated_at", "TEXT"),   # video_url 마지막 갱신시각(만료 임시URL 추적)
+                 ("last_crawled_at", "TEXT"),        # 이 row 마지막 재크롤 시각
+                 ("video_status", "TEXT DEFAULT ''")):  # ok/expired_url/private_or_deleted/unavailable
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
@@ -720,6 +725,20 @@ def ingest_ad_library(ads: list[dict]) -> int:
         tags = a.get("tags") or (a.get("hook_tags") or []) + (a.get("format_tags") or [])
         prev = conn.execute("SELECT * FROM ad_library_ads WHERE id=?", (aid,)).fetchone()
         prev = dict(prev) if prev else None
+        # ── Meta 영상 URL 추적: video_url 은 만료 임시값으로 취급 ──
+        _now_ts = _now()
+        _vu = a.get("video_url") or ""
+        _is_video = (a.get("media_type") or a.get("ad_format") or "") == "video"
+        _has_vu = _vu.startswith("http")
+        if _is_video and _has_vu:
+            _vstatus = "ok"                       # 방금 받은 신선한 URL(만료는 렌더 시 동적판정)
+            _vu_updated = _now_ts
+        elif _is_video:
+            _vstatus = "private_or_deleted"       # 영상 광고인데 URL 못 가져옴 → 비공개/삭제 가능
+            _vu_updated = (prev or {}).get("video_url_updated_at") or ""
+        else:
+            _vstatus = ""                         # 이미지 등 비영상
+            _vu_updated = (prev or {}).get("video_url_updated_at") or ""
         row = {
             "id": aid, "brand_name": a.get("brand_name") or a.get("advertiser_name") or "(미상)",
             "ad_title": a.get("ad_title") or a.get("headline") or "",
@@ -756,6 +775,9 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "yt_likes": int(a.get("yt_likes") or (prev or {}).get("yt_likes") or 0),
             "yt_comments": int(a.get("yt_comments") or (prev or {}).get("yt_comments") or 0),
             "detail_status": a.get("detail_status") or (prev or {}).get("detail_status") or "",
+            "video_url_updated_at": _vu_updated,
+            "last_crawled_at": _now_ts,        # 이번 크롤로 row 갱신됨(ad_id upsert)
+            "video_status": _vstatus,
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -763,6 +785,59 @@ def ingest_ad_library(ads: list[dict]) -> int:
     conn.commit()
     conn.close()
     return n
+
+
+def mark_video_expired(ad_id: str) -> None:
+    """앱에서 st.video 재생 실패가 감지된 광고를 expired_url 로 기록(다음 크롤 우선 갱신 대상)."""
+    conn = get_conn()
+    conn.execute("UPDATE ad_library_ads SET video_status='expired_url' "
+                 "WHERE id=? AND platform='meta' AND COALESCE(video_status,'')<>'private_or_deleted'",
+                 (ad_id,))
+    conn.commit()
+    conn.close()
+
+
+def expired_video_brands() -> list[str]:
+    """만료/재생불가 영상이 있는 브랜드 — 많은 순. 5시 크롤이 우선 갱신하도록 정렬용."""
+    from services.urls import meta_video_state
+    conn = get_conn()
+    rows = conn.execute("SELECT brand_name, video_url, video_status, media_type, ad_format "
+                        "FROM ad_library_ads WHERE platform='meta' AND media_type='video'").fetchall()
+    conn.close()
+    cnt: dict = {}
+    for r in rows:
+        d = dict(r)
+        if d.get("video_status") == "expired_url" or meta_video_state(d) == "expired_url":
+            cnt[d["brand_name"]] = cnt.get(d["brand_name"], 0) + 1
+    return [b for b, _ in sorted(cnt.items(), key=lambda x: -x[1])]
+
+
+def finalize_meta_video_status(run_start: str) -> dict:
+    """크롤 직후 호출: meta 영상 row 의 video_status 를 확정.
+       - 이번 실행에서 신선한 URL로 갱신됨 → ok
+       - 이번 실행에서 다시 안 잡힘(last_crawled_at < run_start) + 만료/URL없음 → private_or_deleted
+       - 크롤됐는데도 URL 없음/만료 → unavailable / expired_url
+    """
+    from services.urls import meta_video_state
+    conn = get_conn()
+    rows = conn.execute("SELECT * FROM ad_library_ads "
+                        "WHERE platform='meta' AND media_type='video'").fetchall()
+    counts: dict = {}
+    for r in rows:
+        d = dict(r)
+        state = meta_video_state(d)              # ok / expired_url / unavailable
+        refreshed = (d.get("last_crawled_at") or "") >= run_start
+        if state == "ok":
+            final = "ok"
+        elif not refreshed:
+            final = "private_or_deleted"          # 재크롤에서 다시 안 보임 → 비공개/삭제 추정
+        else:
+            final = state or "unavailable"        # 크롤됐는데도 만료/없음
+        conn.execute("UPDATE ad_library_ads SET video_status=? WHERE id=?", (final, d["id"]))
+        counts[final] = counts.get(final, 0) + 1
+    conn.commit()
+    conn.close()
+    return counts
 
 
 def get_brand(display_name: str) -> Optional[dict]:
