@@ -33,16 +33,21 @@ def main(ids: list) -> None:
                             "reason": "원본 접근 불가(만료·비공개·삭제 또는 권한 필요)",
                             "is_new": False, "advertiser": "", "page_id": ""})
             continue
-        adv = (ads[0].get("headline") or ads[0].get("advertiser_name") or "(ID수집)").strip() or "(ID수집)"
-        for a in ads:   # ?id= 는 광고주의 광고 여러 건을 반환 → 모두 같은 광고주명으로
-            a["brand_name"] = a.get("brand_name") or adv
-        database.ingest_ad_library(ads)
-        got = {str(a.get("platform_ad_id")) for a in ads}
-        hit = aid in got
-        results.append({"id": aid, "ok": hit, "is_new": hit,
-                        "reason": "신규 수집" if hit else "광고주 광고는 받았으나 해당 ID 미확인(만료/비공개 가능)",
-                        "advertiser": adv, "page_id": ads[0].get("page_id") or "",
-                        "media": ads[0].get("media_type") or ""})
+        # ?id= 페이지는 추천/연관 광고도 같이 반환 → 입력 ID와 정확히 일치하는 광고만 저장(오염 방지)
+        target = [a for a in ads if str(a.get("platform_ad_id")) == aid]
+        if not target:
+            results.append({"id": aid, "ok": False,
+                            "reason": "해당 ID 광고 미확인(만료/비공개 가능) — 연관광고는 저장 안 함",
+                            "is_new": False, "advertiser": "",
+                            "page_id": ads[0].get("page_id") or ""})
+            continue
+        a = target[0]
+        adv = (a.get("headline") or a.get("advertiser_name") or "(ID수집)").strip() or "(ID수집)"
+        a["brand_name"] = a.get("brand_name") or adv
+        database.ingest_ad_library([a])   # 입력 ID 1건만 적재
+        results.append({"id": aid, "ok": True, "is_new": True, "reason": "신규 수집",
+                        "advertiser": adv, "page_id": a.get("page_id") or "",
+                        "media": a.get("media_type") or ""})
     if any(r["is_new"] for r in results):
         database.compute_matches()
         database.regrade()
