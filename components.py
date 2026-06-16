@@ -300,6 +300,67 @@ def _domain_ok(d: str) -> bool:
     return bool(re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", d))
 
 
+def _run_meta_collect(display: str) -> None:
+    """선택 브랜드를 page_id(있으면) 기반으로 깊게 재수집."""
+    with st.spinner(f"'{display}' Meta 재수집 중… (page_id 기반 전체 크롤, 1~3분)"):
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / "jobs" / "meta_collect.py"), display],
+                               capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+            tail = [l for l in (r.stdout or r.stderr).strip().splitlines() if l.strip()][-1:] or ["완료"]
+            st.success(f"재수집 완료 — {tail[0]}")
+        except subprocess.TimeoutExpired:
+            st.error("시간 초과")
+        except Exception as e:  # noqa: BLE001
+            st.error(f"재수집 실패: {e}")
+    _reload()
+
+
+_STATUS_COLOR = {"정상": "#10B981", "얕은 수집": "#F59E0B", "확인 필요": "#EF4444",
+                 "만료 많음": "#B45309", "page_id 확인 필요": "#6366F1"}
+
+
+def render_brand_collection_admin() -> None:
+    """브랜드별 Meta 수집 상태 + page_id 수동 입력/재수집."""
+    stats = database.all_brand_collection_status()
+    n_pid = sum(1 for s in stats if s["method"] == "page_id")
+    st.caption(f"브랜드 {len(stats)}개 · page_id 기반 {n_pid} · 키워드 {len(stats) - n_pid} "
+               f"(page_id가 있으면 키워드 한계 없이 광고주 전체를 수집)")
+
+    # 상태 요약 테이블(상태 나쁜 순 정렬됨)
+    try:
+        import pandas as pd
+        df = pd.DataFrame([{"브랜드": s["brand"], "방식": s["method"], "page_id": s["page_id"] or "-",
+                            "광고수": s["count"], "영상": s["video"], "사라짐": s["gone"],
+                            "마지막수집": s["last"] or "-", "상태": s["status"]} for s in stats])
+        st.dataframe(df, use_container_width=True, hide_index=True, height=320)
+    except Exception:  # noqa: BLE001
+        for s in stats[:40]:
+            st.write(f"{s['brand']} · {s['method']} · {s['count']}개 · {s['status']}")
+
+    st.markdown("---")
+    # 브랜드 선택 → page_id 입력/저장 + 재수집
+    names = [s["brand"] for s in stats]
+    sel = st.selectbox("브랜드 선택", names, key="bca_sel")
+    cur = database.get_brand(sel) or {}
+    cc = st.columns([3, 1.2])
+    pid = cc[0].text_input("Meta page_id (광고주 페이지 ID)", value=cur.get("meta_page_id") or "",
+                           key=f"bca_pid_{sel}",
+                           placeholder="예: 100xxxxxxxxxxx — 라이브러리에서 광고주 페이지 ID")
+    if cc[1].button("💾 page_id 저장", key=f"bca_save_{sel}", use_container_width=True):
+        database.set_brand_page_id(sel, pid, "confirmed" if pid.strip() else "none")
+        st.success("저장됨")
+        _reload()
+    bb = st.columns(2)
+    if bb[0].button(f"🔄 '{sel}' 재수집 (page_id 깊게)", key=f"bca_re_{sel}",
+                    type="primary", use_container_width=True):
+        _run_meta_collect(sel)
+    cand = (cur.get("page_id_status") == "candidate")
+    if bb[1].button("page_id 후보→확정", key=f"bca_conf_{sel}", disabled=not cand,
+                    use_container_width=True, help="키워드 수집에서 자동 추출한 후보를 확정"):
+        database.set_brand_page_id(sel, cur.get("meta_page_id") or "", "confirmed")
+        _reload()
+
+
 def _collect_ids(ids: list) -> None:
     """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집."""
     with st.spinner(f"광고 ID {len(ids)}개 수집 중… (Meta Ad Library, 최대 1~2분)"):

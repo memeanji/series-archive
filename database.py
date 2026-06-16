@@ -38,6 +38,7 @@ AD_COLS = [
     "yt_views", "yt_likes", "yt_comments", "detail_status",
     # Meta fbcdn video_url 은 만료되는 임시값 → 갱신시각/마지막크롤/재생상태를 추적
     "video_url_updated_at", "last_crawled_at", "video_status",
+    "page_id", "last_seen_at",   # page_id 기반 수집 + 마지막으로 라이브러리에서 본 시각
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -195,9 +196,17 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("fatigue_status", "TEXT"),    # 성장중/안정/정체/피로도의심/회복중/종료(일별잡이 계산)
                  ("video_url_updated_at", "TEXT"),   # video_url 마지막 갱신시각(만료 임시URL 추적)
                  ("last_crawled_at", "TEXT"),        # 이 row 마지막 재크롤 시각
-                 ("video_status", "TEXT DEFAULT ''")):  # ok/expired_url/private_or_deleted/unavailable
+                 ("video_status", "TEXT DEFAULT ''"),  # ok/expired_url/private_or_deleted/unavailable
+                 ("page_id", "TEXT"),                # 광고주 page_id(page_id 기반 수집)
+                 ("last_seen_at", "TEXT")):          # 마지막으로 라이브러리에서 본 시각
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
+    # brands 테이블 page_id 컬럼
+    bcols = [r[1] for r in conn.execute("PRAGMA table_info(brands)").fetchall()]
+    for c, t in (("meta_page_id", "TEXT"),
+                 ("page_id_status", "TEXT DEFAULT 'none'")):   # none/candidate/confirmed
+        if c not in bcols:
+            conn.execute(f"ALTER TABLE brands ADD COLUMN {c} {t}")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
     for c, t in (("video_id", "TEXT"), ("embed_url", "TEXT"), ("title", "TEXT"),
                  ("channel_title", "TEXT"),
@@ -827,6 +836,8 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "video_url_updated_at": _vu_updated,
             "last_crawled_at": _now_ts,        # 이번 크롤로 row 갱신됨(ad_id upsert)
             "video_status": _vstatus,
+            "page_id": a.get("page_id") or (prev or {}).get("page_id") or "",
+            "last_seen_at": _now_ts,           # 이번 크롤에서 라이브러리에 보였음
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -964,6 +975,104 @@ def get_brand(display_name: str) -> Optional[dict]:
     r = conn.execute("SELECT * FROM brands WHERE display_name=?", (display_name,)).fetchone()
     conn.close()
     return dict(r) if r else None
+
+
+def all_brand_collection_status() -> list[dict]:
+    """전 브랜드 Meta 수집 상태를 1패스로 계산(관리 화면용)."""
+    conn = get_conn()
+    brands = conn.execute(
+        "SELECT display_name, meta_page_id, page_id_status FROM brands "
+        "WHERE COALESCE(is_active,1)=1").fetchall()
+    rows = conn.execute(
+        "SELECT brand_name, media_type, video_status, last_seen_at, collected_at "
+        "FROM ad_library_ads WHERE platform='meta' AND COALESCE(is_excluded,0)=0").fetchall()
+    conn.close()
+    agg: dict = {}
+    for r in rows:
+        a = agg.setdefault(r["brand_name"], {"total": 0, "vid": 0, "gone": 0, "last": ""})
+        a["total"] += 1
+        if r["media_type"] == "video":
+            a["vid"] += 1
+            if (r["video_status"] or "") in ("expired_url", "private_or_deleted", "not_found"):
+                a["gone"] += 1
+        ls = str(r["last_seen_at"] or r["collected_at"] or "")[:16]
+        if ls > a["last"]:
+            a["last"] = ls
+    out = []
+    for b in brands:
+        name = b["display_name"]
+        a = agg.get(name, {"total": 0, "vid": 0, "gone": 0, "last": ""})
+        has_pid = bool((b["meta_page_id"] or "").strip())
+        ratio = (a["gone"] / a["vid"]) if a["vid"] else 0.0
+        if a["total"] < 20 and not has_pid:
+            label = "page_id 확인 필요"
+        elif a["total"] < 20:
+            label = "확인 필요"
+        elif ratio >= 0.6:
+            label = "만료 많음"
+        elif has_pid:
+            label = "정상"
+        else:
+            label = "얕은 수집"
+        out.append({"brand": name, "method": "page_id" if has_pid else "keyword",
+                    "page_id": b["meta_page_id"] or "", "count": a["total"], "video": a["vid"],
+                    "gone": a["gone"], "last": a["last"], "status": label})
+    order = {"page_id 확인 필요": 0, "확인 필요": 1, "얕은 수집": 2, "만료 많음": 3, "정상": 4}
+    out.sort(key=lambda x: (order.get(x["status"], 9), -x["count"]))
+    return out
+
+
+def set_brand_page_id(display_name: str, page_id: str, status: str = "confirmed") -> None:
+    """브랜드의 Meta page_id 설정(수동 입력 or 자동 추출). status: candidate/confirmed."""
+    conn = get_conn()
+    conn.execute("UPDATE brands SET meta_page_id=?, page_id_status=?, updated_at=? WHERE display_name=?",
+                 (str(page_id).strip(), status, _now(), display_name))
+    conn.commit()
+    conn.close()
+
+
+def existing_ad_ids(ids: list) -> set:
+    """주어진 ad_id 중 이미 DB에 있는 것(신규/갱신 구분용)."""
+    ids = [str(i) for i in ids if i]
+    if not ids:
+        return set()
+    conn = get_conn()
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT id FROM ad_library_ads WHERE id IN ({ph})", ids).fetchall()
+    conn.close()
+    return {r[0] for r in rows}
+
+
+def brand_collection_status(display_name: str) -> dict:
+    """브랜드별 Meta 수집 상태 판정.
+       method: page_id/keyword · count · expired/private 비율 → 상태 라벨."""
+    b = get_brand(display_name) or {}
+    has_pid = bool((b.get("meta_page_id") or "").strip())
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT video_status, media_type, last_seen_at, collected_at FROM ad_library_ads "
+        "WHERE brand_name=? AND platform='meta' AND COALESCE(is_excluded,0)=0", (display_name,)).fetchall()
+    conn.close()
+    total = len(rows)
+    vids = [r for r in rows if r["media_type"] == "video"]
+    gone = sum(1 for r in vids if (r["video_status"] or "") in ("expired_url", "private_or_deleted", "not_found"))
+    gone_ratio = (gone / len(vids)) if vids else 0.0
+    last = max((str(r["last_seen_at"] or r["collected_at"] or "") for r in rows), default="")[:16]
+    # 상태 판정(우선순위)
+    if total < 20 and not has_pid:
+        label = "page_id 확인 필요"
+    elif total < 20:
+        label = "확인 필요"
+    elif gone_ratio >= 0.6:
+        label = "만료 많음"
+    elif has_pid:
+        label = "정상"
+    else:
+        label = "얕은 수집"
+    return {"brand": display_name, "method": "page_id" if has_pid else "keyword",
+            "page_id": b.get("meta_page_id") or "", "page_id_status": b.get("page_id_status") or "none",
+            "count": total, "video": len(vids), "gone": gone,
+            "gone_ratio": round(gone_ratio, 2), "last": last, "status": label}
 
 
 def ingest_social_videos(vids: list[dict], from_keyword_search: bool = True) -> int:

@@ -48,6 +48,15 @@ _NAV = {
     "광고", "플랫폼", "드롭다운 열기", "활성", "비활성", "광고 상세 정보 보기",
 }
 
+# 현재 DOM에 로드된 고유 광고 ID 수 — 스크롤 종료 판정용(가벼움)
+_JS_COUNT = r"""
+() => { const s = new Set();
+  for (const el of document.querySelectorAll('div')) {
+    const m = (el.innerText || '').match(/(?:Library ID|라이브러리 ID)[:\s]*([0-9]{6,})/);
+    if (m) s.add(m[1]);
+  } return s.size; }
+"""
+
 # 카드 추출 JS — 'Library ID/라이브러리 ID' 텍스트를 가진 최소 블록을 카드로 본다.
 _JS_EXTRACT = r"""
 () => {
@@ -92,6 +101,12 @@ _JS_EXTRACT = r"""
       if (mm) { bg = mm[1]; break; }
     }
     const links = Array.from(card.querySelectorAll('a')).map(a => a.href).filter(Boolean);
+    // 광고주 page_id 후보 — 카드 링크의 view_all_page_id= / page_id= 에서 추출
+    let page_id = '';
+    for (const h of links) {
+      const pm = (h || '').match(/(?:view_all_page_id|page_id)=([0-9]+)/);
+      if (pm) { page_id = pm[1]; break; }
+    }
     // 영상 광고: poster만 사용(없으면 비워 둬서 Python 스크린샷 폴백 → 프로필 img 회피)
     // 이미지 광고: 가장 큰 소재 이미지 우선
     let thumb = '', src = 'none';
@@ -116,7 +131,7 @@ _JS_EXTRACT = r"""
     }
     out.push({ library_id: id, has_video: vids.length > 0,
                video_url: vids[0] || '', thumbnail_url: thumb, thumb_src: src,
-               platforms: plats, links: links.slice(0, 8),
+               platforms: plats, links: links.slice(0, 8), page_id: page_id,
                text: (card.innerText || '').trim().slice(0, 1200) });
   }
   return out;
@@ -179,7 +194,8 @@ def _parse_card(r: dict, brand: str) -> dict:
 
 def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                  headless: bool = True, shot: bool = False, retries: int = 1,
-                 page_id: str = "", ad_id: str = "") -> list[dict]:
+                 page_id: str = "", ad_id: str = "",
+                 max_scroll: int = 80, no_new_ads_limit: int = 5) -> list[dict]:
     """Playwright 렌더 → 다단계 썸네일 추출 → 실패 시 카드 screenshot 폴백.
     page_id 주면 해당 페이지의 전체 광고를 크롤(키워드 검색 대신 — 영상 mp4 정확 수집).
     ad_id 주면 라이브러리 ID 단건 페이지를 크롤(공유받은 광고 ID 즉시 수집)."""
@@ -222,11 +238,28 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     page.wait_for_timeout(3000)
             if not ok:
                 return []
-            for _ in range(scrolls):
-                page.mouse.wheel(0, 6000)
-                page.wait_for_timeout(2200)
+            # 새 광고 ID가 더 안 늘 때까지 스크롤(무한루프 방지 max_scroll). ad_id 단건은 스크롤 불필요.
+            done_scrolls = 1
+            if not ad_id:
+                last_cnt, stale = 0, 0
+                for i in range(max_scroll):
+                    page.mouse.wheel(0, 6000)
+                    page.wait_for_timeout(2000)
+                    try:
+                        cnt = page.evaluate(_JS_COUNT)
+                    except Exception:  # noqa: BLE001
+                        cnt = last_cnt
+                    if cnt <= last_cnt:
+                        stale += 1
+                    else:
+                        stale, last_cnt = 0, cnt
+                    if stale >= no_new_ads_limit:
+                        break
+                done_scrolls = i + 1
+                print(f"  [meta-scroll] '{brand or page_id or ad_id}' "
+                      f"스크롤 {done_scrolls}회 · 광고ID {last_cnt}개 로드")
             # lazy-load 소재 이미지가 모두 뜨도록: 천천히 위로 되감으며 viewport 통과시키고 대기
-            for _ in range(scrolls):
+            for _ in range(min(done_scrolls, 12)):
                 page.mouse.wheel(0, -4000)
                 page.wait_for_timeout(700)
             try:
@@ -276,6 +309,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                     "ad_variant_count": parsed.get("variant_count", 1),
                     "platforms": ", ".join(r.get("platforms") or []),
                     "scrape_status": status, "error_message": err,
+                    "page_id": page_id or r.get("page_id") or "",   # 수집한 page_id / 카드 추출 후보
                     "views": 0, "likes": 0, "comments": 0, "shares": 0, "raw_data": r,
                 })
         finally:
