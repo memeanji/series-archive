@@ -158,6 +158,9 @@ def _footer(t0: float, db_ms: float = 0.0, render_ms: float = 0.0) -> None:
         if st.button("🚪 로그아웃", use_container_width=True):
             auth.logout()
         total_ms = (time.perf_counter() - t0) * 1000
+        build = database.get_db_build()
+        if build:
+            st.caption(f"🗄 데이터 빌드: {build}")
         st.caption(f"⏱ DB {db_ms:.0f}ms · render {render_ms:.0f}ms · total {total_ms:.0f}ms")
 
 

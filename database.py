@@ -896,8 +896,25 @@ def regenerate_demo_db() -> None:
     con = sqlite3.connect(demo)
     con.isolation_level = None
     con.execute("DELETE FROM users")
+    # 빌드 시각 스탬프 — 클라우드에서 '최신 demo.db 를 보는지' 화면에서 대조 가능
+    con.execute("CREATE TABLE IF NOT EXISTS db_build (built_at TEXT)")
+    con.execute("DELETE FROM db_build")
+    con.execute("INSERT INTO db_build(built_at) VALUES(?)",
+                (datetime.now().strftime("%Y-%m-%d %H:%M"),))
     con.execute("VACUUM")
     con.close()
+
+
+def get_db_build() -> str:
+    """현재 DB(클라우드는 demo.db 시드본)의 빌드 시각. 없으면 ''."""
+    conn = get_conn()
+    try:
+        r = conn.execute("SELECT built_at FROM db_build LIMIT 1").fetchone()
+        return r[0] if r else ""
+    except Exception:  # noqa: BLE001
+        return ""
+    finally:
+        conn.close()
 
 
 def get_brand(display_name: str) -> Optional[dict]:
