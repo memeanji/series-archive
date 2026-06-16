@@ -21,19 +21,24 @@ def _log(m: str) -> None:
     print(f"[{datetime.now():%H:%M:%S}] {m}", flush=True)
 
 
-def main() -> None:
+def main(exclude: list = None) -> None:
+    exclude = set(exclude or [])
     database.init_db()
     run_start = datetime.now(timezone.utc).isoformat()
     conn = database.get_conn()
     brands = [r[0] for r in conn.execute(
         "SELECT display_name FROM brands WHERE COALESCE(is_active,1)=1 ORDER BY display_name").fetchall()]
     conn.close()
+    if exclude:
+        brands = [b for b in brands if b not in exclude]
+        _log(f"제외 {len(exclude)}개: {sorted(exclude)}")
     try:
         priority = database.expired_video_brands()
         if priority:
             pset = set(priority)
-            brands = priority + [b for b in brands if b not in pset]
-            _log(f"우선 갱신(만료 영상 보유) {len(priority)}개 브랜드 먼저")
+            brands = [b for b in priority if b not in exclude] + \
+                     [b for b in brands if b not in pset]
+            _log(f"우선 갱신(만료 영상 보유) 먼저")
     except Exception as e:  # noqa: BLE001
         _log(f"우선순위 계산 건너뜀: {e}")
     _log(f"=== 메타 전체 재크롤 시작: {len(brands)}개 브랜드 ===")
@@ -55,8 +60,9 @@ def main() -> None:
     database.regrade()
     database.migrate_brands()
     try:
-        vs = database.finalize_meta_video_status(run_start)
-        _log(f"영상 상태: {vs}")
+        # 이번에 크롤한 브랜드만 상태확정(제외 브랜드의 정상 영상을 오판하지 않도록)
+        vs = database.finalize_meta_video_status(run_start, brands=brands)
+        _log(f"영상 상태(크롤 브랜드): {vs}")
     except Exception as e:  # noqa: BLE001
         _log(f"영상 상태 확정 실패: {e}")
     _log(f"크롤 완료 · 누적 갱신 {grand}")
@@ -85,4 +91,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # 인자로 받은 브랜드들은 제외(이미 따로 갱신한 브랜드 재처리 방지)
+    main(exclude=sys.argv[1:])
