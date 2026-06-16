@@ -1222,11 +1222,12 @@ def _render_video_script(ad: dict) -> None:
             st.caption("🤖 Gemini가 영상을 분석한 추정 대본 — 실제 대사와 다를 수 있습니다.")
         else:
             st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}")
-        with st.expander("📝 구간별 자막 (타임코드별)", expanded=True):
+        # 📄 전체 스크립트(이어붙임·복붙용) — 구간/타임코드 없이 흐르는 문장으로만 표시
+        st.markdown("##### 📄 전체 스크립트 (이어붙임 · 복붙용)")
+        st.text_area("전체 스크립트", value=_script_plaintext(cur["text"]), height=260,
+                     label_visibility="collapsed", key=f"scfull_{aid}")
+        with st.expander("📝 구간별 자막 (타임코드별) 보기", expanded=False):
             st.markdown(_render_script_body(cur["text"]), unsafe_allow_html=True)
-        with st.expander("📄 전체 스크립트 (이어붙임 · 복붙용)", expanded=False):
-            st.text_area("전체 스크립트", value=_script_plaintext(cur["text"]), height=240,
-                         label_visibility="collapsed", key=f"scfull_{aid}")
     elif completed and edit:
         new = st.text_area("스크립트 편집", value=cur["text"], height=260, key=f"scredit_{aid}",
                            label_visibility="collapsed")
