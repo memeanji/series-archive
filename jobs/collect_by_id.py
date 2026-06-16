@@ -1,7 +1,8 @@
 """광고 ID 단건 즉시 수집 — Meta Ad Library ?id=<ID> 페이지를 크롤해 DB에 적재.
-   ID 검색에서 '미수집'으로 나온 공유 광고를 바로 가져올 때 사용.
+   ID별 성공/실패·사유·page_id 를 구조화해 'RESULT_JSON:' 로 출력(앱이 파싱).
    사용:  python jobs/collect_by_id.py <id1> <id2> ...
 """
+import json
 import sys
 from pathlib import Path
 
@@ -14,24 +15,36 @@ from collectors import meta_library_crawler  # noqa: E402
 def main(ids: list) -> None:
     database.init_db()
     ids = [str(i).strip() for i in ids if str(i).strip()]
-    print(f"=== ID 단건 수집: {len(ids)}개 ===", flush=True)
-    total = 0
+    before = database.existing_ad_ids(ids)
+    results = []
     for aid in ids:
+        if aid in before:
+            results.append({"id": aid, "ok": True, "reason": "기존 보유", "is_new": False,
+                            "advertiser": "", "page_id": ""})
+            continue
         try:
-            ads = meta_library_crawler.search_brand("", ad_id=aid, scrolls=2, retries=2)
-            # 브랜드명이 비면 '(ID수집)'로 — 이후 재크롤/수동분류로 정정 가능
-            for a in ads:
-                a.setdefault("brand_name", a.get("advertiser_name") or "(ID수집)")
-            saved = database.ingest_ad_library(ads)
-            total += saved
-            print(f"  {aid}: 발견 {len(ads)} 저장 {saved}", flush=True)
+            ads = meta_library_crawler.search_brand("", ad_id=aid, retries=2)
         except Exception as e:  # noqa: BLE001
-            print(f"  {aid}: 실패 {str(e)[:90]}", flush=True)
-    if total:
+            results.append({"id": aid, "ok": False, "reason": f"네트워크/크롤 오류: {str(e)[:60]}",
+                            "is_new": False, "advertiser": "", "page_id": ""})
+            continue
+        if not ads:
+            results.append({"id": aid, "ok": False,
+                            "reason": "원본 접근 불가(만료·비공개·삭제 또는 권한 필요)",
+                            "is_new": False, "advertiser": "", "page_id": ""})
+            continue
+        a = ads[0]
+        a.setdefault("brand_name", a.get("advertiser_name") or a.get("headline") or "(ID수집)")
+        database.ingest_ad_library(ads)
+        results.append({"id": aid, "ok": True, "reason": "신규 수집", "is_new": True,
+                        "advertiser": a.get("headline") or a.get("advertiser_name") or "",
+                        "page_id": a.get("page_id") or "",
+                        "media": a.get("media_type") or ""})
+    if any(r["is_new"] for r in results):
         database.compute_matches()
         database.regrade()
         database.migrate_brands()
-    print(f"=== 완료: {total}개 적재 ===", flush=True)
+    print("RESULT_JSON:" + json.dumps(results, ensure_ascii=False), flush=True)
 
 
 if __name__ == "__main__":

@@ -414,19 +414,22 @@ def render_brand_collection_admin() -> None:
             _reload()
 
 
-def _collect_ids(ids: list) -> None:
-    """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집."""
+def _collect_ids(ids: list) -> list:
+    """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집. ID별 결과 리스트 반환."""
+    import json as _json
+    results: list = []
     with st.spinner(f"광고 ID {len(ids)}개 수집 중… (Meta Ad Library, 최대 1~2분)"):
         try:
             r = subprocess.run([sys.executable, str(ROOT / "jobs" / "collect_by_id.py"), *map(str, ids)],
                                capture_output=True, text=True, timeout=600, cwd=str(ROOT))
-            tail = (r.stdout or r.stderr).strip().splitlines()[-1:] or ["완료"]
-            st.success(f"수집 완료 — {tail[0]}")
+            for ln in (r.stdout or "").splitlines():
+                if ln.startswith("RESULT_JSON:"):
+                    results = _json.loads(ln[len("RESULT_JSON:"):])
         except subprocess.TimeoutExpired:
             st.error("시간 초과 — 잠시 후 다시 시도")
         except Exception as e:  # noqa: BLE001
             st.error(f"수집 실패: {e}")
-    _reload()
+    return results
 
 
 def _run_collect(display: str) -> None:
@@ -2021,20 +2024,48 @@ def render_id_search(raw: str) -> None:
     if missing:
         st.caption("⚠️ 미수집 ID: " + ", ".join(missing))
 
-    # 미수집 ID 즉시 수집 버튼(Meta Ad Library ?id= 단건 크롤)
+    # 미수집 ID → 즉시 수집 버튼 + 원본 열기
     if missing:
-        if st.button(f"🔄 미수집 {len(missing)}개 지금 수집", key="idsearch_collect", type="primary"):
-            _collect_ids(missing)
-        # 라이브러리에서 바로 확인할 링크도 제공
+        st.markdown("현재 DB에 없는 광고 ID입니다. Meta Ad Library 원본에서 바로 수집을 시도할 수 있습니다.")
+        mc = st.columns([1.4, 1, 3])
+        if mc[0].button(f"📥 미수집 광고 바로 수집하기 ({len(missing)})", key="idsearch_collect",
+                        type="primary", use_container_width=True):
+            res = _collect_ids(missing)
+            st.session_state["idsearch_collect_res"] = res
+            st.cache_data.clear()      # 새 광고가 검색결과에 바로 보이게
+            st.rerun()
+        first = missing[0]
+        mc[1].markdown(
+            f"<a href='https://www.facebook.com/ads/library/?id={first}' target='_blank' "
+            f"style='display:inline-block;text-align:center;width:100%;font-size:13px;color:{S.SUB};"
+            f"border:1px solid {S.BORDER};border-radius:8px;padding:7px 0;text-decoration:none'>"
+            f"Meta 원본 열기 ↗</a>", unsafe_allow_html=True)
         links = "".join(
             f"<a href='https://www.facebook.com/ads/library/?id={i}' target='_blank' "
-            f"style='font-size:12px;color:{S.SUB};border:1px solid {S.BORDER};border-radius:8px;"
-            f"padding:4px 11px;text-decoration:none'>{i} ↗</a>" for i in missing)
-        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:6px'>{links}</div>",
+            f"style='font-size:11px;color:{S.OFF_GRAY};text-decoration:none'>{i}↗</a>" for i in missing)
+        st.markdown(f"<div style='display:flex;gap:9px;flex-wrap:wrap;margin-top:5px'>{links}</div>",
                     unsafe_allow_html=True)
-    if not rows:
-        st.info("현재 수집된 데이터에 없는 광고 ID입니다. "
-                "위 ‘지금 수집’으로 바로 가져오거나, 브랜드 재크롤/원본 Meta Ad Library 확인이 필요합니다.")
+
+    # 직전 수집 결과 요약(부분 성공/실패 + 사유)
+    cres = st.session_state.get("idsearch_collect_res")
+    if cres:
+        ok_new = [r for r in cres if r.get("is_new")]
+        had = [r for r in cres if r.get("ok") and not r.get("is_new")]
+        fail = [r for r in cres if not r.get("ok")]
+        st.markdown(
+            f"<div class='sa-info'>수집 결과 · 입력 <b>{len(cres)}</b> · 기존보유 <b>{len(had)}</b> · "
+            f"<span style='color:{S.LIVE}'>신규성공 <b>{len(ok_new)}</b></span> · "
+            f"<span style='color:{S.END_RED}'>실패 <b>{len(fail)}</b></span></div>",
+            unsafe_allow_html=True)
+        for r in fail:
+            st.caption(f"❌ {r['id']} — {r.get('reason','실패')}")
+        if any(r.get("page_id") for r in ok_new):
+            pids = ", ".join(f"{r['id']}→page_id {r['page_id']}" for r in ok_new if r.get("page_id"))
+            st.caption(f"🏢 광고주 page_id 추출: {pids} (브랜드 수집관리에서 매칭 가능)")
+        st.session_state.pop("idsearch_collect_res", None)
+
+    if not rows and not missing:
+        st.info("입력한 ID가 모두 검색됐어요.")
         return
 
     for i in range(0, len(rows), 4):
