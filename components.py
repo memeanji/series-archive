@@ -1381,9 +1381,12 @@ def _repurely_detail(r: dict) -> None:
         _th = _resolve_media(r.get("thumb_local"), r.get("thumbnail_url"))
         _vid = r.get("video_id") or ""
         permalink = mp4 = ""
-        if plat == "TikTok" and (r.get("video_url") or "").startswith("http"):
-            mp4 = r.get("video_url")            # TikTok preview_url(mp4) 직접 재생
-        elif _vid:   # Meta 자사 계정 영상 → 원본 mp4(source) 조회해 st.video 재생
+        # TikTok preview_url(mp4)·cover는 서명·만료 URL → 영구 로컬썸네일(thumb_local)이 있으면
+        # 그걸 미리보기로 우선 사용(클라우드에서도 안정). 로컬썸 없을 때만 mp4 재생 시도.
+        _tt_local_thumb = plat == "TikTok" and (r.get("thumb_local") or "").strip()
+        if plat == "TikTok" and (r.get("video_url") or "").startswith("http") and not _tt_local_thumb:
+            mp4 = r.get("video_url")            # TikTok preview_url(mp4) 직접 재생(로컬썸 없을 때)
+        elif _vid and plat != "TikTok":   # Meta 자사 계정 영상 → 원본 mp4(source) 조회해 st.video 재생
             try:
                 import repurely.meta_api as MAPI
                 vi = MAPI.video_info(_vid)
@@ -1407,8 +1410,11 @@ def _repurely_detail(r: dict) -> None:
             st.markdown(f"<div style='position:relative;border-radius:12px;overflow:hidden;"
                         f"aspect-ratio:9/16;max-width:400px;max-height:480px;margin:0 auto;"
                         f"background:#0F172A'>"
-                        f"<img src='{_th}' style='width:100%;height:100%;object-fit:contain'/></div>",
+                        f"<img src='{_th}' loading='lazy' decoding='async' "
+                        f"style='width:100%;height:100%;object-fit:contain'/></div>",
                         unsafe_allow_html=True)
+            if _tt_local_thumb:
+                st.caption("🎬 TikTok 소재 미리보기 · 영상 원본은 서명 URL이라 만료될 수 있어요")
         else:
             st.markdown(f"<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:9/16'>"
                         f"<div class='sa-ph'><span class='i'>🎬</span>소재 미리보기 없음</div></div>",
@@ -1609,7 +1615,8 @@ def _repurely_card(r: dict, key: str) -> None:
     if th:
         play = "<div class='sa-play'>▶</div>" if is_video else ""
         media_label = ("▶ 영상" if is_video else "🖼 이미지") if is_meta else plat
-        thumb_html = (f"<div class='sa-thumb{meta_cls}'><img src='{th}'/>{play}"
+        thumb_html = (f"<div class='sa-thumb{meta_cls}'>"
+                      f"<img src='{th}' loading='lazy' decoding='async'/>{play}"
                       f"<div class='sa-media'>{media_label}</div></div>")
     else:
         icon = "🎬" if is_video else "🖼"
