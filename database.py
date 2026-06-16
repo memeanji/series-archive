@@ -39,6 +39,8 @@ AD_COLS = [
     # Meta fbcdn video_url 은 만료되는 임시값 → 갱신시각/마지막크롤/재생상태를 추적
     "video_url_updated_at", "last_crawled_at", "video_status",
     "page_id", "last_seen_at",   # page_id 기반 수집 + 마지막으로 라이브러리에서 본 시각
+    # Google: 법인(광고주)과 브랜드 분리 + 광고단위 브랜드 재매칭
+    "advertiser_name", "brand_status", "match_method", "match_confidence", "manual_override",
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -198,7 +200,12 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("last_crawled_at", "TEXT"),        # 이 row 마지막 재크롤 시각
                  ("video_status", "TEXT DEFAULT ''"),  # ok/expired_url/private_or_deleted/unavailable
                  ("page_id", "TEXT"),                # 광고주 page_id(page_id 기반 수집)
-                 ("last_seen_at", "TEXT")):          # 마지막으로 라이브러리에서 본 시각
+                 ("last_seen_at", "TEXT"),           # 마지막으로 라이브러리에서 본 시각
+                 ("advertiser_name", "TEXT"),        # Google 투명성센터 법인/광고주명
+                 ("brand_status", "TEXT DEFAULT ''"),  # confirmed/estimated/company_only/unmatched
+                 ("match_method", "TEXT"),           # domain/brand_text/product_keyword/company_only/unmatched/manual
+                 ("match_confidence", "TEXT"),       # high/medium/low/none
+                 ("manual_override", "INTEGER DEFAULT 0")):
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     # brands 테이블 page_id 컬럼
@@ -206,10 +213,18 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     for c, t in (("meta_page_id", "TEXT"),
                  ("page_id_status", "TEXT DEFAULT 'none'"),   # none/candidate/confirmed
                  ("meta_reported_count", "INTEGER DEFAULT 0"),  # 라이브러리 표기 결과수(수집률 비교)
-                 ("sort_order", "INTEGER")):   # 사이드바/요일그룹 정렬 순서(기본 id, 수동 교체용)
+                 ("sort_order", "INTEGER"),   # 사이드바/요일그룹 정렬 순서(기본 id, 수동 교체용)
+                 ("brand_aliases", "TEXT"),       # JSON: 브랜드명 별칭(영문/표기변형)
+                 ("product_keywords", "TEXT"),    # JSON: 제품명/라인명/대표 키워드
+                 ("brand_domains", "TEXT")):      # JSON: 공식몰/상세페이지 도메인 패턴
         if c not in bcols:
             conn.execute(f"ALTER TABLE brands ADD COLUMN {c} {t}")
     conn.execute("UPDATE brands SET sort_order=id WHERE sort_order IS NULL")  # 최초 1회 백필
+    # Google 광고-브랜드 학습 규칙(수동 매칭 → 동일 도메인/키워드 자동매칭)
+    conn.execute("""CREATE TABLE IF NOT EXISTS brand_match_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pattern_type TEXT, pattern TEXT, brand_name TEXT, created_at TEXT,
+        UNIQUE(pattern_type, pattern))""")
     scols = [r[1] for r in conn.execute("PRAGMA table_info(social_videos)").fetchall()]
     for c, t in (("video_id", "TEXT"), ("embed_url", "TEXT"), ("title", "TEXT"),
                  ("channel_title", "TEXT"),
@@ -345,6 +360,9 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
     w, p = ["1=1"], []
     if tab in ("meta", "google"):
         w.append("a.platform=?"); p.append(tab)
+    if tab == "google" and not f.get("only_unavailable"):
+        # 메인 그리드는 확정/추정만 — 법인매칭 미확정·미매칭은 리뷰함에서 처리
+        w.append("COALESCE(a.brand_status,'') NOT IN ('company_only','unmatched','excluded')")
     if tab == "TOP":
         w.append("s.final_grade IN ('S','A','B')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")  # placeholder 카드 제외
@@ -846,6 +864,12 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "video_status": _vstatus,
             "page_id": a.get("page_id") or (prev or {}).get("page_id") or "",
             "last_seen_at": _now_ts,           # 이번 크롤에서 라이브러리에 보였음
+            "advertiser_name": a.get("advertiser_name") or (prev or {}).get("advertiser_name") or "",
+            # 매칭 결과는 별도 매칭단계가 세팅 → 재수집 시 보존(수동지정 우선)
+            "brand_status": (prev or {}).get("brand_status") or "",
+            "match_method": (prev or {}).get("match_method") or "",
+            "match_confidence": (prev or {}).get("match_confidence") or "",
+            "manual_override": (prev or {}).get("manual_override") or 0,
         }
         conn.execute(f"INSERT OR REPLACE INTO ad_library_ads({','.join(AD_COLS)}) "
                      f"VALUES({','.join(['?']*len(AD_COLS))})", tuple(row[c] for c in AD_COLS))
@@ -1051,6 +1075,82 @@ def set_brand_page_id(display_name: str, page_id: str, status: str = "confirmed"
 
 
 _WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def recompute_google_matches() -> dict:
+    """전 구글 광고에 브랜드 매칭 적용. advertiser_name 비면 현재 brand 의 법인명으로 백필.
+       수동지정(manual_override=1)은 보존. 반환 상태별 카운트."""
+    import services.google_match as GM
+    conn = get_conn()
+    reg = GM.build_registry(conn)
+    rules = GM.load_rules(conn)
+    # 법인명(google_advertiser_name) 매핑
+    legal = {r["display_name"]: (r["google_advertiser_name"] or "")
+             for r in conn.execute("SELECT display_name, google_advertiser_name FROM brands").fetchall()}
+    rows = conn.execute("SELECT * FROM ad_library_ads WHERE platform='google'").fetchall()
+    counts: dict = {}
+    for r in rows:
+        d = dict(r)
+        if d.get("manual_override"):
+            counts["manual"] = counts.get("manual", 0) + 1
+            continue
+        if not (d.get("advertiser_name") or "").strip():
+            d["advertiser_name"] = legal.get(d.get("brand_name"), "")
+        m = GM.match_ad(d, reg, rules)
+        # 확정/추정이면 실제 브랜드로 재태깅, 미확정/미매칭은 brand_name 유지(상태로만 분리)
+        new_brand = m["brand"] if m["status"] in ("confirmed", "estimated") and m["brand"] else d.get("brand_name")
+        conn.execute(
+            "UPDATE ad_library_ads SET advertiser_name=?, brand_name=?, brand_status=?, "
+            "match_method=?, match_confidence=? WHERE id=?",
+            (d["advertiser_name"], new_brand, m["status"], m["method"], m["confidence"], d["id"]))
+        counts[m["status"]] = counts.get(m["status"], 0) + 1
+    conn.commit()
+    conn.close()
+    return counts
+
+
+def google_review_ads(limit: int = 300) -> list[dict]:
+    """브랜드 미확정(company_only)·미매칭 구글 광고 — 리뷰함."""
+    conn = get_conn()
+    rows = conn.execute(
+        f"SELECT {_SUMMARY_COLS}, a.advertiser_name, a.brand_status, a.match_method "
+        f"{_JOIN} WHERE a.platform='google' AND a.brand_status IN ('company_only','unmatched') "
+        f"AND COALESCE(a.is_excluded,0)=0 GROUP BY a.id ORDER BY a.collected_at DESC LIMIT ?",
+        [limit]).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def google_status_counts() -> dict:
+    conn = get_conn()
+    rows = conn.execute("SELECT COALESCE(NULLIF(brand_status,''),'(미분류)') s, COUNT(*) c "
+                        "FROM ad_library_ads WHERE platform='google' AND COALESCE(is_excluded,0)=0 "
+                        "GROUP BY s").fetchall()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
+
+
+def assign_google_brand(ad_id: str, brand: str = "", exclude: bool = False, learn: bool = True) -> None:
+    """리뷰함 수동 지정: 브랜드 확정 / 제외. manual_override 저장 + 학습규칙 등록."""
+    conn = get_conn()
+    if exclude:
+        conn.execute("UPDATE ad_library_ads SET is_excluded=1, brand_status='excluded', "
+                     "manual_override=1, match_method='manual' WHERE id=?", (ad_id,))
+        conn.commit(); conn.close()
+        return
+    row = conn.execute("SELECT landing_url, advertiser_name FROM ad_library_ads WHERE id=?",
+                       (ad_id,)).fetchone()
+    conn.execute("UPDATE ad_library_ads SET brand_name=?, brand_status='confirmed', "
+                 "match_method='manual', match_confidence='high', manual_override=1, is_excluded=0 "
+                 "WHERE id=?", (brand, ad_id))
+    # 학습: 랜딩 도메인이 있으면 도메인 규칙 등록(이후 동일 도메인 자동매칭)
+    if learn and row:
+        dom = (row["landing_url"] or "").lower().replace("https://", "").replace("http://", "").split("/")[0]
+        if dom:
+            conn.execute("INSERT OR REPLACE INTO brand_match_rules(pattern_type,pattern,brand_name,created_at) "
+                         "VALUES('domain',?,?,?)", (dom, brand, _now()))
+    conn.commit()
+    conn.close()
 
 
 def recent_brand_logs(display_name: str, limit: int = 8) -> list[dict]:

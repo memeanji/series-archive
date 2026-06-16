@@ -434,6 +434,50 @@ def render_brand_collection_admin() -> None:
                        f"신규 {lg.get('new_count',0)} · 갱신 {lg.get('updated_count',0)}")
 
 
+def render_google_review() -> None:
+    """구글 브랜드 미확정 리뷰함 — 법인매칭(company_only)·미매칭 광고를 스크린샷 보고 수동 지정."""
+    cnt = database.google_status_counts()
+    conf = cnt.get("confirmed", 0) + cnt.get("estimated", 0)
+    review = cnt.get("company_only", 0) + cnt.get("unmatched", 0)
+    st.caption(f"구글 광고 상태 — 확정/추정 {conf} · 미확정(법인만) {cnt.get('company_only',0)} · "
+               f"미매칭 {cnt.get('unmatched',0)} · 수동지정 {cnt.get('(미분류)',0)} 미분류")
+    if st.button("🔁 브랜드 매칭 재계산", key="grv_recompute",
+                 help="랜딩/문구/제품키워드/법인 우선순위로 전체 재매칭(수동지정은 보존)"):
+        with st.spinner("구글 광고 브랜드 매칭 재계산 중…"):
+            res = database.recompute_google_matches()
+        st.success(f"재계산 완료 — {res}")
+        _reload()
+
+    rows = database.google_review_ads(120)
+    if not rows:
+        st.info("미확정 구글 광고가 없습니다. (먼저 '브랜드 매칭 재계산'을 눌러보세요.)")
+        return
+    st.caption(f"미확정 {len(rows)}건 — 스크린샷을 보고 브랜드를 지정하세요(법인명이 같아 자동 확정 불가).")
+    allb = sorted(database.brand_index_groups().keys())   # 지정용 전체 브랜드
+    for i in range(0, len(rows), 4):
+        cols = st.columns(4)
+        for col, ad in zip(cols, rows[i:i + 4]):
+            with col:
+                th = get_display_thumbnail(ad)
+                if th["src"]:
+                    st.markdown(f"<img src='{th['src']}' loading='lazy' style='width:100%;border-radius:8px;"
+                                f"background:#0F172A'/>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:1'>"
+                                "<div class='sa-ph'>🔍</div></div>", unsafe_allow_html=True)
+                st.caption(f"법인: {ad.get('advertiser_name') or '-'}")
+                sel = st.selectbox("브랜드 지정", allb, key=f"grv_b_{ad['id']}",
+                                   index=(allb.index(ad["brand_name"]) if ad.get("brand_name") in allb else 0),
+                                   label_visibility="collapsed")
+                bc = st.columns(2)
+                if bc[0].button("지정", key=f"grv_set_{ad['id']}", use_container_width=True):
+                    database.assign_google_brand(ad["id"], brand=sel)
+                    _reload()
+                if bc[1].button("제외", key=f"grv_ex_{ad['id']}", use_container_width=True):
+                    database.assign_google_brand(ad["id"], exclude=True)
+                    _reload()
+
+
 def _collect_ids(ids: list) -> list:
     """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집. ID별 결과 리스트 반환."""
     import json as _json
