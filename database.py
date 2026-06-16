@@ -852,6 +852,33 @@ def finalize_meta_video_status(run_start: str, brands: Optional[list] = None) ->
     return counts
 
 
+def backfill_video_status() -> dict:
+    """모든 meta 영상 row 의 video_status 를 현재 video_url 만료여부로 채움(1회/유지보수용).
+       - http URL + 미만료 → ok / + 만료 → expired_url / URL 없음 → unavailable
+       - 크롤로 확정된 private_or_deleted·not_found 는 보존(되돌리지 않음).
+       앱이 빈 status 를 만나 검은 플레이어를 띄우는 일을 방지."""
+    from services.urls import fbcdn_url_expired
+    conn = get_conn()
+    rows = conn.execute("SELECT id, video_url, video_status FROM ad_library_ads "
+                        "WHERE platform='meta' AND media_type='video'").fetchall()
+    counts: dict = {}
+    for r in rows:
+        cur = (r["video_status"] or "").strip()
+        if cur in ("private_or_deleted", "not_found"):
+            counts[cur] = counts.get(cur, 0) + 1
+            continue
+        vu = (r["video_url"] or "").strip()
+        if vu.startswith("http"):
+            state = "expired_url" if fbcdn_url_expired(vu) else "ok"
+        else:
+            state = "unavailable"
+        conn.execute("UPDATE ad_library_ads SET video_status=? WHERE id=?", (state, r["id"]))
+        counts[state] = counts.get(state, 0) + 1
+    conn.commit()
+    conn.close()
+    return counts
+
+
 def regenerate_demo_db() -> None:
     """배포용 clean 데모 DB 생성. WAL 체크포인트 후 복사(미체크포인트 최신 커밋 누락 방지)
        → users 제거 → VACUUM. 잡에서 git push 전에 호출."""

@@ -1055,23 +1055,15 @@ def render_ad_detail(ad: dict) -> None:
             # 그 외 — Player API로 재생 시도, 실제 차단(onError) 시 자동 fallback 전환
             _yt_smart_player(ad, yt_vid)
         elif plat == "meta" and (ad.get("media_type") == "video"):
-            # Meta 영상: 크롤 단계에서 저장된 video_status 를 '읽기만'(렌더 시 만료계산·네트워크 안 함).
-            # 값이 비면(구데이터) ok 로 간주해 재생 시도.
-            mstate = (ad.get("video_status") or "ok").strip() or "ok"
+            # Meta 영상: 저장된 video_status 만 '읽기'. **ok 일 때만** st.video → 만료/미상은
+            # 검은 플레이어 대신 안내 박스(빈 값=미상도 ok로 보지 않음, 검은화면 방지).
+            mstate = (ad.get("video_status") or "").strip()
             _rel = _rel_korean(ad.get("video_url_updated_at"))
-            if mstate == "ok":
+            if mstate == "ok" and vurl.startswith("http"):
                 st.video(vurl)
                 if _rel:
                     st.caption(f"🔄 영상 URL 갱신: {_rel}")
-            elif mstate == "expired_url":
-                if th["src"]:
-                    st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
-                                f"object-fit:contain;background:#0F172A;border-radius:10px'/>",
-                                unsafe_allow_html=True)
-                _ago = f" (마지막 갱신 {_rel})" if _rel else ""
-                st.warning(f"⚠ 영상 URL이 만료돼 재생할 수 없어요{_ago}. 매일 05:00 자동 수집 때 "
-                           f"우선 갱신됩니다. 지금은 아래 ‘원본 광고’에서 확인하세요.")
-            else:  # private_or_deleted / not_found / unavailable
+            elif mstate in ("private_or_deleted", "not_found", "unavailable"):
                 # 썸네일·광고문구·수집일·브랜드는 그대로 유지하고 영상만 안내로 대체
                 if th["src"]:
                     st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
@@ -1080,7 +1072,15 @@ def render_ad_detail(ad: dict) -> None:
                 st.info("메타에서 원본 광고를 더 이상 확인할 수 없습니다. "
                         "비공개·삭제됐거나 게재가 종료된 광고일 수 있어요 "
                         "(아래 ‘원본 광고’ 접근이 안 될 수 있습니다).")
-        elif vurl:
+            else:  # expired_url 또는 빈 값(미상) → 만료 안내(다음 크롤 갱신 대상)
+                if th["src"]:
+                    st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
+                                f"object-fit:contain;background:#0F172A;border-radius:10px'/>",
+                                unsafe_allow_html=True)
+                _ago = f" (마지막 갱신 {_rel})" if _rel else ""
+                st.warning(f"⚠ 영상 URL 만료 또는 원본 광고 접근 불가{_ago}. 매일 05:00 자동 수집 때 "
+                           f"우선 갱신됩니다. 지금은 아래 ‘원본 광고’에서 확인하세요.")
+        elif plat != "meta" and vurl:
             st.video(vurl)
         elif th["src"]:
             # 구글 소재 스크린샷은 작을 수 있어 최대한 크게(업스케일) 표시
