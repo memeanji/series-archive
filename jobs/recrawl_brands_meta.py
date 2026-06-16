@@ -46,6 +46,8 @@ def main(brands: list) -> None:
         _log(f"demo.db 갱신 실패: {e}")
     msg = f"우선 재크롤(Meta) {','.join(brands)} {datetime.now():%Y-%m-%d %H:%M}"
     for cmd in (["git", "add", "sample_data/demo.db"],
+                ["git", "add", "static/thumbnails/m_*.jpg"],   # 새 메타 썸네일도 클라우드 반영
+
                 ["git", "commit", "-m", msg],
                 ["git", "push", "origin", "main"]):
         try:

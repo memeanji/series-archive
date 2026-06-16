@@ -309,7 +309,7 @@ def migrate_base64_thumbnails() -> int:
 # ── 탭별 페이지 조회(요약 컬럼만, SQL LIMIT/OFFSET) ──────
 _SUMMARY_COLS = (
     "a.id, a.brand_name, a.ad_title, substr(a.ad_copy,1,90) AS ad_copy_short, "
-    "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
+    "a.platform, a.status, a.thumbnail_url, a.local_thumbnail_path, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
     "a.scrape_status, a.error_message, a.platforms, a.detail_status, a.video_status, "
     "a.yt_views, a.yt_likes, a.yt_comments, a.yt_embeddable, a.fatigue_status, "

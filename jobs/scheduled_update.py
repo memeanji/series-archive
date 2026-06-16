@@ -70,6 +70,8 @@ def main() -> None:
     # git 커밋·푸시(Cloud 자동 반영)
     msg = f"auto: 매일 수집 갱신 {datetime.now():%Y-%m-%d}"
     for cmd in (["git", "add", "sample_data/demo.db"],
+                ["git", "add", "static/thumbnails/m_*.jpg"],   # 새 메타 썸네일도 클라우드 반영
+                ["git", "add", "static/thumbnails/rep_tt_*.png"],
                 ["git", "commit", "-m", msg],
                 ["git", "push", "origin", "main"]):
         try:

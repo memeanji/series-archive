@@ -176,7 +176,9 @@ def _file_data_uri(rel_path: str) -> str:
 def get_display_thumbnail(ad: dict) -> dict:
     """카드/상세 공통 썸네일 결정. 우선순위: thumbnail_path>thumbnail_url>preview_url>image_url>media_url.
     로컬 static 경로는 data URI로 변환, http(s)는 그대로. 반환: {src, source, method, exists}."""
-    for key in ("thumbnail_path", "thumbnail_url", "preview_url", "image_url", "media_url"):
+    # local_thumbnail_path(영구 로컬 파일) 최우선 → thumbnail_url(로컬경로 또는 만료 fbcdn) → 기타
+    for key in ("local_thumbnail_path", "thumbnail_path", "thumbnail_url",
+                "preview_url", "image_url", "media_url"):
         v = (ad.get(key) or "").strip()
         if not v:
             continue

@@ -71,6 +71,8 @@ def main() -> None:
     # git push
     msg = f"메타 전체 영상 URL 재크롤 갱신 {datetime.now():%Y-%m-%d %H:%M}"
     for cmd in (["git", "add", "sample_data/demo.db"],
+                ["git", "add", "static/thumbnails/m_*.jpg"],   # 새 메타 썸네일도 클라우드 반영
+
                 ["git", "commit", "-m", msg],
                 ["git", "push", "origin", "main"]):
         try:
