@@ -300,6 +300,21 @@ def _domain_ok(d: str) -> bool:
     return bool(re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", d))
 
 
+def _collect_ids(ids: list) -> None:
+    """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집."""
+    with st.spinner(f"광고 ID {len(ids)}개 수집 중… (Meta Ad Library, 최대 1~2분)"):
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / "jobs" / "collect_by_id.py"), *map(str, ids)],
+                               capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+            tail = (r.stdout or r.stderr).strip().splitlines()[-1:] or ["완료"]
+            st.success(f"수집 완료 — {tail[0]}")
+        except subprocess.TimeoutExpired:
+            st.error("시간 초과 — 잠시 후 다시 시도")
+        except Exception as e:  # noqa: BLE001
+            st.error(f"수집 실패: {e}")
+    _reload()
+
+
 def _run_collect(display: str) -> None:
     with st.spinner(f"'{display}' 수집 중… (메타+구글+YouTube, 1~2분)"):
         try:
@@ -1892,17 +1907,20 @@ def render_id_search(raw: str) -> None:
     if missing:
         st.caption("⚠️ 미수집 ID: " + ", ".join(missing))
 
-    if not rows:
-        st.info("현재 수집된 데이터에 없는 광고 ID입니다. "
-                "브랜드 재크롤 또는 원본 Meta Ad Library 확인이 필요합니다.")
-        # 미수집 ID는 라이브러리에서 바로 확인할 수 있게 링크 제공
+    # 미수집 ID 즉시 수집 버튼(Meta Ad Library ?id= 단건 크롤)
+    if missing:
+        if st.button(f"🔄 미수집 {len(missing)}개 지금 수집", key="idsearch_collect", type="primary"):
+            _collect_ids(missing)
+        # 라이브러리에서 바로 확인할 링크도 제공
         links = "".join(
             f"<a href='https://www.facebook.com/ads/library/?id={i}' target='_blank' "
             f"style='font-size:12px;color:{S.SUB};border:1px solid {S.BORDER};border-radius:8px;"
             f"padding:4px 11px;text-decoration:none'>{i} ↗</a>" for i in missing)
-        if links:
-            st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:6px'>{links}</div>",
-                        unsafe_allow_html=True)
+        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:6px'>{links}</div>",
+                    unsafe_allow_html=True)
+    if not rows:
+        st.info("현재 수집된 데이터에 없는 광고 ID입니다. "
+                "위 ‘지금 수집’으로 바로 가져오거나, 브랜드 재크롤/원본 Meta Ad Library 확인이 필요합니다.")
         return
 
     for i in range(0, len(rows), 4):
