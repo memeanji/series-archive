@@ -1,7 +1,7 @@
 """
-3일 주기 자동 수집 파이프라인 (Windows 작업 스케줄러가 호출).
+매일 자동 수집 파이프라인 (Windows 작업 스케줄러가 매일 05:00 호출).
 [모든 브랜드 메타+구글 크롤 → 매칭/재등급 → demo.db 갱신 → git 커밋·푸시(Cloud 반영)]
-스크립트 결과는 영구저장(Supabase)에도 자동 백업됨.
+매일 재크롤로 만료되는 fbcdn 영상/썸네일 서명 URL도 갱신됨.
 사용:  python jobs/scheduled_update.py
 """
 import shutil
@@ -29,7 +29,7 @@ def main() -> None:
     brands = [r[0] for r in conn.execute(
         "SELECT display_name FROM brands WHERE COALESCE(is_active,1)=1 ORDER BY display_name").fetchall()]
     conn.close()
-    _log(f"=== 3일 주기 수집 시작: {len(brands)}개 브랜드 ===")
+    _log(f"=== 매일 수집 시작: {len(brands)}개 브랜드 ===")
     total = 0
     for i, b in enumerate(brands, 1):
         try:
@@ -56,7 +56,7 @@ def main() -> None:
         _log(f"demo.db 갱신 실패: {e}")
 
     # git 커밋·푸시(Cloud 자동 반영)
-    msg = f"auto: 3일 주기 수집 갱신 {datetime.now():%Y-%m-%d}"
+    msg = f"auto: 매일 수집 갱신 {datetime.now():%Y-%m-%d}"
     for cmd in (["git", "add", "sample_data/demo.db"],
                 ["git", "commit", "-m", msg],
                 ["git", "push", "origin", "main"]):
