@@ -116,11 +116,6 @@ def main() -> None:
         _footer(t0)
         return
 
-    # ── 구글 브랜드 미확정 리뷰함(법인명만 일치 → 수동 지정) — Google 탭 ──
-    if tab == "Google":
-        with st.expander("🔎 구글 브랜드 미확정 리뷰함 (법인 매칭 광고 수동 지정)", expanded=False):
-            C.render_google_review()
-
     # ── 광고 ID 다중 검색(Meta Ad Library 공유 광고 빠른 조회) ──
     with st.expander("🔎 광고 ID로 찾기 (여러 개·링크 붙여넣기 가능)", expanded=False):
         id_raw = st.text_area(

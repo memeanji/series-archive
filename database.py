@@ -360,9 +360,6 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
     w, p = ["1=1"], []
     if tab in ("meta", "google"):
         w.append("a.platform=?"); p.append(tab)
-    if tab == "google" and not f.get("only_unavailable"):
-        # 메인 그리드는 확정/추정만 — 법인매칭 미확정·미매칭은 리뷰함에서 처리
-        w.append("COALESCE(a.brand_status,'') NOT IN ('company_only','unmatched','excluded')")
     if tab == "TOP":
         w.append("s.final_grade IN ('S','A','B')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")  # placeholder 카드 제외
