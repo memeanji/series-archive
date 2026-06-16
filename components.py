@@ -14,7 +14,7 @@ import streamlit.components.v1 as stc
 import database
 import services.youtube as YT
 import styles as S
-from services.urls import is_valid_external_url, meta_video_state, normalize_google_transparency_url
+from services.urls import is_valid_external_url, normalize_google_transparency_url
 
 ROOT = Path(__file__).resolve().parent
 
@@ -571,7 +571,7 @@ def render_ad_card(ad: dict, idx: int) -> None:
                  "<div style='font-size:10px;opacity:.7'>광고 라이브러리에 없음</div></div>")
         thumb_cls = "sa-thumb sa-thumb-empty"
     elif thumb:
-        inner = f"<img src='{thumb}'/>"
+        inner = f"<img src='{thumb}' loading='lazy' decoding='async'/>"
         if plat == "google":
             thumb_cls = "sa-thumb sa-thumb-contain"      # 구글: 원본 비율 유지(자르지 않음)
         elif plat == "meta":
@@ -602,9 +602,9 @@ def render_ad_card(ad: dict, idx: int) -> None:
     yt_blocked = (ad.get("yt_embeddable") == 0) and ("youtu" in (ad.get("video_url") or ""))
     play_badge = ("<div class='sa-badge' style='background:rgba(180,83,9,.92);top:7px;left:7px'>"
                   "🔒 외부재생</div>" if yt_blocked else "")
-    # Meta 영상 재생불가 상태 배지(만료/비공개)
+    # Meta 영상 재생불가 상태 배지 — 크롤 단계에서 저장된 video_status 를 '읽기만'(렌더 시 계산 안 함)
     if plat == "meta" and is_video and not yt_blocked:
-        _mst = meta_video_state(ad)
+        _mst = (ad.get("video_status") or "").strip()
         if _mst == "expired_url":
             play_badge = ("<div class='sa-badge' style='background:rgba(202,138,4,.95);top:7px;left:7px'>"
                           "⚠ URL 만료</div>")
@@ -696,16 +696,42 @@ def _render_source_buttons(ad: dict) -> None:
         links.append(("🔗 원본 광고", f"https://www.facebook.com/ads/library/?id={ad['id']}"))
     if is_valid_external_url(ad.get("landing_url")):
         links.append(("🛒 랜딩", ad["landing_url"]))
+    # 원본 광고가 접근 불가일 수 있는 상태면 버튼 옆에 경고 표시(버튼은 유지)
+    _vs = (ad.get("video_status") or "").strip()
+    inaccessible = plat == "meta" and _vs in ("private_or_deleted", "not_found", "unavailable")
     if links:
         pills = "".join(
             f"<a href='{u}' target='_blank' style='font-size:12px;color:{S.SUB};text-decoration:none;"
             f"border:1px solid {S.BORDER};border-radius:8px;padding:4px 11px;background:{S.CARD};"
             f"white-space:nowrap;transition:all .15s'>{lbl} ↗</a>" for lbl, u in links)
-        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;margin-top:18px'>{pills}</div>",
-                    unsafe_allow_html=True)
+        warn = ("<span style='font-size:11px;color:#B45309;align-self:center'>⚠ 접근 불가일 수 있음</span>"
+                if inaccessible else "")
+        st.markdown(f"<div style='display:flex;gap:7px;flex-wrap:wrap;align-items:center;"
+                    f"margin-top:18px'>{pills}{warn}</div>", unsafe_allow_html=True)
     else:
         st.markdown(f"<div style='font-size:11.5px;color:{S.OFF_GRAY};margin-top:18px'>"
                     f"원본·랜딩 URL 정보 없음</div>", unsafe_allow_html=True)
+
+
+def _rel_korean(iso_ts: str) -> str:
+    """ISO 시각 → '방금/N분 전/N시간 전/N일 전'. 비거나 파싱 실패 시 ''."""
+    if not iso_ts:
+        return ""
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        t = _dt.fromisoformat(str(iso_ts))
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=_tz.utc)
+        secs = (_dt.now(_tz.utc) - t).total_seconds()
+    except Exception:  # noqa: BLE001
+        return ""
+    if secs < 120:
+        return "방금"
+    if secs < 3600:
+        return f"{int(secs // 60)}분 전"
+    if secs < 86400:
+        return f"{int(secs // 3600)}시간 전"
+    return f"{int(secs // 86400)}일 전"
 
 
 def _greybox(text: str) -> str:
@@ -1029,30 +1055,31 @@ def render_ad_detail(ad: dict) -> None:
             # 그 외 — Player API로 재생 시도, 실제 차단(onError) 시 자동 fallback 전환
             _yt_smart_player(ad, yt_vid)
         elif plat == "meta" and (ad.get("media_type") == "video"):
-            # Meta fbcdn 영상 URL 은 만료되는 임시값 → 동적 판정 후 상태별 렌더
-            mstate = meta_video_state(ad)
+            # Meta 영상: 크롤 단계에서 저장된 video_status 를 '읽기만'(렌더 시 만료계산·네트워크 안 함).
+            # 값이 비면(구데이터) ok 로 간주해 재생 시도.
+            mstate = (ad.get("video_status") or "ok").strip() or "ok"
+            _rel = _rel_korean(ad.get("video_url_updated_at"))
             if mstate == "ok":
                 st.video(vurl)
+                if _rel:
+                    st.caption(f"🔄 영상 URL 갱신: {_rel}")
             elif mstate == "expired_url":
-                # 재생 실패(URL 만료) → expired_url 기록(다음 5시 크롤 우선 갱신) + 썸네일/안내
-                if ad.get("video_status") != "expired_url":
-                    try:
-                        database.mark_video_expired(aid)
-                    except Exception:  # noqa: BLE001
-                        pass
                 if th["src"]:
                     st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
                                 f"object-fit:contain;background:#0F172A;border-radius:10px'/>",
                                 unsafe_allow_html=True)
-                st.warning("⚠ 영상 URL이 만료돼 재생할 수 없어요. 매일 05:00 자동 수집 때 "
-                           "우선 갱신됩니다. 지금은 아래 ‘원본 광고’에서 확인하세요.")
-            else:  # private_or_deleted / unavailable
+                _ago = f" (마지막 갱신 {_rel})" if _rel else ""
+                st.warning(f"⚠ 영상 URL이 만료돼 재생할 수 없어요{_ago}. 매일 05:00 자동 수집 때 "
+                           f"우선 갱신됩니다. 지금은 아래 ‘원본 광고’에서 확인하세요.")
+            else:  # private_or_deleted / not_found / unavailable
+                # 썸네일·광고문구·수집일·브랜드는 그대로 유지하고 영상만 안내로 대체
                 if th["src"]:
                     st.markdown(f"<img src='{th['src']}' style='width:100%;min-height:240px;"
                                 f"object-fit:contain;background:#0F172A;border-radius:10px'/>",
                                 unsafe_allow_html=True)
-                st.info("영상을 가져올 수 없어요 — 비공개·삭제됐거나 더 이상 게재되지 않는 "
-                        "광고일 수 있어요. 아래 ‘원본 광고’에서 확인하세요.")
+                st.info("메타에서 원본 광고를 더 이상 확인할 수 없습니다. "
+                        "비공개·삭제됐거나 게재가 종료된 광고일 수 있어요 "
+                        "(아래 ‘원본 광고’ 접근이 안 될 수 있습니다).")
         elif vurl:
             st.video(vurl)
         elif th["src"]:
@@ -1659,8 +1686,9 @@ def _render_kpi(k: dict) -> None:
                 f"</div>", unsafe_allow_html=True)
 
 
-def render_repurely_insights(rows: list[dict]) -> None:
-    """repurely 내부 소재 분석 탭 — 매체별(Meta/TikTok/Naver GFA) 섹션별 소재 카드."""
+def render_repurely_insights(rows: list[dict], last_sync: str = "") -> None:
+    """repurely 내부 소재 분석 탭 — 매체별(Meta/TikTok/Naver GFA) 섹션별 소재 카드.
+    last_sync: 데이터가 실제 fetch 된 시각('YYYY-MM-DD HH:MM'). 캐시 적중 중에도 진짜 갱신시각."""
     import repurely.insights as RI
     # 동기화 실패(빈 결과) 시 마지막 정상 데이터 유지
     if rows:
@@ -1686,18 +1714,33 @@ def render_repurely_insights(rows: list[dict]) -> None:
         st.session_state["_rep_benchmarks"] = RI.benchmarks()
 
     # ── 헤더 + 동기화 상태 + 새로고침 ──
-    last_sync = max((r.get("collected_at", "") for r in rows), default="-")
+    # 실제 fetch 시각(last_sync) 우선 — 캐시 적중 중에도 '진짜 마지막 갱신'을 보여줌.
+    # 없으면(구버전 호출) 행의 collected_at 최댓값으로 폴백.
     from datetime import datetime as _dt, timedelta as _td
+    last_sync = (last_sync or "").strip() or max((r.get("collected_at", "") for r in rows), default="-")
+    nxt = "-"
+    rel = ""
     try:
-        nxt = (_dt.strptime(last_sync, "%Y-%m-%d %H:%M") + _td(hours=1)).strftime("%H:%M")
+        _ts = _dt.strptime(last_sync, "%Y-%m-%d %H:%M")
+        nxt = (_ts + _td(hours=1)).strftime("%H:%M")
+        _now = _dt.now()
+        _mins = int((_now - _ts).total_seconds() // 60)
+        if _now.date() == _ts.date():
+            rel = "오늘" if _mins >= 60 else ("방금" if _mins < 2 else f"{_mins}분 전")
+            if _mins >= 60:
+                rel = f"오늘 · {_mins // 60}시간 전"
+        else:
+            _days = (_now.date() - _ts.date()).days
+            rel = f"⚠ {_days}일 전 (오래됨)"
     except Exception:  # noqa: BLE001
         nxt = "-"
+    rel_html = (f" <span style='color:{S.PRIMARY};font-weight:700'>({rel})</span>" if rel else "")
     hc = st.columns([4, 1.3])
     hc[0].markdown(f"<div style='font-size:16px;font-weight:800;color:{S.TEXT};margin:.2rem 0 0'>"
                    f"🏢 repurely 내부 소재 성과</div>"
                    f"<div style='font-size:11.5px;color:{S.SUB};margin-top:3px;line-height:1.7'>"
                    f"📊 분석 기준 <b style='color:{S.TEXT}'>오늘 누적 데이터</b> · "
-                   f"마지막 갱신 <b style='color:{S.TEXT}'>{last_sync}</b> · "
+                   f"마지막 갱신 <b style='color:{S.TEXT}'>{last_sync}</b>{rel_html} · "
                    f"다음 갱신 ~{nxt} · <b>1시간 주기</b></div>", unsafe_allow_html=True)
     if hc[1].button("🔄 지금 갱신", use_container_width=True):
         st.session_state.pop("_rep_cache", None)
@@ -1838,7 +1881,8 @@ def _social_card(v: dict) -> None:
     plat = v.get("platform")
     thumb = v.get("thumbnail_url")
     grade = v.get("final_grade")
-    inner = f"<img src='{thumb}'/>" if thumb else "<div class='sa-ph'>🎬</div>"
+    inner = (f"<img src='{thumb}' loading='lazy' decoding='async'/>" if thumb
+             else "<div class='sa-ph'>🎬</div>")
     badge = (f"<div class='sa-badge' style='background:{S.grade_color(grade)}'>{grade}급</div>"
              if grade and grade != "미분류" else "")
     rs = v.get("review_status") or "needs_review"

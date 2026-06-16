@@ -65,9 +65,12 @@ def _yt_counts():
 @st.cache_resource(ttl=3600, show_spinner="repurely 데이터 불러오는 중…")
 def _repurely_load_cached():
     """repurely 시트+Meta API 통합 — 서버 전체에서 1시간 공유 캐시.
-    cache_resource라 _reload()의 cache_data.clear()/세션 리셋/새로고침에도 살아남음."""
+    cache_resource라 _reload()의 cache_data.clear()/세션 리셋/새로고침에도 살아남음.
+    fetched_at = load_all 이 '실제로' 실행된 시각(캐시 적중 동안 고정 → 진짜 갱신시각)."""
     import repurely.insights as RI
-    return RI.load_all()
+    from datetime import datetime
+    return {"rows": RI.load_all(),
+            "fetched_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 
 def _repurely_rows(force: bool = False):
@@ -77,7 +80,8 @@ def _repurely_rows(force: bool = False):
         except Exception:  # noqa: BLE001
             pass
     base = _repurely_load_cached()
-    return [dict(r) for r in base]   # 세션별 enrich 변형이 공유 캐시를 오염시키지 않게 복사
+    # 세션별 enrich 변형이 공유 캐시를 오염시키지 않게 복사 + 실제 fetch 시각 동반
+    return [dict(r) for r in base["rows"]], base["fetched_at"]
 
 
 @st.cache_data(ttl=60)
@@ -107,14 +111,15 @@ def main() -> None:
 
     # ── repurely 내부 소재 분석 탭(Insight) ──
     if tab == "Insight":
-        C.render_repurely_insights(_repurely_rows())
+        rep_rows, rep_fetched = _repurely_rows()
+        C.render_repurely_insights(rep_rows, last_sync=rep_fetched)
         _footer(t0)
         return
 
     # ── 광고 탭(전체/Meta/Google) — SQL 페이지 로딩 ──
     tabkey = TAB_KEY.get(tab, "all")
     f = C.render_filters(_filter_options(), header, _social_count())
-    page_size = st.session_state.get("sa_psize", 12)
+    page_size = st.session_state.get("sa_psize", 20)
     page = st.session_state.get("sa_page", 1)
 
     import json

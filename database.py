@@ -58,8 +58,15 @@ def hash_pw(pw: str) -> str:
 
 def get_conn() -> sqlite3.Connection:
     DATA.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    # WAL: 05:00 크롤(쓰기) 중에도 앱은 락 없이 읽기 가능 / busy_timeout: 락 충돌 시 대기
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except Exception:  # noqa: BLE001
+        pass
     return conn
 
 
@@ -277,7 +284,7 @@ _SUMMARY_COLS = (
     "a.id, a.brand_name, a.ad_title, substr(a.ad_copy,1,90) AS ad_copy_short, "
     "a.platform, a.status, a.thumbnail_url, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
-    "a.scrape_status, a.error_message, a.platforms, a.detail_status, "
+    "a.scrape_status, a.error_message, a.platforms, a.detail_status, a.video_status, "
     "a.yt_views, a.yt_likes, a.yt_comments, a.yt_embeddable, a.fatigue_status, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
