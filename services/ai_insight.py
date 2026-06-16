@@ -162,6 +162,7 @@ def _gemini_json(prompt: str) -> dict:
     import time
 
     import requests
+    from services.gemini_log import log_call
     key = config.GEMINI_API_KEY
     model = config.GEMINI_MODEL or "gemini-2.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -175,13 +176,19 @@ def _gemini_json(prompt: str) -> dict:
             last = r
             time.sleep(1.5 * (attempt + 1))
             continue
-        r.raise_for_status()
-        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        try:
+            r.raise_for_status()
+            txt = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except Exception as e:  # noqa: BLE001
+            log_call("ai_insight._gemini_json", len(prompt), ok=False, code=str(getattr(r, "status_code", e)))
+            raise
         if txt.startswith("```"):
             txt = txt.strip("`")
             txt = txt[4:] if txt[:4].lower() == "json" else txt
+        log_call("ai_insight._gemini_json", len(prompt), ok=True)
         return json.loads(txt)
     if last is not None:
+        log_call("ai_insight._gemini_json", len(prompt), ok=False, code=str(last.status_code))
         last.raise_for_status()
     return {}
 

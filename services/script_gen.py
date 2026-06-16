@@ -62,13 +62,16 @@ def gemini_model() -> str:
     return config.secret("GEMINI_MODEL", "") or "gemini-2.5-flash"
 
 
-def _gemini(parts: list, retries: int = 3) -> str:
+def _gemini(parts: list, retries: int = 3, _fn: str = "script_gen._gemini", _ad: str = "") -> str:
     """Gemini 호출. 과부하(503)/한도(429) 대응:
     ① 토큰을 줄여(저해상도 미디어) TPM 압박·비용 완화 ② 점증 백오프 재시도
     ③ 그래도 과부하면 덜 붐비는 대체 모델로 폴백. 실패 시 '' (앱 멈춤 방지)."""
     import time
 
     import requests
+    from services.gemini_log import log_call
+    _plen = sum(len(str(p.get("text", ""))) for p in parts if isinstance(p, dict))
+    _last_code = ""
     key = gemini_key()
     # 설정 모델 → 대체 모델 순서(2.5-flash 과부하 시 2.0-flash/flash-lite로)
     models = []
@@ -92,6 +95,7 @@ def _gemini(parts: list, retries: int = 3) -> str:
                 j = r.json()
                 if "error" in j:
                     code = j["error"].get("code")
+                    _last_code = str(code)
                     if code in (503, 429, 500) and attempt < retries:
                         time.sleep(min(3 * (attempt + 1), 15))
                         continue
@@ -99,13 +103,16 @@ def _gemini(parts: list, retries: int = 3) -> str:
                 cand = (j.get("candidates") or [{}])[0]
                 txt = " ".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
                 if txt:
+                    log_call(_fn, _plen, ok=True, code="", ad_id=_ad, note=model)
                     return txt
                 break   # 빈 응답 → 다음 모델
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                _last_code = type(e).__name__
                 if attempt < retries:
                     time.sleep(2 * (attempt + 1))
                     continue
                 break
+    log_call(_fn, _plen, ok=False, code=_last_code, ad_id=_ad, note="all models failed")
     return ""
 
 
@@ -161,7 +168,7 @@ def _gemini_video_file(url: str, ad: dict) -> tuple:
 
     b64 = base64.b64encode(content).decode()
     g = _gemini([{"inline_data": {"mime_type": "video/mp4", "data": b64}},
-                 {"text": PROMPT + _ctx(ad)}])
+                 {"text": PROMPT + _ctx(ad)}], _fn="script_gen.video_file", _ad=str(ad.get("id") or ""))
     seg = _parse_segments(g)
     if seg:
         database.put_script_cache(vhash, seg, "gemini_video")
@@ -216,7 +223,8 @@ def generate(ad: dict) -> dict:
         if cached:
             return {"text": cached["text"], "source": cached["source"], "status": "completed",
                     "error": "", "input_type": "video_url"}
-        g = _gemini([{"file_data": {"file_uri": YT.watch_url(vid)}}, {"text": PROMPT + _ctx(ad)}])
+        g = _gemini([{"file_data": {"file_uri": YT.watch_url(vid)}}, {"text": PROMPT + _ctx(ad)}],
+                    _fn="script_gen.youtube_uri", _ad=str(ad.get("id") or ""))
         seg = _parse_segments(g)
         if seg:
             database.put_script_cache("yt:" + vid, seg, "gemini_video")
@@ -281,7 +289,7 @@ def analyze_thumbnail(ad: dict) -> dict:
                 "error": "", "input_type": "thumbnail"}
     b64 = base64.b64encode(content).decode()
     g = _gemini([{"inline_data": {"mime_type": mime or "image/jpeg", "data": b64}},
-                 {"text": THUMB_PROMPT + _ctx(ad)}])
+                 {"text": THUMB_PROMPT + _ctx(ad)}], _fn="script_gen.thumbnail", _ad=str(ad.get("id") or ""))
     obj = _parse_thumb(g)
     if obj:
         database.put_script_cache(ihash, obj, "gemini_thumbnail")

@@ -84,14 +84,19 @@ def gemini_transcript(video_id: str) -> str:
         {"file_data": {"file_uri": watch_url(video_id)}},
         {"text": "이 영상의 음성을 한국어 대본으로 전사해줘. 해설·요약 없이 말한 내용만 자연스럽게."},
     ]}]}
+    from services.gemini_log import log_call
     try:
         r = requests.post(url, json=body, timeout=120)
         j = r.json()
         if "error" in j:
+            log_call("youtube.gemini_transcript", 0, ok=False,
+                     code=str(j["error"].get("code")), ad_id=video_id)
             return ""
         parts = j["candidates"][0]["content"]["parts"]
+        log_call("youtube.gemini_transcript", 0, ok=True, ad_id=video_id)
         return " ".join(p.get("text", "") for p in parts).strip()
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        log_call("youtube.gemini_transcript", 0, ok=False, code=type(e).__name__, ad_id=video_id)
         return ""
 
 

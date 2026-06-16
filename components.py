@@ -448,12 +448,30 @@ def render_google_review() -> None:
         st.success(f"재계산 완료 — {res}")
         _reload()
 
-    rows = database.google_review_ads(120)
+    # 무거운 스크린샷(data URI) 로딩 방지 — 버튼 눌러야 소량 불러오기
+    if not st.session_state.get("_grv_show"):
+        if st.button("미확정 광고 불러오기(12개씩)", key="grv_load"):
+            st.session_state["_grv_show"] = True
+            st.session_state["_grv_page"] = 0
+            st.rerun()
+        st.caption("※ 구글 스크린샷이 무거워 자동 로딩을 끕니다. 버튼을 눌러 확인하세요.")
+        return
+    page = st.session_state.get("_grv_page", 0)
+    SIZE = 12
+    rows_all = database.google_review_ads(SIZE * (page + 1) + 1)
+    rows = rows_all[page * SIZE:(page + 1) * SIZE]
     if not rows:
         st.info("미확정 구글 광고가 없습니다. (먼저 '브랜드 매칭 재계산'을 눌러보세요.)")
+        st.session_state["_grv_show"] = False
         return
-    st.caption(f"미확정 {len(rows)}건 — 스크린샷을 보고 브랜드를 지정하세요(법인명이 같아 자동 확정 불가).")
+    st.caption(f"미확정 {page*SIZE+1}~{page*SIZE+len(rows)}번째 — 1건만 지정하면 **같은 광고주(AR ID) 전부 자동 확정**됩니다.")
+    nav = st.columns([1, 1, 4])
+    if nav[0].button("◀ 이전", disabled=page <= 0, key="grv_prev"):
+        st.session_state["_grv_page"] = page - 1; st.rerun()
+    if nav[1].button("다음 ▶", disabled=len(rows_all) <= (page + 1) * SIZE, key="grv_next"):
+        st.session_state["_grv_page"] = page + 1; st.rerun()
     allb = sorted(database.brand_index_groups().keys())   # 지정용 전체 브랜드
+    import re as _re
     for i in range(0, len(rows), 4):
         cols = st.columns(4)
         for col, ad in zip(cols, rows[i:i + 4]):
@@ -465,7 +483,10 @@ def render_google_review() -> None:
                 else:
                     st.markdown("<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:1'>"
                                 "<div class='sa-ph'>🔍</div></div>", unsafe_allow_html=True)
+                _ar = _re.search(r'/advertiser/(AR[0-9A-Za-z]+)',
+                                 (ad.get('transparency_url') or ad.get('original_ad_url') or ''))
                 st.caption(f"법인: {ad.get('advertiser_name') or '-'}")
+                st.caption(f"AR: {(_ar.group(1)[:14]+'…') if _ar else '-'} · {ad.get('match_reason') or ''}")
                 sel = st.selectbox("브랜드 지정", allb, key=f"grv_b_{ad['id']}",
                                    index=(allb.index(ad["brand_name"]) if ad.get("brand_name") in allb else 0),
                                    label_visibility="collapsed")
@@ -476,6 +497,10 @@ def render_google_review() -> None:
                 if bc[1].button("제외", key=f"grv_ex_{ad['id']}", use_container_width=True):
                     database.assign_google_brand(ad["id"], exclude=True)
                     _reload()
+                tu = ad.get("transparency_url") or ad.get("original_ad_url")
+                if tu:
+                    st.markdown(f"<a href='{tu}' target='_blank' style='font-size:11px'>투명성센터 ↗</a>",
+                                unsafe_allow_html=True)
 
 
 def _collect_ids(ids: list) -> list:
@@ -1020,7 +1045,8 @@ def _script_plaintext(text: str) -> str:
         return t
     parts = [(s.get("script") or "").strip() for s in segs]
     parts = [p for p in parts if p]
-    return "\n".join(parts) if parts else t
+    # 이어붙임·복붙용: 구간 구분 없이 대사만 자연스럽게 연결(줄바꿈 X → 흐르는 문장)
+    return " ".join(parts) if parts else t
 
 
 def _render_thumb_analysis(text: str) -> str:
@@ -1091,10 +1117,21 @@ def _render_video_script(ad: dict) -> None:
     ovr = st.session_state.setdefault("_script_result", {})
 
     def _gen(label: str):
-        with st.spinner(label):
-            r = SG.generate(ad)
-        database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
-        ovr[aid] = r   # 세션 캐시 → 리런 없이 바로 표시
+        # rerun 중복 호출 방지 — 같은 ad 가 생성 중이면 재호출 금지
+        running = st.session_state.setdefault("_gemini_running", set())
+        if aid in running:
+            st.caption("⏳ 이미 생성 중입니다…")
+            return
+        running.add(aid)
+        try:
+            database.update_ad_script(aid, ad.get("script_text") or "", ad.get("script_source") or "",
+                                      "running", "")   # generation_status=running
+            with st.spinner(label):
+                r = SG.generate(ad)
+            database.update_ad_script(aid, r["text"], r["source"], r["status"], r["error"])
+            ovr[aid] = r   # 세션 캐시 → 리런 없이 바로 표시
+        finally:
+            running.discard(aid)
 
     # 현재 상태(세션 캐시 우선)
     cur = ovr.get(aid) or {"text": ad.get("script_text") or "",
