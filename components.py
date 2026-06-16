@@ -348,7 +348,8 @@ def render_brand_collection_admin() -> None:
     # 상태 요약 테이블(상태 나쁜 순 정렬됨)
     try:
         import pandas as pd
-        df = pd.DataFrame([{"브랜드": s["brand"], "방식": s["method"], "page_id": s["page_id"] or "-",
+        df = pd.DataFrame([{"#": s.get("index") or "-", "요일": s.get("group") or "-",
+                            "브랜드": s["brand"], "방식": s["method"], "page_id": s["page_id"] or "-",
                             "앱수집": s["count"], "라이브러리": s.get("reported") or "-",
                             "수집률%": s.get("rate") if s.get("rate") is not None else "-",
                             "영상": s["video"], "사라짐": s["gone"],
@@ -363,7 +364,14 @@ def render_brand_collection_admin() -> None:
     sel = st.selectbox("브랜드 선택", names, key="bca_sel")
     cur = database.get_brand(sel) or {}
     _pid_now = (cur.get("meta_page_id") or "").strip()
-    st.caption(f"현재 page_id: **{_pid_now or '없음'}** · 상태: {cur.get('page_id_status') or 'none'}")
+    _sst = next((s for s in stats if s["brand"] == sel), {})
+    _gi = database.brand_index_groups().get(sel, {})
+    _f = {"brand": sel, "media": [], "status": "전체", "category": "전체",
+          "sort": "최근 수집순", "period_days": None}
+    _merged = database.count_ads("meta", {**_f, "merge_variants": True})
+    st.caption(f"#{_gi.get('index','-')} · **{_gi.get('group','-')}요일** 수집 그룹 · "
+               f"page_id **{_pid_now or '없음'}**({cur.get('page_id_status') or 'none'}) · "
+               f"광고ID별 **{_sst.get('count','-')}장** / 묶음 **{_merged}장** · 상태 **{_sst.get('status','-')}**")
 
     # ── 기본: 광고 링크/라이브러리 ID 로 광고주 찾기 ──
     raw = st.text_input("Meta 광고 라이브러리 ID 또는 공유 링크", key=f"bca_lib_{sel}",
@@ -414,6 +422,16 @@ def render_brand_collection_admin() -> None:
             database.set_brand_page_id(sel, pid, "confirmed" if pid.strip() else "none")
             st.success("저장됨")
             _reload()
+
+    # ── 수집 로그 ──
+    with st.expander(f"📜 '{sel}' 수집 로그", expanded=False):
+        logs = database.recent_brand_logs(sel, 8)
+        if not logs:
+            st.caption("수집 로그가 없습니다.")
+        for lg in logs:
+            st.caption(f"{str(lg.get('started_at') or '')[:16]} · {lg.get('method') or '-'} · "
+                       f"{lg.get('status')} · 발견 {lg.get('found_count',0)} · "
+                       f"신규 {lg.get('new_count',0)} · 갱신 {lg.get('updated_count',0)}")
 
 
 def _collect_ids(ids: list) -> list:
@@ -595,7 +613,10 @@ def render_sidebar(counts: list, total: int) -> str:
                 _select(b)
         sb.markdown(f"<hr style='margin:.5rem 0 .6rem;border-color:{S.BORDER}'>", unsafe_allow_html=True)
 
-    # ── 브랜드 목록(🟢 라이브 + Ⓜ 메타 · Ⓖ 구글 광고수) ──
+    # 브랜드 인덱스/요일 그룹(요일별 분할 수집 기준) — 사이드바 번호 표기에 사용
+    _ig = database.brand_index_groups()
+
+    # ── 브랜드 목록(N. 브랜드 + Ⓜ 메타 · Ⓖ 구글 광고수) ──
     def _brand_btn(r, container=sb):
         b = r["name"]
         m, g = r.get("meta", 0), r.get("google", 0)
@@ -605,12 +626,17 @@ def render_sidebar(counts: list, total: int) -> str:
         if g:
             seg.append(f"Ⓖ {g}")
         cnt = "   ".join(seg)
-        dot = "🟢" if r.get("live") else "⚪"
-        tip = (f"메타 광고 {m} · 구글 투명성센터 {g} · 소셜 승인 {r['approved']} "
-               f"(검토필요 {r['needs']} · 제외 {r['rejected']})")
-        if container.button(f"{dot} {b}   {cnt}", key=f"b_{b}", help=tip,
+        gi = _ig.get(b, {})
+        idx = gi.get("index", 0)
+        num = f"{idx}." if idx else "·"
+        tip = (f"#{idx} · {gi.get('group','-')}요일 수집 · 메타 {m} · 구글 {g} · "
+               f"소셜 승인 {r['approved']} (검토 {r['needs']} · 제외 {r['rejected']})")
+        if container.button(f"{num} {b}   {cnt}", key=f"b_{b}", help=tip,
                             type=("primary" if b == sel else "secondary")):
             _select(b)
+
+    # 인덱스 순으로 정렬(번호가 순차적으로 보이게)
+    counts = sorted(counts, key=lambda r: _ig.get(r["name"], {}).get("index", 9999))
 
     def _norm(s):
         return (s or "").lower().replace(" ", "")

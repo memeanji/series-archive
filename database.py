@@ -1028,6 +1028,12 @@ def all_brand_collection_status() -> list[dict]:
                     "page_id": b["meta_page_id"] or "", "count": a["total"], "video": a["vid"],
                     "gone": a["gone"], "last": a["last"], "status": label,
                     "reported": reported, "rate": (round(rate * 100) if rate is not None else None)})
+    # 인덱스·요일 그룹 부여
+    ig = brand_index_groups()
+    for o in out:
+        gi = ig.get(o["brand"], {})
+        o["index"] = gi.get("index", 0)
+        o["group"] = gi.get("group", "-")
     order = {"누락 의심": 0, "page_id 확인 필요": 1, "확인 필요": 2, "얕은 수집": 3, "만료 많음": 4, "정상": 5}
     out.sort(key=lambda x: (order.get(x["status"], 9), -x["count"]))
     return out
@@ -1043,6 +1049,18 @@ def set_brand_page_id(display_name: str, page_id: str, status: str = "confirmed"
 
 
 _WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def recent_brand_logs(display_name: str, limit: int = 8) -> list[dict]:
+    """브랜드 최근 수집 로그(관리화면 표시용)."""
+    conn = get_conn()
+    bid = (conn.execute("SELECT id FROM brands WHERE display_name=?", (display_name,)).fetchone() or [0])[0]
+    rows = conn.execute(
+        "SELECT platform, keyword AS method, status, found_count, saved_count AS new_count, "
+        "skipped_count AS updated_count, started_at FROM brand_collection_logs "
+        "WHERE brand_id=? ORDER BY id DESC LIMIT ?", (bid, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def brand_index_groups() -> dict:

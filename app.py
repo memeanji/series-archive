@@ -116,9 +116,9 @@ def main() -> None:
         _footer(t0)
         return
 
-    # ── 브랜드 수집 관리(page_id 기반 깊은 수집) — Meta 탭에서만 ──
+    # ── 고급 설정: 브랜드 수집 관리(page_id·요일그룹·수동 deep collect·로그) — Meta 탭 ──
     if tab == "Meta":
-        with st.expander("⚙️ 브랜드 수집 관리 (page_id·재수집·상태)", expanded=False):
+        with st.expander("⚙️ 고급 설정 · 브랜드 수집 관리 (page_id·요일그룹·재수집·로그)", expanded=False):
             C.render_brand_collection_admin()
 
     # ── 광고 ID 다중 검색(Meta Ad Library 공유 광고 빠른 조회) ──
