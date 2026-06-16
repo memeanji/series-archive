@@ -70,13 +70,40 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _db_build_of(path) -> str:
+    """해당 DB 파일의 db_build.built_at(빌드 시각) 읽기. 없으면 ''."""
+    try:
+        c = sqlite3.connect(path)
+        r = c.execute("SELECT built_at FROM db_build LIMIT 1").fetchone()
+        c.close()
+        return r[0] if r else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def init_db(seed_users: Optional[dict] = None) -> None:
-    # DB가 없는 환경(예: Streamlit Cloud 첫 실행)이면 번들된 데모 DB로 시드
+    # 번들 데모 DB 로 시드/재시드.
+    #  - DB 없음(클라우드 첫 실행) → 시드
+    #  - 클라우드(/mount/src)에서 demo.db 빌드가 현재 DB 와 다름 → 재시드
+    #    (Streamlit Cloud 가 재부팅해도 옛 series_archive.db 가 남아 새 demo.db 를 안 읽던 문제 해결)
+    #  - 로컬(Windows 등)에서는 라이브 크롤 DB 를 절대 덮어쓰지 않음(데이터 보호)
+    import shutil
+    is_cloud = "/mount/src" in str(ROOT).replace("\\", "/")
+    seed = ROOT / "sample_data" / "demo.db"
     if not DB_PATH.exists():
-        seed = ROOT / "sample_data" / "demo.db"
         if seed.exists():
-            import shutil
             DATA.mkdir(parents=True, exist_ok=True)
+            shutil.copy(seed, DB_PATH)
+    elif is_cloud and seed.exists():
+        seed_build = _db_build_of(seed)
+        if seed_build and seed_build != _db_build_of(DB_PATH):
+            for ext in ("-wal", "-shm"):   # 스테일 WAL/SHM 제거 후 최신 demo.db 로 교체
+                p = Path(str(DB_PATH) + ext)
+                if p.exists():
+                    try:
+                        p.unlink()
+                    except Exception:  # noqa: BLE001
+                        pass
             shutil.copy(seed, DB_PATH)
     conn = get_conn()
     conn.executescript("""
