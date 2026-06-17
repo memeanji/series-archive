@@ -20,6 +20,19 @@ import database
 _LOGIN_TTL = 6 * 3600   # 로그인 유지 6시간
 
 
+def _auth_log(step: str, username: str = "", ok: bool = True, note: str = "") -> None:
+    """로그인/접근 단계 로그 — 누가 어디서 막히는지 추적(logs/auth.log)."""
+    try:
+        from datetime import datetime
+        d = Path(__file__).resolve().parent / "logs"
+        d.mkdir(exist_ok=True)
+        with open(d / "auth.log", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}\t{step}\tuser={username or '-'}\t"
+                    f"{'OK' if ok else 'FAIL'}\t{note}\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _sign_key() -> bytes:
     return (_secret("AUTH_SECRET") or "series-archive-2026-internal-signing").encode()
 
@@ -171,12 +184,15 @@ def login() -> None:
                 if check_password(u.strip(), p):
                     st.session_state.authenticated = True
                     st.session_state.username = u.strip()
+                    _auth_log("login", u.strip(), True)
                     try:   # 6시간 유지 토큰을 URL에 저장(새로고침에도 로그인 유지)
                         st.query_params["auth"] = _make_token(u.strip())
                     except Exception:  # noqa: BLE001
                         pass
                     st.rerun()
                 else:
+                    _known = ", ".join(sorted(get_secret_users().keys())) or "(없음)"
+                    _auth_log("login", u.strip(), False, f"등록계정={_known}")
                     st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
             st.markdown("<div style='text-align:center;color:#94A3B8;font-size:12px;margin-top:14px'>"
                         "내부 공유용 · 계정 문의는 관리자에게</div>", unsafe_allow_html=True)
