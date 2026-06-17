@@ -1107,14 +1107,36 @@ def _render_sheets_cuts(ad: dict, aid: str, script_text: str) -> None:
     """구간별 자막 → 구글시트 스토리보드 탭 자동 생성: 버튼 → 미리보기 → 확인 시 템플릿 복사+입력."""
     import datetime as _dt
     import services.sheets_cuts as SC
+    if not (script_text or "").strip():
+        return   # 스크립트 자체가 없으면 아무것도 안 함(상위에서 AI 생성 안내)
     cuts = SC.normalize_cuts(script_text)
-    if not cuts:   # 컷(구간 JSON) 없으면 버튼 비활성 안내
-        st.caption("※ 구간별 자막(컷)이 없어 시트 전송 불가 — 'AI 생성'으로 구간 스크립트를 먼저 만들어 주세요.")
-        return
+    # 디버그 로그(ad당 세션 1회) — 어느 포맷에서 컷/스크립트를 읽었는지
+    try:
+        _seen = st.session_state.setdefault("_script_dbg", set())
+        if aid not in _seen:
+            _seen.add(aid)
+            nd = SC.normalize_script_data(ad)
+            import os
+            os.makedirs("logs", exist_ok=True)
+            with open("logs/script_debug.log", "a", encoding="utf-8") as _f:
+                _f.write(f"{aid}\t{ad.get('brand_name') or '-'}\tsrc={nd['source']}\t"
+                         f"parse={nd['parse']}\tsegs={len(nd['segments'])}\t"
+                         f"full_len={len(nd['full_script'])}\n")
+    except Exception:  # noqa: BLE001
+        pass
+    # 안내 문구는 버튼 클릭 시에만 — 항상 노출하지 않음
     pkey = f"_sheets_prev_{aid}"
-    if st.button(f"📤 구글시트 스토리보드로 보내기 ({len(cuts)}컷)", key=f"sheetbtn_{aid}"):
+    label = f"📤 구글시트 스토리보드로 보내기 ({len(cuts)}컷)" if cuts else "📤 구글시트 스토리보드로 보내기"
+    if st.button(label, key=f"sheetbtn_{aid}"):
         st.session_state[pkey] = True
     if not st.session_state.get(pkey):
+        return
+    if not cuts:   # 클릭했는데 컷이 없을 때만 안내(전체 스크립트만 있는 경우)
+        st.info("구간별 자막(컷)으로 나뉘지 않아 시트 컷 입력이 어려워요. 전체 스크립트만 있는 형태예요. "
+                "'재생성'하면 구간별로 다시 만들어질 수 있어요.")
+        if st.button("닫기", key=f"sheetclose_{aid}"):
+            st.session_state[pkey] = False
+            st.rerun()
         return
     mmdd = _dt.datetime.now().strftime("%m%d")
     default_name = f"{mmdd} {ad.get('brand_name') or ''}".strip()

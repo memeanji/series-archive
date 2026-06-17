@@ -40,28 +40,62 @@ def _sa_info():
         return None
 
 
+import re
+
+# 'MM:SS–MM:SS  대사' / 'M:SS 대사' 등 타임코드 줄
+_TS_LINE = re.compile(r"^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*[–\-~]?\s*"
+                      r"(\d{1,2}:\d{2}(?::\d{2})?)?\s+(.+?)\s*$")
+
+
 def normalize_cuts(script_text: str) -> list[dict]:
-    """Gemini 구간 JSON([{start,end,script,visual_summary,...}]) → [{start,end,caption,visual}].
-       구간 JSON 이 아니면 [](단일 텍스트는 컷 분해 불가)."""
+    """저장 포맷이 무엇이든 컷 리스트 [{start,end,caption,visual}] 로 정규화.
+       1) Gemini 구간 JSON  2) 평문 타임코드(MM:SS–MM:SS 대사)  3) 그 외 → []."""
     t = (script_text or "").strip()
-    if not (t.startswith("[") and t.endswith("]")):
+    if not t:
         return []
-    try:
-        segs = json.loads(t)
-    except Exception:  # noqa: BLE001
-        return []
-    if not isinstance(segs, list):
-        return []
-    out = []
-    for s in segs:
-        if not isinstance(s, dict):
+    # 1) 구간 JSON
+    if t.startswith("[") and t.endswith("]"):
+        try:
+            segs = json.loads(t)
+            if isinstance(segs, list):
+                out = []
+                for s in segs:
+                    if isinstance(s, dict):
+                        out.append({"start": str(s.get("start") or "").strip(),
+                                    "end": str(s.get("end") or "").strip(),
+                                    "caption": (s.get("script") or s.get("caption") or "").strip(),
+                                    "visual": (s.get("visual_summary") or s.get("visual") or "").strip()})
+                if out:
+                    return out
+        except Exception:  # noqa: BLE001
+            pass
+    # 2) 평문 타임코드 줄 파싱(youtube_transcript 등)
+    cuts = []
+    for raw in t.splitlines():
+        ln = raw.strip()
+        if not ln or (ln.startswith("[") and ln.endswith("]")):   # '[영상 스크립트]' 헤더 건너뜀
             continue
-        cap = (s.get("script") or s.get("caption") or "").strip()
-        out.append({"start": str(s.get("start") or "").strip(),
-                    "end": str(s.get("end") or "").strip(),
-                    "caption": cap,
-                    "visual": (s.get("visual_summary") or s.get("visual") or "").strip()})
-    return out
+        m = _TS_LINE.match(ln)
+        if m and m.group(3):
+            cuts.append({"start": m.group(1), "end": m.group(2) or "",
+                         "caption": m.group(3).strip(), "visual": ""})
+    return cuts
+
+
+def normalize_script_data(row: dict) -> dict:
+    """저장된 스크립트 데이터 정규화(구버전 호환).
+       반환 {segments, full_script, source, has_cuts, parse}."""
+    text = (row.get("script_text") or row.get("script") or row.get("transcript") or "").strip()
+    src = row.get("script_source") or ("plain" if text else "")
+    cuts = normalize_cuts(text)
+    parse = "json" if (text.startswith("[") and text.endswith("]")) else ("timecode" if cuts else ("text" if text else "empty"))
+    # 전체 스크립트(흐르는 문장): 컷이 있으면 caption 이어붙임, 없으면 원문
+    if cuts and any(c["caption"] for c in cuts):
+        full = " ".join(c["caption"] for c in cuts if c["caption"])
+    else:
+        full = text
+    return {"segments": cuts, "full_script": full, "source": src,
+            "has_cuts": bool(cuts), "parse": parse}
 
 
 def _col_letter(n: int) -> str:
