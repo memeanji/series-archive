@@ -1103,6 +1103,40 @@ def _render_script_body(text: str) -> str:
             f"padding:10px 12px;max-height:360px;overflow:auto'>{''.join(rows)}</div>")
 
 
+def _render_sheets_cuts(ad: dict, aid: str, script_text: str) -> None:
+    """구간별 자막 → 구글시트 스토리보드 탭 자동 생성: 버튼 → 미리보기 → 확인 시 템플릿 복사+입력."""
+    import datetime as _dt
+    import services.sheets_cuts as SC
+    cuts = SC.normalize_cuts(script_text)
+    if not cuts:   # 컷(구간 JSON) 없으면 버튼 비활성 안내
+        st.caption("※ 구간별 자막(컷)이 없어 시트 전송 불가 — 'AI 생성'으로 구간 스크립트를 먼저 만들어 주세요.")
+        return
+    pkey = f"_sheets_prev_{aid}"
+    if st.button(f"📤 구글시트 스토리보드로 보내기 ({len(cuts)}컷)", key=f"sheetbtn_{aid}"):
+        st.session_state[pkey] = True
+    if not st.session_state.get(pkey):
+        return
+    mmdd = _dt.datetime.now().strftime("%m%d")
+    default_name = f"{mmdd} {ad.get('brand_name') or ''}".strip()
+    name = st.text_input("새 탭 이름", value=default_name, key=f"sheetname_{aid}",
+                         help="템플릿을 복사해 이 이름의 새 탭을 만듭니다 (예: 0617 올레놀샷)")
+    st.caption("미리보기 — 1행 C열~ 대사, 3행 C열~ 편집가이드 (A열·B2 보존, 템플릿 복사)")
+    for i, c in enumerate(cuts, 1):
+        st.caption(f"컷{i}: {c['caption'] or '(빈칸)'}  ·  🎬 {c.get('visual','') or '-'}")
+    cc = st.columns(2)
+    if cc[0].button("✅ 스토리보드 탭 생성", key=f"sheetgo_{aid}", type="primary", use_container_width=True):
+        with st.spinner("구글시트 템플릿 복사·입력 중…"):
+            res = SC.write_storyboard(name or default_name, cuts)
+        if res.get("success"):
+            st.success(f"{res['message']} — 탭 '{res['tab']}' · {res['cut_count']}개 컷 입력")
+        else:
+            st.error(res.get("message") or "생성 실패")
+        st.session_state[pkey] = False
+    if cc[1].button("취소", key=f"sheetcancel_{aid}", use_container_width=True):
+        st.session_state[pkey] = False
+        st.rerun()
+
+
 def _render_video_script(ad: dict) -> None:
     """모달을 닫지 않고(=튕김 없음) 세션 상태에 결과를 캐시해 즉시 갱신."""
     import services.script_gen as SG
@@ -1222,12 +1256,13 @@ def _render_video_script(ad: dict) -> None:
             st.caption("🤖 Gemini가 영상을 분석한 추정 대본 — 실제 대사와 다를 수 있습니다.")
         else:
             st.caption(f"출처: {src_ko.get(cur['source'], cur['source'] or '-')}")
-        # 📄 전체 스크립트(이어붙임·복붙용) — 구간/타임코드 없이 흐르는 문장으로만 표시
-        st.markdown("##### 📄 전체 스크립트 (이어붙임 · 복붙용)")
-        st.text_area("전체 스크립트", value=_script_plaintext(cur["text"]), height=260,
-                     label_visibility="collapsed", key=f"scfull_{aid}")
+        # 📄 전체 스크립트(이어붙임·복붙용) — 접었다 펼침(기본 펼침), 구간/타임코드 없이 흐르는 문장
+        with st.expander("📄 전체 스크립트 (이어붙임 · 복붙용)", expanded=True):
+            st.text_area("전체 스크립트", value=_script_plaintext(cur["text"]), height=260,
+                         label_visibility="collapsed", key=f"scfull_{aid}")
         with st.expander("📝 구간별 자막 (타임코드별) 보기", expanded=False):
             st.markdown(_render_script_body(cur["text"]), unsafe_allow_html=True)
+        _render_sheets_cuts(ad, aid, cur["text"])
     elif completed and edit:
         new = st.text_area("스크립트 편집", value=cur["text"], height=260, key=f"scredit_{aid}",
                            label_visibility="collapsed")
