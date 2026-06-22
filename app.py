@@ -109,12 +109,10 @@ def main() -> None:
 
     tab = header["tab"]
 
-    # ── repurely 내부 소재 분석 탭(Insight) ──
-    if tab == "Insight":
-        rep_rows, rep_fetched = _repurely_rows()
-        C.render_repurely_insights(rep_rows, last_sync=rep_fetched)
-        _footer(t0)
-        return
+    # ── 구글 브랜드 미확정 리뷰함(법인 공유 → AR ID 단위 수동 지정·학습) — Google 탭 ──
+    if tab == "Google":
+        with st.expander("🔎 구글 브랜드 미확정 리뷰함 (법인 공유 광고 · AR ID 학습 지정)", expanded=False):
+            C.render_google_review()
 
     # ── 광고 ID 다중 검색(Meta Ad Library 공유 광고 빠른 조회) ──
     with st.expander("🔎 광고 ID로 찾기 (여러 개·링크 붙여넣기 가능)", expanded=False):
@@ -159,6 +157,11 @@ def main() -> None:
     st.session_state.sa_psize = info[1].selectbox(
         "페이지당", _opts, index=_opts.index(page_size) if page_size in _opts else 0,
         label_visibility="collapsed")
+    # Google: 미확정 광고가 섞일 수 있음을 안내(공유 법인 단위 수집 특성)
+    if tab == "Google" and any((r.get("brand_status") or "") in ("company_only", "unmatched", "")
+                               for r in rows):
+        st.caption("⚪ 미확정 배지 광고는 공유 법인/광고주 단위로 수집되어 **다른 자매브랜드 광고가 섞일 수 있습니다**. "
+                   "리뷰함에서 브랜드 지정/제외로 정리할 수 있어요.")
 
     if f["brand"] != "전체":   # 특정 브랜드 선택 시 추이 요약
         C.render_brand_trend_summary(f["brand"])

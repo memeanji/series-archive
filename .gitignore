@@ -29,3 +29,4 @@ venv/
 
 # 데모용 clean DB는 예외(계정/비밀 없음)
 !sample_data/demo.db
+secrets_cloud_paste.toml

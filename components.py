@@ -264,7 +264,7 @@ def render_header(ads=None) -> dict:
     # 상단: 큰 탭(직관적) + 새로고침 + 우측 유저. 제목(Series Archive)은 사이드바로 이동.
     tc = st.columns([5, 1, 1], vertical_alignment="center")
     with tc[0]:
-        tabs = ["Meta", "Google", "Insight", "북마크"]
+        tabs = ["Meta", "Google", "북마크"]
         tab = st.segmented_control("메뉴", tabs, default="Meta", key="nav_tab",
                                    label_visibility="collapsed") or "Meta"
     # 캐시 강제 초기화(5시 크롤·demo.db 갱신 후 옛 상태가 캐시로 남는 것 방지)
@@ -434,23 +434,40 @@ def render_brand_collection_admin() -> None:
                        f"신규 {lg.get('new_count',0)} · 갱신 {lg.get('updated_count',0)}")
 
 
+def _grv_thumb(ad) -> None:
+    th = get_display_thumbnail(ad)
+    if th["src"]:
+        st.markdown(f"<img src='{th['src']}' loading='lazy' style='width:100%;border-radius:8px;"
+                    f"background:#0F172A'/>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:1'>"
+                    "<div class='sa-ph'>🔍</div></div>", unsafe_allow_html=True)
+    tu = ad.get("transparency_url") or ad.get("original_ad_url")
+    if tu:
+        st.markdown(f"<a href='{tu}' target='_blank' style='font-size:11px'>투명성센터 ↗</a>",
+                    unsafe_allow_html=True)
+
+
 def render_google_review() -> None:
-    """구글 브랜드 미확정 리뷰함 — 법인매칭(company_only)·미매칭 광고를 스크린샷 보고 수동 지정."""
+    """구글 광고 상태 관리 — 4상태(확정/추정/미확정/제외). 미확정은 수동 지정, 제외는 별도 목록."""
     cnt = database.google_status_counts()
-    conf = cnt.get("confirmed", 0) + cnt.get("estimated", 0)
-    review = cnt.get("company_only", 0) + cnt.get("unmatched", 0)
-    st.caption(f"구글 광고 상태 — 확정/추정 {conf} · 미확정(법인만) {cnt.get('company_only',0)} · "
-               f"미매칭 {cnt.get('unmatched',0)} · 수동지정 {cnt.get('(미분류)',0)} 미분류")
+    review_n = cnt.get("company_only", 0) + cnt.get("unmatched", 0)
+    excl_n = cnt.get("reference_excluded", 0)
+    st.caption(f"🟢 브랜드 확정 {cnt.get('confirmed',0)} · 🟡 추정 {cnt.get('estimated',0)} · "
+               f"⚪ 미확정 {review_n} · 🚫 레퍼런스 제외 {excl_n}")
     if st.button("🔁 브랜드 매칭 재계산", key="grv_recompute",
-                 help="랜딩/문구/제품키워드/법인 우선순위로 전체 재매칭(수동지정은 보존)"):
+                 help="브랜드명/alias/도메인/제품키워드/법인 순으로 재매칭(수동 지정·제외는 보존)"):
         with st.spinner("구글 광고 브랜드 매칭 재계산 중…"):
             res = database.recompute_google_matches()
         st.success(f"재계산 완료 — {res}")
         _reload()
 
+    view = st.segmented_control("보기", ["⚪ 미확정 리뷰", "🚫 제외 목록"],
+                                default="⚪ 미확정 리뷰", key="grv_view") or "⚪ 미확정 리뷰"
+
     # 무거운 스크린샷(data URI) 로딩 방지 — 버튼 눌러야 소량 불러오기
     if not st.session_state.get("_grv_show"):
-        if st.button("미확정 광고 불러오기(12개씩)", key="grv_load"):
+        if st.button("광고 불러오기(12개씩)", key="grv_load"):
             st.session_state["_grv_show"] = True
             st.session_state["_grv_page"] = 0
             st.rerun()
@@ -458,49 +475,48 @@ def render_google_review() -> None:
         return
     page = st.session_state.get("_grv_page", 0)
     SIZE = 12
-    rows_all = database.google_review_ads(SIZE * (page + 1) + 1)
+    excluded_view = view.startswith("🚫")
+    fetch = database.google_excluded_ads if excluded_view else database.google_review_ads
+    rows_all = fetch(SIZE * (page + 1) + 1)
     rows = rows_all[page * SIZE:(page + 1) * SIZE]
     if not rows:
-        st.info("미확정 구글 광고가 없습니다. (먼저 '브랜드 매칭 재계산'을 눌러보세요.)")
-        st.session_state["_grv_show"] = False
+        st.info("제외된 광고가 없습니다." if excluded_view
+                else "미확정 구글 광고가 없습니다. (먼저 '브랜드 매칭 재계산'을 눌러보세요.)")
         return
-    st.caption(f"미확정 {page*SIZE+1}~{page*SIZE+len(rows)}번째 — 1건만 지정하면 **같은 광고주(AR ID) 전부 자동 확정**됩니다.")
+    if excluded_view:
+        st.caption(f"레퍼런스 제외 {page*SIZE+1}~{page*SIZE+len(rows)}번째 — 잘못 제외했으면 되돌릴 수 있어요.")
+    else:
+        st.caption(f"미확정 {page*SIZE+1}~{page*SIZE+len(rows)}번째 — "
+                   f"브랜드 지정 1건이면 **같은 광고주(AR ID) 전부 자동 확정**됩니다.")
     nav = st.columns([1, 1, 4])
     if nav[0].button("◀ 이전", disabled=page <= 0, key="grv_prev"):
         st.session_state["_grv_page"] = page - 1; st.rerun()
     if nav[1].button("다음 ▶", disabled=len(rows_all) <= (page + 1) * SIZE, key="grv_next"):
         st.session_state["_grv_page"] = page + 1; st.rerun()
-    allb = sorted(database.brand_index_groups().keys())   # 지정용 전체 브랜드
-    import re as _re
+    allb = sorted(database.brand_index_groups().keys())
     for i in range(0, len(rows), 4):
         cols = st.columns(4)
         for col, ad in zip(cols, rows[i:i + 4]):
             with col:
-                th = get_display_thumbnail(ad)
-                if th["src"]:
-                    st.markdown(f"<img src='{th['src']}' loading='lazy' style='width:100%;border-radius:8px;"
-                                f"background:#0F172A'/>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='sa-thumb sa-thumb-empty' style='aspect-ratio:1'>"
-                                "<div class='sa-ph'>🔍</div></div>", unsafe_allow_html=True)
-                _ar = _re.search(r'/advertiser/(AR[0-9A-Za-z]+)',
-                                 (ad.get('transparency_url') or ad.get('original_ad_url') or ''))
-                st.caption(f"법인: {ad.get('advertiser_name') or '-'}")
-                st.caption(f"AR: {(_ar.group(1)[:14]+'…') if _ar else '-'} · {ad.get('match_reason') or ''}")
-                sel = st.selectbox("브랜드 지정", allb, key=f"grv_b_{ad['id']}",
+                _grv_thumb(ad)
+                st.caption(f"광고주: {ad.get('advertiser_name') or '-'}")
+                if excluded_view:
+                    if st.button("↩ 제외 취소", key=f"grv_rs_{ad['id']}", use_container_width=True):
+                        database.restore_google_excluded(ad["id"]); st.rerun()
+                    continue
+                st.caption(f"{ad.get('match_reason') or ''}")
+                sel = st.selectbox("브랜드", allb, key=f"grv_b_{ad['id']}",
                                    index=(allb.index(ad["brand_name"]) if ad.get("brand_name") in allb else 0),
                                    label_visibility="collapsed")
+                # 캐시 비우지 않고 가볍게 rerun(리뷰 목록은 비캐시 쿼리라 즉시 반영)
+                if st.button("✅ 이 브랜드로 지정", key=f"grv_set_{ad['id']}",
+                             type="primary", use_container_width=True):
+                    database.assign_google_brand(ad["id"], brand=sel); st.rerun()
                 bc = st.columns(2)
-                if bc[0].button("지정", key=f"grv_set_{ad['id']}", use_container_width=True):
-                    database.assign_google_brand(ad["id"], brand=sel)
-                    _reload()
-                if bc[1].button("제외", key=f"grv_ex_{ad['id']}", use_container_width=True):
-                    database.assign_google_brand(ad["id"], exclude=True)
-                    _reload()
-                tu = ad.get("transparency_url") or ad.get("original_ad_url")
-                if tu:
-                    st.markdown(f"<a href='{tu}' target='_blank' style='font-size:11px'>투명성센터 ↗</a>",
-                                unsafe_allow_html=True)
+                if bc[0].button("브랜드 미확정", key=f"grv_uk_{ad['id']}", use_container_width=True):
+                    database.assign_google_brand(ad["id"], unsure=True); st.rerun()
+                if bc[1].button("레퍼런스 제외", key=f"grv_ex_{ad['id']}", use_container_width=True):
+                    database.assign_google_brand(ad["id"], exclude=True); st.rerun()
 
 
 def _collect_ids(ids: list) -> list:
@@ -762,6 +778,8 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
                                        help="상세에서 '광고 라이브러리에 없습니다'가 뜨는 광고만 모아 봅니다.")
             merge_variants = st.checkbox("A/B 변형 묶기(같은 문구 1장으로)", value=False, key="f_merge",
                                          help="끄면 라이브러리처럼 광고 1건당 카드 1장. 켜면 같은 문구의 A/B 변형을 묶어 표시.")
+            include_estimated = st.checkbox("🟡 브랜드 추정 광고도 포함(구글)", value=False, key="f_estimated",
+                                            help="구글: 기본은 '브랜드 확정'만. 켜면 '추정' 광고도 함께 표시.")
 
     # 탭 → 매체/북마크 매핑
     tab = header["tab"]
@@ -793,6 +811,7 @@ def render_filters(opts: dict, header: dict, social_count: int = 0) -> dict:
         "show_hidden": show_hidden,
         "only_unavailable": only_unavail,
         "merge_variants": merge_variants,
+        "include_estimated": include_estimated,
     }
 
 
@@ -851,6 +870,15 @@ def render_ad_card(ad: dict, idx: int) -> None:
         elif _mst in ("private_or_deleted", "unavailable"):
             play_badge = ("<div class='sa-badge' style='background:rgba(100,116,139,.95);top:7px;left:7px'>"
                           "재생 불가</div>")
+    # Google 브랜드 매칭 상태 배지(B안: 미확정/추정도 노출하되 명확히 구분)
+    if plat == "google":
+        _bs = (ad.get("brand_status") or "").strip()
+        if _bs in ("company_only", "unmatched", ""):
+            play_badge = ("<div class='sa-badge' style='background:rgba(100,116,139,.95);top:7px;left:7px'>"
+                          "⚪ 미확정</div>")
+        elif _bs == "estimated":
+            play_badge = ("<div class='sa-badge' style='background:rgba(202,138,4,.95);top:7px;left:7px'>"
+                          "🟡 추정</div>")
     dot = S.status_color(ad.get("status"))
 
     # ── 핵심 지표(우선순위 2) ──

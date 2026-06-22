@@ -5,6 +5,18 @@
 from __future__ import annotations
 
 import json
+import re
+
+_AR_RE = re.compile(r"/advertiser/(AR[0-9A-Za-z]+)")
+
+
+def advertiser_id(ad: dict) -> str:
+    """transparency_url/original_ad_url 에서 광고주 계정 ID(AR...) 추출 — 브랜드 구분 핵심키."""
+    for k in ("transparency_url", "original_ad_url"):
+        m = _AR_RE.search(str(ad.get(k) or ""))
+        if m:
+            return m.group(1)
+    return ""
 
 
 def _loads(v):
@@ -48,42 +60,61 @@ def match_ad(ad: dict, registry: dict, rules: list) -> dict:
     """반환 {brand, method, confidence, status}.
     status: confirmed / estimated / company_only / unmatched."""
     landing = " ".join(str(ad.get(k) or "") for k in ("landing_url", "final_url", "media_url")).lower()
+    # 사용 가능한 모든 텍스트 필드(파일명/경로 포함)에서 브랜드 힌트 탐색
+    # brand_name(크롤 추정값)은 순환 확정 방지 위해 제외 — 실제 콘텐츠 필드만
     text = " ".join(str(ad.get(k) or "") for k in
-                    ("ad_title", "ad_copy", "transparency_url", "original_ad_url")).lower()
+                    ("ad_title", "ad_copy", "advertiser_name", "transparency_url",
+                     "original_ad_url", "thumbnail_url", "local_thumbnail_path")).lower()
     blob = landing + " " + text
     adv = (ad.get("advertiser_name") or "").strip().lower()
+    arid = advertiser_id(ad)
     brands = registry["brands"]
 
-    # 0) 학습 규칙(수동 매칭으로 등록된 도메인/키워드) — 최우선 자동매칭
+    # 0-A) 제외 학습 규칙 — 이 광고주(AR ID)는 레퍼런스 제외(보험·대출 등 안 들고옴)
+    if arid:
+        for rule in rules:
+            if rule["pattern_type"] == "exclude_advertiser_id" and (rule["pattern"] or "").lower() == arid.lower():
+                return {"brand": None, "method": "manual", "confidence": "none",
+                        "status": "reference_excluded", "reason": "레퍼런스 제외(학습: 같은 광고주)"}
+    # 0) 학습 규칙(수동 지정으로 등록된 advertiser_id/도메인/키워드) — 최우선 자동매칭
     for rule in rules:
         pat = (rule["pattern"] or "").lower()
-        if not pat:
+        if not pat or rule["brand_name"] not in brands:
             continue
-        hay = landing if rule["pattern_type"] == "domain" else blob
-        if pat in hay and rule["brand_name"] in brands:
-            return {"brand": rule["brand_name"], "method": "manual", "confidence": "high",
-                    "status": "confirmed"}
-    # 1) 랜딩/최종 URL 에 브랜드 도메인
+        pt = rule["pattern_type"]
+        hit = (pt == "advertiser_id" and arid and pat == arid.lower()) \
+            or (pt == "domain" and pat in landing) \
+            or (pt == "keyword" and pat in blob)
+        if hit:
+            return {"brand": rule["brand_name"], "method": f"learned_{pt}", "confidence": "high",
+                    "status": "confirmed", "reason": f"{pt} 학습규칙: {rule['pattern']}"}
+    # 1) 브랜드 공식 도메인 일치(랜딩/모든 URL·경로)
     for b, info in brands.items():
-        if any(d and d in landing for d in info["domains"]):
-            return {"brand": b, "method": "domain", "confidence": "high", "status": "confirmed"}
-    # 2) 문구/소재 텍스트에 브랜드명·alias
+        hit = next((d for d in info["domains"] if d and (d in landing or d in blob)), None)
+        if hit:
+            return {"brand": b, "method": "domain_match", "confidence": "high",
+                    "status": "confirmed", "reason": f"도메인 '{hit}' 발견"}
+    # 2) 브랜드명·alias 직접 포함(콘텐츠 텍스트)
     for b, info in brands.items():
-        if any(a and a in text for a in info["aliases"]):
-            return {"brand": b, "method": "brand_text", "confidence": "high", "status": "confirmed"}
+        hit = next((a for a in info["aliases"] if a and a in text), None)
+        if hit:
+            return {"brand": b, "method": "brand_name_or_alias_match", "confidence": "high",
+                    "status": "confirmed", "reason": f"브랜드명/alias '{hit}' 발견"}
     # 3) 제품/라인/키워드
     for b, info in brands.items():
-        if any(k and k in blob for k in info["keywords"]):
-            return {"brand": b, "method": "product_keyword", "confidence": "medium",
-                    "status": "estimated"}
-    # 4) 법인(광고주)만 일치 → 브랜드 미확정
+        hit = next((k for k in info["keywords"] if k and k in blob), None)
+        if hit:
+            return {"brand": b, "method": "product_keyword_match", "confidence": "medium",
+                    "status": "estimated", "reason": f"제품 키워드 '{hit}' 발견"}
+    # 4) 법인(광고주)만 일치
     if adv:
         cands = registry["by_company"].get(adv, [])
         if len(cands) == 1:
-            # 법인 아래 브랜드가 하나뿐이면 그 브랜드로 확정해도 안전
-            return {"brand": cands[0], "method": "company_only", "confidence": "low",
-                    "status": "confirmed"}
+            return {"brand": cands[0], "method": "company_single", "confidence": "low",
+                    "status": "confirmed", "reason": f"법인 '{adv}' = 단일 브랜드"}
         if len(cands) >= 2:
             return {"brand": None, "method": "company_only", "confidence": "low",
-                    "status": "company_only"}
-    return {"brand": None, "method": "unmatched", "confidence": "none", "status": "unmatched"}
+                    "status": "company_only",
+                    "reason": f"법인 '{adv}'만 발견(브랜드 {len(cands)}개 공유) · AR:{arid or '-'}"}
+    return {"brand": None, "method": "unmatched", "confidence": "none", "status": "unmatched",
+            "reason": "브랜드명/도메인/법인 힌트 없음"}

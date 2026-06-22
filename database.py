@@ -205,7 +205,8 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("brand_status", "TEXT DEFAULT ''"),  # confirmed/estimated/company_only/unmatched
                  ("match_method", "TEXT"),           # domain/brand_text/product_keyword/company_only/unmatched/manual
                  ("match_confidence", "TEXT"),       # high/medium/low/none
-                 ("manual_override", "INTEGER DEFAULT 0")):
+                 ("manual_override", "INTEGER DEFAULT 0"),
+                 ("match_reason", "TEXT")):          # 왜 매칭됐는지(화면 표시용)
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     # brands 테이블 page_id 컬럼
@@ -261,8 +262,33 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     # 구버전 ads 테이블 → ad_library_ads 이관(최초 1회)
     if conn.execute("SELECT COUNT(*) FROM ad_library_ads").fetchone()[0] == 0:
         _migrate_legacy(conn)
+    _ensure_indexes(conn)   # 조회 성능(브랜드 카운트·필터·정렬·매칭 조인) 보조 인덱스
     conn.commit()
     conn.close()
+
+
+def _ensure_indexes(conn: sqlite3.Connection) -> None:
+    """목록/카운트/매칭 조인이 매 새로고침마다 1만+행을 풀스캔하지 않도록 보조 인덱스 생성.
+    모두 IF NOT EXISTS — 이미 있으면 무시. 데이터/스키마 변경 없음(읽기 성능만 개선)."""
+    for ddl in (
+        # brand_counts 상관 서브쿼리(브랜드별 광고 수) + 브랜드 필터 — 가장 큰 병목
+        "CREATE INDEX IF NOT EXISTS idx_ala_brand ON ad_library_ads(brand_name)",
+        # Meta/Google 탭 필터
+        "CREATE INDEX IF NOT EXISTS idx_ala_platform ON ad_library_ads(platform)",
+        # 기본 정렬(최근 수집순)
+        "CREATE INDEX IF NOT EXISTS idx_ala_collected ON ad_library_ads(collected_at)",
+        "CREATE INDEX IF NOT EXISTS idx_ala_brandid ON ad_library_ads(brand_id)",
+        # 소셜 매칭 조인(ROW_NUMBER PARTITION BY ad_id ORDER BY match_score)
+        "CREATE INDEX IF NOT EXISTS idx_asm_ad ON ad_social_matches(ad_id, match_score, social_id)",
+        # 소셜 브랜드 카운트/조인
+        "CREATE INDEX IF NOT EXISTS idx_sv_brand ON social_videos(brand_name)",
+        # 브랜드별 최근 수집 로그 조회
+        "CREATE INDEX IF NOT EXISTS idx_bcl_brand ON brand_collection_logs(brand_id, platform, id)",
+    ):
+        try:
+            conn.execute(ddl)
+        except Exception:  # noqa: BLE001
+            pass
     migrate_base64_thumbnails()
     migrate_brands()
     restore_scripts_from_store()   # Supabase에 백업된 스크립트 복원(영구 보존)
@@ -338,7 +364,7 @@ _SUMMARY_COLS = (
     "a.id, a.brand_name, a.ad_title, substr(a.ad_copy,1,90) AS ad_copy_short, "
     "a.platform, a.status, a.thumbnail_url, a.local_thumbnail_path, a.preview_url, a.video_url, a.score, "
     "a.media_type, a.ad_format, a.collected_at, a.started_at, a.is_bookmarked, "
-    "a.scrape_status, a.error_message, a.platforms, a.detail_status, a.video_status, "
+    "a.scrape_status, a.error_message, a.platforms, a.detail_status, a.video_status, a.brand_status, "
     "a.yt_views, a.yt_likes, a.yt_comments, a.yt_embeddable, a.fatigue_status, "
     "(CASE WHEN length(a.memo)>0 THEN 1 ELSE 0 END) AS has_memo, "
     "m.match_score AS match_score, s.final_grade AS social_final_grade, "
@@ -360,6 +386,9 @@ def _where(tab: str, f: dict) -> tuple[str, list]:
     w, p = ["1=1"], []
     if tab in ("meta", "google"):
         w.append("a.platform=?"); p.append(tab)
+    if tab == "google" and not f.get("only_unavailable"):
+        # B안: 확정+추정+미확정 모두 노출(빈 탭 방지), 배지로 상태 구분. '레퍼런스 제외'만 숨김(제외 탭)
+        w.append("COALESCE(a.brand_status,'') NOT IN ('excluded','reference_excluded')")
     if tab == "TOP":
         w.append("s.final_grade IN ('S','A','B')")
         w.append("(a.thumbnail_url<>'' OR a.video_url<>'')")  # placeholder 카드 제외
@@ -1098,8 +1127,9 @@ def recompute_google_matches() -> dict:
         new_brand = m["brand"] if m["status"] in ("confirmed", "estimated") and m["brand"] else d.get("brand_name")
         conn.execute(
             "UPDATE ad_library_ads SET advertiser_name=?, brand_name=?, brand_status=?, "
-            "match_method=?, match_confidence=? WHERE id=?",
-            (d["advertiser_name"], new_brand, m["status"], m["method"], m["confidence"], d["id"]))
+            "match_method=?, match_confidence=?, match_reason=? WHERE id=?",
+            (d["advertiser_name"], new_brand, m["status"], m["method"], m["confidence"],
+             m.get("reason", ""), d["id"]))
         counts[m["status"]] = counts.get(m["status"], 0) + 1
     conn.commit()
     conn.close()
@@ -1110,12 +1140,35 @@ def google_review_ads(limit: int = 300) -> list[dict]:
     """브랜드 미확정(company_only)·미매칭 구글 광고 — 리뷰함."""
     conn = get_conn()
     rows = conn.execute(
-        f"SELECT {_SUMMARY_COLS}, a.advertiser_name, a.brand_status, a.match_method "
+        f"SELECT {_SUMMARY_COLS}, a.advertiser_name, a.brand_status, a.match_method, "
+        f"a.match_reason, a.transparency_url, a.original_ad_url "
         f"{_JOIN} WHERE a.platform='google' AND a.brand_status IN ('company_only','unmatched') "
-        f"AND COALESCE(a.is_excluded,0)=0 GROUP BY a.id ORDER BY a.collected_at DESC LIMIT ?",
-        [limit]).fetchall()
+        f"AND COALESCE(a.is_excluded,0)=0 GROUP BY a.id ORDER BY a.advertiser_name, a.collected_at DESC "
+        f"LIMIT ?", [limit]).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def google_excluded_ads(limit: int = 120) -> list[dict]:
+    """레퍼런스 제외 처리된 구글 광고 — 제외 탭."""
+    conn = get_conn()
+    rows = conn.execute(
+        f"SELECT {_SUMMARY_COLS}, a.advertiser_name, a.brand_status, a.match_reason, "
+        f"a.transparency_url, a.original_ad_url "
+        f"{_JOIN} WHERE a.platform='google' AND "
+        f"(a.brand_status='reference_excluded' OR COALESCE(a.is_excluded,0)=1) "
+        f"GROUP BY a.id ORDER BY a.collected_at DESC LIMIT ?", [limit]).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def restore_google_excluded(ad_id: str) -> None:
+    """제외 취소 → 다시 미확정으로 되돌림."""
+    conn = get_conn()
+    conn.execute("UPDATE ad_library_ads SET is_excluded=0, brand_status='company_only', "
+                 "manual_override=0, match_reason='제외 취소' WHERE id=?", (ad_id,))
+    conn.commit()
+    conn.close()
 
 
 def google_status_counts() -> dict:
@@ -1127,22 +1180,57 @@ def google_status_counts() -> dict:
     return {r[0]: r[1] for r in rows}
 
 
-def assign_google_brand(ad_id: str, brand: str = "", exclude: bool = False, learn: bool = True) -> None:
-    """리뷰함 수동 지정: 브랜드 확정 / 제외. manual_override 저장 + 학습규칙 등록."""
+def assign_google_brand(ad_id: str, brand: str = "", exclude: bool = False,
+                        unsure: bool = False, learn: bool = True) -> None:
+    """리뷰함 수동 처리: 브랜드 지정 / 브랜드 미확정(보류) / 레퍼런스 제외. manual_override 저장."""
+    import services.google_match as GM
     conn = get_conn()
-    if exclude:
-        conn.execute("UPDATE ad_library_ads SET is_excluded=1, brand_status='excluded', "
-                     "manual_override=1, match_method='manual' WHERE id=?", (ad_id,))
+    if exclude:   # 레퍼런스 제외 → 제외 탭 + 학습(같은 광고주 광고는 다음부터 자동 제외)
+        row = conn.execute("SELECT transparency_url, original_ad_url FROM ad_library_ads WHERE id=?",
+                           (ad_id,)).fetchone()
+        conn.execute("UPDATE ad_library_ads SET is_excluded=1, brand_status='reference_excluded', "
+                     "manual_override=1, match_method='manual', match_reason='레퍼런스 제외' WHERE id=?",
+                     (ad_id,))
+        if learn and row:
+            arid = GM.advertiser_id(dict(row))
+            if arid:   # 이 광고주(AR ID) = 레퍼런스 제외 규칙 등록 + 같은 AR ID 일괄 제외
+                conn.execute("INSERT OR REPLACE INTO brand_match_rules(pattern_type,pattern,brand_name,created_at)"
+                             " VALUES('exclude_advertiser_id',?,'(제외)',?)", (arid, _now()))
+                conn.execute(
+                    "UPDATE ad_library_ads SET is_excluded=1, brand_status='reference_excluded', "
+                    "match_reason='레퍼런스 제외(학습: 같은 광고주)' WHERE platform='google' "
+                    "AND COALESCE(brand_status,'')<>'reference_excluded' "
+                    "AND (transparency_url LIKE ? OR original_ad_url LIKE ?)",
+                    (f"%advertiser/{arid}%", f"%advertiser/{arid}%"))
         conn.commit(); conn.close()
         return
-    row = conn.execute("SELECT landing_url, advertiser_name FROM ad_library_ads WHERE id=?",
-                       (ad_id,)).fetchone()
+    if unsure:   # 브랜드 미확정(보류) — 확인했지만 브랜드 모름, 리뷰함 유지(재계산에 안 덮임)
+        conn.execute("UPDATE ad_library_ads SET brand_status='company_only', manual_override=1, "
+                     "match_method='manual', match_reason='수동 확인: 브랜드 미확정' WHERE id=?", (ad_id,))
+        conn.commit(); conn.close()
+        return
+    import services.google_match as GM
+    row = conn.execute("SELECT landing_url, transparency_url, original_ad_url FROM ad_library_ads "
+                       "WHERE id=?", (ad_id,)).fetchone()
     conn.execute("UPDATE ad_library_ads SET brand_name=?, brand_status='confirmed', "
-                 "match_method='manual', match_confidence='high', manual_override=1, is_excluded=0 "
-                 "WHERE id=?", (brand, ad_id))
-    # 학습: 랜딩 도메인이 있으면 도메인 규칙 등록(이후 동일 도메인 자동매칭)
+                 "match_method='manual', match_confidence='high', match_reason='수동 지정', "
+                 "manual_override=1, is_excluded=0 WHERE id=?", (brand, ad_id))
     if learn and row:
-        dom = (row["landing_url"] or "").lower().replace("https://", "").replace("http://", "").split("/")[0]
+        d = dict(row)
+        # 학습 1: 광고주 AR ID → 같은 AR ID 광고 전부 자동확정(핵심)
+        arid = GM.advertiser_id(d)
+        if arid:
+            conn.execute("INSERT OR REPLACE INTO brand_match_rules(pattern_type,pattern,brand_name,created_at) "
+                         "VALUES('advertiser_id',?,?,?)", (arid, brand, _now()))
+            # 같은 AR ID 의 다른 광고도 즉시 확정(수동지정 제외)
+            conn.execute(
+                "UPDATE ad_library_ads SET brand_name=?, brand_status='confirmed', "
+                "match_method='learned_advertiser_id', match_confidence='high', "
+                "match_reason=? WHERE platform='google' AND COALESCE(manual_override,0)=0 "
+                "AND (transparency_url LIKE ? OR original_ad_url LIKE ?)",
+                (brand, f"AR ID 학습: {arid}", f"%advertiser/{arid}%", f"%advertiser/{arid}%"))
+        # 학습 2: 랜딩 도메인(있으면)
+        dom = (d.get("landing_url") or "").lower().replace("https://", "").replace("http://", "").split("/")[0]
         if dom:
             conn.execute("INSERT OR REPLACE INTO brand_match_rules(pattern_type,pattern,brand_name,created_at) "
                          "VALUES('domain',?,?,?)", (dom, brand, _now()))
