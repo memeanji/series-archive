@@ -460,9 +460,20 @@ _DEDUP = ("a.brand_name || '|' || a.media_type || '|' || "
           "NULLIF(a.thumbnail_url,''), a.id)")
 
 
+# 공유법인(__브랜드 꼬리표)으로 같은 광고가 형제 브랜드마다 복제 저장됨 →
+# id에서 '__브랜드' 꼬리표를 떼어낸 base creative id(= 진짜 광고 1개 단위)
+_BASE_ID = "CASE WHEN instr(a.id,'__')>0 THEN substr(a.id,1,instr(a.id,'__')-1) ELSE a.id END"
+
+
 def _group_key(f: dict) -> str:
-    """카드 묶음 기준. 기본은 광고별(a.id)로 모두 노출, 토글 시 A/B(문구) 묶기."""
-    return _DEDUP if f.get("merge_variants") else "a.id"
+    """카드 묶음 기준. 기본은 광고별로 노출, 토글 시 A/B(문구) 묶기.
+    단 특정 브랜드 필터가 없으면(전체/Meta/Google 탭) 공유법인 복제행을 base creative로
+    1개만 노출 → 같은 광고가 형제 브랜드 수만큼 중복으로 보이던 문제 제거."""
+    if f.get("merge_variants"):
+        return _DEDUP
+    if not f.get("brand") or f.get("brand") == "전체":
+        return _BASE_ID
+    return "a.id"
 
 
 def count_ads(tab: str, f: dict) -> int:

@@ -135,7 +135,7 @@ def _mp4_duration(content: bytes) -> float:
         return 0.0
 
 
-MAX_DURATION_SEC = 60   # 60초 초과 영상은 생성 제한(확인 필요)
+MAX_DURATION_SEC = 120   # 2분 이하 영상까지 분석 허용(과거 60초 컷 → 사용자 요청으로 120초)
 
 
 def _gemini_video_file(url: str, ad: dict) -> tuple:
@@ -161,10 +161,12 @@ def _gemini_video_file(url: str, ad: dict) -> tuple:
         return "completed", cached["text"], cached["source"], ""
 
     if len(content) > 20 * 1024 * 1024:
-        return "video_unavailable", "", "", "영상이 20MB를 초과해 분석 불가"
+        return ("video_unavailable", "", "",
+                f"영상 용량 {len(content)//(1024*1024)}MB — 20MB 초과로 분석 불가"
+                "(긴/고화질 영상). 필요 시 업로드 API 방식으로 확장 가능")
     dur = _mp4_duration(content)
     if dur and dur > MAX_DURATION_SEC:
-        return "video_too_long", "", "", f"{int(dur)}초 영상 — 60초 초과(생성 제한, 확인 필요)"
+        return "video_too_long", "", "", f"{int(dur)}초 영상 — {MAX_DURATION_SEC}초(2분) 초과로 분석 제한"
 
     b64 = base64.b64encode(content).decode()
     g = _gemini([{"inline_data": {"mime_type": "video/mp4", "data": b64}},
