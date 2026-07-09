@@ -25,7 +25,6 @@ TABLE = [
     ("웰릿", ["웰릿", "Wellit"], "주식회사 이삼오구", "wellit.co.kr"),
     ("데일리플랜", ["데일리플랜", "데이피크", "데이하이", "데이퓨어"], "", "dailyplan.kr"),
     ("루노비전", ["루노비전", "LunorVision", "Klarherz", "크롬스"], "주식회사 크롬스", ""),
-    ("칼로", ["칼로", "calo", "calodiet"], "", "calodiet.co.kr"),
     ("에르고바디", ["에르고바디", "ergobody"], "", "ergobody.co.kr"),
 ]
 
