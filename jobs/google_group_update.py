@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import database  # noqa: E402
+import config  # noqa: E402
 from collectors import google_library_crawler  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -98,15 +99,18 @@ def main(weekday: int = None) -> None:
         database.regenerate_demo_db()
     except Exception as e:  # noqa: BLE001
         _log(f"demo.db 실패: {e}")
-    n_thumb = _git_add_new_google_thumbs()   # 새 구글 이미지 썸네일(CR*.png) 반영
-    _log(f"신규 구글 썸네일 {n_thumb}개 스테이징")
-    msg = f"auto: {_WD[wd]}요일 그룹 구글수집({rng}) {datetime.now():%Y-%m-%d}"
-    for cmd in (["git", "add", "sample_data/demo.db"],
-                ["git", "commit", "-m", msg],
-                ["git", "push", "origin", "main"]):
-        r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300)
-        if r.returncode != 0 and cmd[1] != "commit":
-            _log(f"git {cmd[1]}: {r.stderr[:120]}")
+    if config.ENABLE_AUTO_GIT_PUSH:
+        n_thumb = _git_add_new_google_thumbs()   # 새 구글 이미지 썸네일(CR*.png) 반영
+        _log(f"신규 구글 썸네일 {n_thumb}개 스테이징")
+        msg = f"auto: {_WD[wd]}요일 그룹 구글수집({rng}) {datetime.now():%Y-%m-%d}"
+        for cmd in (["git", "add", "sample_data/demo.db"],
+                    ["git", "commit", "-m", msg],
+                    ["git", "push", "origin", "main"]):
+            r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300)
+            if r.returncode != 0 and cmd[1] != "commit":
+                _log(f"git {cmd[1]}: {r.stderr[:120]}")
+    else:
+        _log("자동 git push 비활성(ENABLE_AUTO_GIT_PUSH=False) — demo.db 로컬 갱신만")
 
     _log("=== 구글 자동 업데이트 완료 ===")
     _log(f"오늘 수집 그룹: {_WD[wd]}요일 {rng} · 총 {len(brands)}개 브랜드")

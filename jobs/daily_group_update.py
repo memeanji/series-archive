@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import database  # noqa: E402
+import config  # noqa: E402
 from jobs.meta_collect import crawl_brand_meta  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -87,14 +88,17 @@ def main(weekday: int = None) -> None:
         database.regenerate_demo_db()
     except Exception as e:  # noqa: BLE001
         _log(f"demo.db 실패: {e}")
-    msg = f"auto: {_WD[wd]}요일 그룹 수집({rng}) {datetime.now():%Y-%m-%d}"
-    for cmd in (["git", "add", "sample_data/demo.db"],
-                ["git", "add", "static/thumbnails/m_*.jpg"],
-                ["git", "commit", "-m", msg],
-                ["git", "push", "origin", "main"]):
-        r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300)
-        if r.returncode != 0 and cmd[1] != "commit":
-            _log(f"git {cmd[1]}: {r.stderr[:120]}")
+    if config.ENABLE_AUTO_GIT_PUSH:
+        msg = f"auto: {_WD[wd]}요일 그룹 수집({rng}) {datetime.now():%Y-%m-%d}"
+        for cmd in (["git", "add", "sample_data/demo.db"],
+                    ["git", "add", "static/thumbnails/m_*.jpg"],
+                    ["git", "commit", "-m", msg],
+                    ["git", "push", "origin", "main"]):
+            r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300)
+            if r.returncode != 0 and cmd[1] != "commit":
+                _log(f"git {cmd[1]}: {r.stderr[:120]}")
+    else:
+        _log("자동 git push 비활성(ENABLE_AUTO_GIT_PUSH=False) — demo.db 로컬 갱신만")
 
     gone = (vs.get("private_or_deleted", 0) + vs.get("expired_url", 0))
     _log("=== 자동 업데이트 완료 ===")

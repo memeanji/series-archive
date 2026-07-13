@@ -62,6 +62,10 @@ COLLECT_WINDOW_DAYS = int(os.getenv("COLLECT_WINDOW_DAYS", "90"))
 USE_REAL_META = os.getenv("USE_REAL_META", "false").lower() == "true"
 USE_REAL_TIKTOK = os.getenv("USE_REAL_TIKTOK", "false").lower() == "true"
 
+# 자동수집 job이 demo.db·썸네일을 Git에 add/commit/push 할지. 기본 False = 레포 비대 방지.
+# (수집·regenerate_demo_db()·로컬 썸네일 생성은 이 플래그와 무관하게 항상 수행)
+ENABLE_AUTO_GIT_PUSH = os.getenv("ENABLE_AUTO_GIT_PUSH", "false").lower() == "true"
+
 # ── Supabase ─────────────────────────────────────────────
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()

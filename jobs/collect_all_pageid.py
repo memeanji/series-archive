@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import database  # noqa: E402
+import config  # noqa: E402
 from jobs.meta_collect import crawl_brand_meta  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,15 +64,18 @@ def main(exclude: list = None) -> None:
         _log("demo.db 갱신 완료")
     except Exception as e:  # noqa: BLE001
         _log(f"demo.db 실패: {e}")
-    msg = f"전 브랜드 page_id 재수집 {datetime.now():%Y-%m-%d %H:%M}"
-    for cmd in (["git", "add", "sample_data/demo.db"],
-                ["git", "add", "static/thumbnails/m_*.jpg"],
-                ["git", "commit", "-m", msg],
-                ["git", "push", "origin", "main"]):
-        r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300)
-        if r.returncode != 0 and cmd[1] != "commit":
-            _log(f"git {cmd[1]}: {r.stderr[:120]}")
-    _log("=== 완료(클라우드 푸시) ===")
+    if config.ENABLE_AUTO_GIT_PUSH:
+        msg = f"전 브랜드 page_id 재수집 {datetime.now():%Y-%m-%d %H:%M}"
+        for cmd in (["git", "add", "sample_data/demo.db"],
+                    ["git", "add", "static/thumbnails/m_*.jpg"],
+                    ["git", "commit", "-m", msg],
+                    ["git", "push", "origin", "main"]):
+            r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300)
+            if r.returncode != 0 and cmd[1] != "commit":
+                _log(f"git {cmd[1]}: {r.stderr[:120]}")
+        _log("=== 완료(클라우드 푸시) ===")
+    else:
+        _log("=== 완료(로컬 갱신만 · 자동 git push 비활성) ===")
 
 
 if __name__ == "__main__":

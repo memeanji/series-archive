@@ -91,12 +91,21 @@ def _apify_status():
     return {"enabled": bool(config.USE_APIFY and config.APIFY_TOKEN)}
 
 
+@st.cache_resource(show_spinner=False)
+def _restore_bookmarks_once():
+    """컨테이너 부팅 시 1회 — Supabase 북마크를 demo.db에 복원.
+       Cloud는 재배포/재시작마다 demo.db가 리셋돼 is_bookmarked가 날아가므로 여기서 되살림.
+       Supabase 미설정/테이블 없음/실패면 0 반환(로컬 북마크 그대로 유지)."""
+    return database.restore_bookmarks_from_store()
+
+
 def main() -> None:
     st.set_page_config(page_title="Series Archive", page_icon="📚", layout="wide",
                        initial_sidebar_state="expanded")
     styles.inject_css()
     styles.block_hotkeys()
     database.init_db(seed_users=auth.get_secret_users())
+    _restore_bookmarks_once()   # Cloud 재배포 후 북마크 복원(1회/부팅)
 
     if not auth.require_login():
         auth.login()
