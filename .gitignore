@@ -5,6 +5,13 @@
 .streamlit/secrets.toml
 *.db
 data/*.db
+# DB ë°±ì—…/ìŠ¤ëƒ…ìƒ· â€” ê³„ì • í•´ì‹œ ë…¸ì¶œ ë°©ì§€(gitignore ìš°íšŒ ë°©ì§€, 2026-07-21)
+*.bak
+*.db.bak*
+*.db.backup*
+*.db-backup*
+data/*.db.*
+sample_data/*.db.*
 data/local_db.json
 data/user_state.json
 data/_*.png
@@ -27,6 +34,6 @@ venv/
 
 # ë‚´ë¶€ í™•ì¸ìš© ìƒ˜í”Œì€ sample_data/ ì— ë¯¼ê°ì •ë³´ ì—†ì´ë§Œ í¬í•¨
 
-# µ¥¸ğ¿ë clean DB´Â ¿¹¿Ü(°èÁ¤/ºñ¹Ğ ¾øÀ½)
+# ï¿½ï¿½ï¿½ï¿½ï¿½ clean DBï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½(ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 !sample_data/demo.db
 secrets_cloud_paste.toml
