@@ -1372,12 +1372,22 @@ def render_ad_detail(ad: dict) -> None:
         database.set_yt_embeddable(aid, emb)
     blocked = yt_vid and (emb == 0 or emb is False)
 
-    # ── 헤더: 브랜드명(가장 크게) + 우측 북마크 별 아이콘 ──
-    hc = st.columns([8, 1])
+    # ── 헤더: 브랜드명(가장 크게) + 우측 [보존 토글] + [북마크 별] (개념 구분) ──
+    preserved = bool(ad.get("is_preserved"))
+    hc = st.columns([7, 1, 1])
     hc[0].markdown(f"<div style='font-size:23px;font-weight:800;color:{S.PRIMARY};"
                    f"letter-spacing:-.3px;line-height:1.25;margin-top:2px'>"
                    f"{_h.escape(_g(ad,'brand_name','-'))}</div>", unsafe_allow_html=True)
-    if hc[1].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
+    # 보존: retention(60일 자동정리)에서 이 광고를 제외. 북마크와 별개.
+    if hc[1].button("🔒 보존" if preserved else "🔓 보존", key=f"preservetop_{aid}",
+                    use_container_width=True,
+                    type=("primary" if preserved else "secondary"),
+                    help=("자동정리(60일) 보존 중 — 눌러서 해제" if preserved
+                          else "자동정리(60일)에서 이 광고 삭제 제외로 표시")):
+        database.update_preserved(aid, not preserved)
+        _reload()
+    # 북마크: 관심 광고 저장(별개 개념)
+    if hc[2].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
                     type=("primary" if marked else "secondary"),
                     help="북마크 해제" if marked else "북마크 저장"):
         database.update_bookmark(aid, not marked, st.session_state.get('username',''))

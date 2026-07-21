@@ -1,0 +1,2 @@
+ad_view_snapshots 컬럼: ad_id, snapshot_date, views, likes, comments, created_at
+추정 날짜컬럼: ['snapshot_date', 'created_at']

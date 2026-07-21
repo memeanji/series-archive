@@ -1,0 +1,3 @@
+region=KR: a태그 11 / creative 0 / 페이지광고수="(광고수 텍스트 없음)"
+region없음: a태그 11 / creative 0 / 페이지광고수="(광고수 텍스트 없음)"
+region=US: a태그 11 / creative 0 / 페이지광고수="(광고수 텍스트 없음)"

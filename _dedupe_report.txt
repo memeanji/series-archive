@@ -1,0 +1,589 @@
+SQLite 버전: 3.50.4 | 복사본: C:\Users\894플~1\AppData\Local\Temp\_dedupe_test.db
+
+===== 지표(보수적 기준) =====
+전체 광고행: 34,657
+[YouTube video_id 확정] 중복그룹 586 · 잉여행 866
+[Meta exact thumbnail SHA-256] '동일 소재 후보' 그룹 835 · 잉여행 1,065
+중복 제거 후 예상 노출: 34,657 - (866+1065) = 32,726
+사용자데이터 포함 그룹: 54
+썸네일 없어 판정 못한 Meta 영상광고: 35
+[카피·랜딩 같지만 썸네일 다름 → 분리 유지] 그룹 1,030
+
+===== 샘플 A: YouTube 확정 동일영상 40 그룹 =====
+  [YT 확정] 9건 · key=yt:LKIo87imhMA
+    id=CR117581150961805557 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-06-12
+    id=CR052438979287239884 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-06-12
+  [YT 확정] 7건 · key=yt:QOzmNM7hUj0
+    id=CR072260779062276915 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR007179990373110906 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 7건 · key=yt:YB3gUIeoR3k
+    id=CR107211535166776279 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR107211535166776279 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 7건 · key=yt:-igrik_ugLY
+    id=CR097604719994606714 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR097604719994606714 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 7건 · key=yt:s0d5syKUaVo
+    id=CR182656381619693158 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-06-12
+    id=CR146638975541192949 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-06-12
+  [YT 확정] 6건 · key=yt:JinOfuLoiik
+    id=CR035005674734621818 · 바르너 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR049570597404514713 · 바르너 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:mh9loypnRTg
+    id=CR071192062006415851 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR071192062006415851 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:ShNwKhoEpc0
+    id=CR099501927308334202 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR099501927308334202 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:k1ILKZwl6cU
+    id=CR146178403177018163 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR146178403177018163 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:_udlEY0y7l4
+    id=CR123131144123019427 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR123131144123019427 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:KfLph2CCgmQ
+    id=CR008912029050113884 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR008912029050113884 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:Vfbx9ckhoEA
+    id=CR029233994603041914 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR029233994603041914 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:rF8U_JWVh8A
+    id=CR091796192479600967 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR091796192479600967 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:1Rleo4QDZ5M
+    id=CR152868917688139776 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR152868917688139776 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:6_x5BGUbf4w
+    id=CR124525553015702159 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR124525553015702159 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:eTFxFAChuJI
+    id=CR066993656570346209 · 힐스뱅크 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR170799077114259701 · 힐스뱅크 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 6건 · key=yt:yOvxSSFhLoY
+    id=CR143412013367275028 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-06-12
+    id=CR095603488572970106 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-06-12
+  [YT 확정] 6건 · key=yt:CRlKHdFgRkQ
+    id=CR022737535647885557 · 뮤르디 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+    id=CR103481447467104337 · 뮤르디 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+  [YT 확정] 6건 · key=yt:bhB41BE5lL4
+    id=CR104404685390715289 · 뮤르디 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+    id=CR119254840618306764 · 뮤르디 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+  [YT 확정] 5건 · key=yt:SA6GMAYJBYA
+    id=CR115552312177585029 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR115552312177585029 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:zzRIwZ3__Xs
+    id=CR135205628975534571 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR135205628975534571 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:uvUNMPqi3ns
+    id=CR049706197424789258 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR049706197424789258 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:7x3ErQNVlr0
+    id=CR151584745831257866 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR151584745831257866 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:2R_VC2dMddQ
+    id=CR067166219422767513 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR067166219422767513 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:W9ogsA0IkMI
+    id=CR141590308829832151 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR141590308829832151 · 디라셀 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:bZHq7Ix3zUE
+    id=CR157215556533087109 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR157215556533087109 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:AUCxra3gIxg
+    id=CR113663602027155947 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR113663602027155947 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:J2IHdJinyoA
+    id=CR069092926633468231 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR069092926633468231 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:DN6CzBA8JJA
+    id=CR124572555076205281 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR124572555076205281 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:hNVIw1RN2-8
+    id=CR091137876385144504 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR091137876385144504 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:vscsWBJhlJY
+    id=CR085777531799852810 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR085777531799852810 · 디라셀 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:u11MZID6zAk
+    id=CR112955471871208325 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR112955471871208325 · 디라셀 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 5건 · key=yt:JWeDgrjPsbI
+    id=CR083720749614807121 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+    id=CR067991927916215664 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+  [YT 확정] 5건 · key=yt:24bqR8C-Ajw
+    id=CR156496077355556536 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+    id=CR063094213843427000 · 테키라 · '' · land= · thumb=(없음) · ch=- · 2026-07-12
+  [YT 확정] 4건 · key=yt:KtpaBtW-9M4
+    id=CR040605641386512875 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR040605641386512875 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 4건 · key=yt:y4RRQBFy-94
+    id=CR168768617237582970 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR168768617237582970 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 4건 · key=yt:WYbSf647wSg
+    id=CR007712200730198671 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR007712200730198671 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 4건 · key=yt:yjEDGoEqxPU
+    id=CR147950081996981534 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR147950081996981534 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 4건 · key=yt:FMVjAMsEaEY
+    id=CR085152063615276154 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR085152063615276154 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+  [YT 확정] 4건 · key=yt:7WdxNW2FAQc
+    id=CR036946580076410961 · 유로키드 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+    id=CR036946580076410961 · 덴티오스 · '' · land= · thumb=(없음) · ch=- · 2026-06-10
+
+===== 샘플 B: Meta '동일 소재 후보'(썸네일·카피·랜딩 일치) 40 그룹 =====
+  ※ 영상ID/영상파일 해시가 없으므로 '동일영상 확정' 아님 — '동일 소재 후보'로 분류
+  [Meta 동일소재 후보] 27건 · ch=0f0de4bd3458
+    id=720812194318532 · 리셋80 · 'Nutritionist - Allison L' · land=https://transparency.meta.co · thumb=static\thumbnails\m_720812194318532.jpg · ch=0f0de4bd3458 · 2026-07-11
+    id=1480417723110984 · 리셋80 · 'Nutritionist - Allison L' · land=https://transparency.meta.co · thumb=static\thumbnails\m_1480417723110984.jpg · ch=0f0de4bd3458 · 2026-07-11
+  [Meta 동일소재 후보] 14건 · ch=ec206a2defe4
+    id=564112786726207 · 리셋80 · 'TheraLab - Triple Fusion' · land=https://transparency.meta.co · thumb=static\thumbnails\m_564112786726207.jpg · ch=ec206a2defe4 · 2026-07-11
+    id=1347068243739044 · 리셋80 · 'TheraLab - Triple Fusion' · land=https://transparency.meta.co · thumb=static\thumbnails\m_1347068243739044.jpg · ch=ec206a2defe4 · 2026-07-11
+  [Meta 동일소재 후보] 10건 · ch=8bbe040292bb
+    id=1554343922384808 · 리셋80 · 'Midlife Harmony
+광고 규정을 준' · land=https://transparency.meta.co · thumb=static\thumbnails\m_1554343922384808.jpg · ch=8bbe040292bb · 2026-07-11
+    id=1269165798352694 · 리셋80 · 'Midlife Harmony
+광고 규정을 준' · land=https://transparency.meta.co · thumb=static\thumbnails\m_1269165798352694.jpg · ch=8bbe040292bb · 2026-07-11
+  [Meta 동일소재 후보] 7건 · ch=20264190801d
+    id=2947281588815804 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_2947281588815804.jpg · ch=20264190801d · 2026-07-11
+    id=743994698568921 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_743994698568921.jpg · ch=20264190801d · 2026-07-11
+  [Meta 동일소재 후보] 6건 · ch=e7047821c2a7
+    id=704752831997590 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_704752831997590.jpg · ch=e7047821c2a7 · 2026-07-11
+    id=1318289289058589 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_1318289289058589.jpg · ch=e7047821c2a7 · 2026-07-11
+  [Meta 동일소재 후보] 6건 · ch=77e15c7dea8d
+    id=1995026881223065 · 리셋80 · 'MeldaProduction
+MAutoDyn' · land=https://www.meldaproduction. · thumb=static\thumbnails\m_1995026881223065.jpg · ch=77e15c7dea8d · 2026-07-11
+    id=2427914457672872 · 리셋80 · 'MeldaProduction
+MAutoDyn' · land=https://www.meldaproduction. · thumb=static\thumbnails\m_2427914457672872.jpg · ch=77e15c7dea8d · 2026-07-11
+  [Meta 동일소재 후보] 6건 · ch=e008e51333de
+    id=1313235776905089 · 리셋80 · 'WislowAgatha
+광고 규정을 준수하지' · land=https://transparency.meta.co · thumb=static\thumbnails\m_1313235776905089.jpg · ch=e008e51333de · 2026-07-11
+    id=650228201456628 · 리셋80 · 'WislowAgatha
+광고 규정을 준수하지' · land=https://transparency.meta.co · thumb=static\thumbnails\m_650228201456628.jpg · ch=e008e51333de · 2026-07-11
+  [Meta 동일소재 후보] 6건 · ch=d7afbdeb52f9
+    id=1817217165637078 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1817217165637078.jpg · ch=d7afbdeb52f9 · 2026-07-11
+    id=2055887054973957 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_2055887054973957.jpg · ch=d7afbdeb52f9 · 2026-07-11
+  [Meta 동일소재 후보] 6건 · ch=5ca28e5dcb6b
+    id=2388589774902716 · 웰릿 · 'Interesting story
+In the' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_2388589774902716.jpg · ch=5ca28e5dcb6b · 2026-07-11
+    id=918060967520701 · 웰릿 · 'Interesting story
+In the' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_918060967520701.jpg · ch=5ca28e5dcb6b · 2026-07-11
+  [Meta 동일소재 후보] 6건 · ch=e48419fedddc
+    id=1480115196752681 · (미상) · 'DramaBox-miniserie
+FB.DR' · land=https://fb.dramabox.com/db_l · thumb=static\thumbnails\m_1480115196752681.jpg · ch=e48419fedddc · 2026-07-12
+    id=1562455335552408 · (미상) · 'DramaBox-miniserie
+FB.DR' · land=https://fb.dramabox.com/db_l · thumb=static\thumbnails\m_1562455335552408.jpg · ch=e48419fedddc · 2026-07-12
+  [Meta 동일소재 후보] 5건 · ch=89bdd2843e46
+    id=1370622201643610 · (미상) · '네이버플러스 스토어
+삼성전자 감사 페스티벌' · land=http://play.google.com/store · thumb=static\thumbnails\m_1370622201643610.jpg · ch=89bdd2843e46 · 2026-06-27
+    id=1912129332812328 · (미상) · '네이버플러스 스토어
+삼성전자 감사 페스티벌' · land=http://play.google.com/store · thumb=static\thumbnails\m_1912129332812328.jpg · ch=89bdd2843e46 · 2026-06-27
+  [Meta 동일소재 후보] 5건 · ch=c633f0abebd2
+    id=1331492615051145 · 리셋80 · '광고 5개에서 이 크리에이티브 및 문구를 사' · land=https://fb.com/canvas_doc/98 · thumb=static\thumbnails\m_1331492615051145.jpg · ch=c633f0abebd2 · 2026-06-30
+    id=1326905872746985 · 리셋80 · '광고 5개에서 이 크리에이티브 및 문구를 사' · land=https://fb.com/canvas_doc/98 · thumb=static\thumbnails\m_1326905872746985.jpg · ch=c633f0abebd2 · 2026-06-30
+  [Meta 동일소재 후보] 5건 · ch=1ed38077cf4b
+    id=1039954541707390 · 솔티스 · '2026. 6. 30.~2026. 7. 2.' · land=https://lp.oneshort.tv/share · thumb=static\thumbnails\m_1039954541707390.jpg · ch=1ed38077cf4b · 2026-07-08
+    id=1338562944371594 · 솔티스 · '2026. 6. 30.~2026. 7. 2.' · land=https://lp.oneshort.tv/share · thumb=static\thumbnails\m_1338562944371594.jpg · ch=1ed38077cf4b · 2026-07-11
+  [Meta 동일소재 후보] 5건 · ch=48ad3cb3d35b
+    id=24518836981051706 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_24518836981051706.jpg · ch=48ad3cb3d35b · 2026-07-11
+    id=2209574616117043 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_2209574616117043.jpg · ch=48ad3cb3d35b · 2026-07-11
+  [Meta 동일소재 후보] 5건 · ch=2a8dce2174d2
+    id=2218536161944150 · 리셋80 · 'Health Boost
+Did you kno' · land=https://healthboost.news/cor · thumb=static\thumbnails\m_2218536161944150.jpg · ch=2a8dce2174d2 · 2026-07-11
+    id=990521839693757 · 리셋80 · 'Health Boost
+Did you kno' · land=https://healthboost.news/cor · thumb=static\thumbnails\m_990521839693757.jpg · ch=2a8dce2174d2 · 2026-07-11
+  [Meta 동일소재 후보] 5건 · ch=512f91f21e5d
+    id=1522392589458606 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_1522392589458606.jpg · ch=512f91f21e5d · 2026-07-11
+    id=2000665470507959 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_2000665470507959.jpg · ch=512f91f21e5d · 2026-07-11
+  [Meta 동일소재 후보] 5건 · ch=41df581d67f2
+    id=1247643347556407 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1247643347556407.jpg · ch=41df581d67f2 · 2026-07-11
+    id=879904438429253 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_879904438429253.jpg · ch=41df581d67f2 · 2026-07-11
+  [Meta 동일소재 후보] 5건 · ch=5677aea3b1be
+    id=1429672712108175 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1429672712108175.jpg · ch=5677aea3b1be · 2026-07-11
+    id=1158982439646501 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1158982439646501.jpg · ch=5677aea3b1be · 2026-07-11
+  [Meta 동일소재 후보] 5건 · ch=aaa0b50e09c3
+    id=1331797495183569 · 네리티아 · '광고 6개에서 이 크리에이티브 및 문구를 사' · land=https://neritia.com/product/ · thumb=static\thumbnails\m_1331797495183569.jpg · ch=aaa0b50e09c3 · 2026-07-12
+    id=27646557654983356 · 네리티아 · '광고 6개에서 이 크리에이티브 및 문구를 사' · land=https://neritia.com/product/ · thumb=static\thumbnails\m_27646557654983356.jpg · ch=aaa0b50e09c3 · 2026-07-12
+  [Meta 동일소재 후보] 5건 · ch=fcc6360eee1d
+    id=1521534652178530 · 네리티아 · '네리티아
+오직 이 링크에서만 진행하는 모공삭' · land=https://neritia.com/product/ · thumb=static\thumbnails\m_1521534652178530.jpg · ch=fcc6360eee1d · 2026-07-12
+    id=863032636556044 · 네리티아 · '네리티아
+오직 이 링크에서만 진행하는 모공삭' · land=https://neritia.com/product/ · thumb=static\thumbnails\m_863032636556044.jpg · ch=fcc6360eee1d · 2026-07-12
+  [Meta 동일소재 후보] 5건 · ch=ccc6d5f2b7a4
+    id=856572867189761 · 네리티아 · '화장품알려주는여자
+노출수가 적음
+NERITI' · land=https://neritia.com/product/ · thumb=static\thumbnails\m_856572867189761.jpg · ch=ccc6d5f2b7a4 · 2026-07-12
+    id=2172250456964756 · 네리티아 · '화장품알려주는여자
+노출수가 적음
+NERITI' · land=https://neritia.com/product/ · thumb=static\thumbnails\m_2172250456964756.jpg · ch=ccc6d5f2b7a4 · 2026-07-12
+  [Meta 동일소재 후보] 5건 · ch=0ade446bfca9
+    id=1471657687443510 · repurely · 'AI Weekly
+Kick-start you' · land=https://coursiv.io/dynamic · thumb=static\thumbnails\m_1471657687443510.jpg · ch=0ade446bfca9 · 2026-07-12
+    id=983731197357140 · repurely · 'AI Weekly
+Kick-start you' · land=https://coursiv.io/dynamic · thumb=static\thumbnails\m_983731197357140.jpg · ch=0ade446bfca9 · 2026-07-12
+  [Meta 동일소재 후보] 4건 · ch=2ab86d729d4c
+    id=1244064540858956 · 에르고바디 · '광고 2개에서 이 크리에이티브 및 문구를 사' · land=https://ergobody.co.kr/produ · thumb=static\thumbnails\m_1244064540858956.jpg · ch=2ab86d729d4c · 2026-06-09
+    id=960988779744294 · 에르고바디 · '광고 2개에서 이 크리에이티브 및 문구를 사' · land=https://ergobody.co.kr/produ · thumb=static\thumbnails\m_960988779744294.jpg · ch=2ab86d729d4c · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=07dab6191ec0
+    id=1853749725433867 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1853749725433867.jpg · ch=07dab6191ec0 · 2026-06-09
+    id=1881295515827480 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1881295515827480.jpg · ch=07dab6191ec0 · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=c1afc95df5b8
+    id=1486102046385598 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1486102046385598.jpg · ch=c1afc95df5b8 · 2026-06-09
+    id=1888286225892182 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1888286225892182.jpg · ch=c1afc95df5b8 · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=2c20368aaa5c
+    id=1731827430815615 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1731827430815615.jpg · ch=2c20368aaa5c · 2026-06-09
+    id=4387918518118783 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_4387918518118783.jpg · ch=2c20368aaa5c · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=511cda0c0257
+    id=1125157756483284 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1125157756483284.jpg · ch=511cda0c0257 · 2026-06-09
+    id=1979812796081796 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1979812796081796.jpg · ch=511cda0c0257 · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=4098507e8a97
+    id=997483236534541 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/eve · thumb=static\thumbnails\m_997483236534541.jpg · ch=4098507e8a97 · 2026-06-09
+    id=2000237410697949 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/eve · thumb=static\thumbnails\m_2000237410697949.jpg · ch=4098507e8a97 · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=48e3df0a941b
+    id=1176746877792645 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1176746877792645.jpg · ch=48e3df0a941b · 2026-06-09
+    id=1979027603039475 · 푸드올로지 · '여러 버전이 있는 광고입니다
+광고 2개에서' · land=https://food-ology.co.kr/pro · thumb=static\thumbnails\m_1979027603039475.jpg · ch=48e3df0a941b · 2026-06-09
+  [Meta 동일소재 후보] 4건 · ch=5c87686fbc5d
+    id=1912273706148645 · 리디잇 · '잇몸이 편안한 하루
+잇몸 관리 안하면 임플란' · land=https://rediett.kr/product/d · thumb=static\thumbnails\m_1912273706148645.jpg · ch=5c87686fbc5d · 2026-07-04
+    id=1710912833378174 · 리디잇 · '잇몸이 편안한 하루
+잇몸 관리 안하면 임플란' · land=https://rediett.kr/product/d · thumb=static\thumbnails\m_1710912833378174.jpg · ch=5c87686fbc5d · 2026-07-04
+  [Meta 동일소재 후보] 4건 · ch=e5d175ea22ff
+    id=2330907563995345 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_2330907563995345.jpg · ch=e5d175ea22ff · 2026-07-11
+    id=1585150232701969 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_1585150232701969.jpg · ch=e5d175ea22ff · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=6979745a03a3
+    id=4882761225283350 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_4882761225283350.jpg · ch=6979745a03a3 · 2026-07-11
+    id=1846579265905534 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_1846579265905534.jpg · ch=6979745a03a3 · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=2400e0543c1f
+    id=2257296744655742 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_2257296744655742.jpg · ch=2400e0543c1f · 2026-07-11
+    id=909973677785092 · 리셋80 · 'Deals Deluxe
+Don't miss' · land=https://go.dealsdeluxe.club/ · thumb=static\thumbnails\m_909973677785092.jpg · ch=2400e0543c1f · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=2fcbca76259d
+    id=1454595272356945 · 리셋80 · 'Dr. Chris Harper, ND
+광고' · land=https://transparency.meta.co · thumb=static\thumbnails\m_1454595272356945.jpg · ch=2fcbca76259d · 2026-07-11
+    id=2371256086705471 · 리셋80 · 'Dr. Chris Harper, ND
+광고' · land=https://transparency.meta.co · thumb=static\thumbnails\m_2371256086705471.jpg · ch=2fcbca76259d · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=b10727ae23db
+    id=1398886978631984 · 웰릿 · 'Happyday
+In the second y' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1398886978631984.jpg · ch=b10727ae23db · 2026-07-11
+    id=1170086951946696 · 웰릿 · 'Happyday
+In the second y' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1170086951946696.jpg · ch=b10727ae23db · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=84d84e55fdcc
+    id=1080462844210834 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1080462844210834.jpg · ch=84d84e55fdcc · 2026-07-11
+    id=1139892148106636 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1139892148106636.jpg · ch=84d84e55fdcc · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=5ca28e5dcb6b
+    id=3490081647826603 · 웰릿 · 'Interesting story
+In the' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_3490081647826603.jpg · ch=5ca28e5dcb6b · 2026-07-11
+    id=1551968099230709 · 웰릿 · 'Interesting story
+In the' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1551968099230709.jpg · ch=5ca28e5dcb6b · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=5677aea3b1be
+    id=912271424578610 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_912271424578610.jpg · ch=5677aea3b1be · 2026-07-11
+    id=896994619384160 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_896994619384160.jpg · ch=5677aea3b1be · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=41df581d67f2
+    id=1650198785983950 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1650198785983950.jpg · ch=41df581d67f2 · 2026-07-11
+    id=1618363922699934 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1618363922699934.jpg · ch=41df581d67f2 · 2026-07-11
+  [Meta 동일소재 후보] 4건 · ch=2f143809061d
+    id=2160858991153584 · 웰릿 · 'Wellit.official.page
+오늘' · land=https://gift.kakao.com/produ · thumb=static\thumbnails\m_2160858991153584.jpg · ch=2f143809061d · 2026-07-11
+    id=1782059796117632 · 웰릿 · 'Wellit.official.page
+오늘' · land=https://gift.kakao.com/produ · thumb=static\thumbnails\m_1782059796117632.jpg · ch=2f143809061d · 2026-07-11
+
+===== 샘플 C: 카피·랜딩 같지만 썸네일 다름(분리 유지) 40 그룹 =====
+  [분리 유지] 88건 · 서로다른 썸네일해시 81종 · 셀라딕스 · 'celladix 셀라딕스 ⏰올영 세일⏰ 단 '
+    id=1292773756219590 · 셀라딕스 · 'Celladix 셀라딕스
+⏰올영 세일⏰ 단' · land=https://oy.run/LyGzWlYVBgV0V · thumb=static\thumbnails\m_1292773756219590.jpg · ch=b54c2c48c6b4 · 2026-06-09
+    id=1636306090811028 · 셀라딕스 · 'Celladix 셀라딕스
+⏰올영 세일⏰ 단' · land=https://oy.run/LyGzWlYVBgV0V · thumb=static\thumbnails\m_1636306090811028.jpg · ch=840ba2ab143b · 2026-06-09
+  [분리 유지] 78건 · 서로다른 썸네일해시 65종 · 라라스윗 · '라라스윗 lalasweet [공식몰 최저가]'
+    id=872038369280627 · 라라스윗 · '라라스윗 Lalasweet
+[공식몰 최저가]' · land=https://lalasweet.kr/product · thumb=static\thumbnails\m_872038369280627.jpg · ch=86de2629e45a · 2026-06-12
+    id=1300154385621859 · 라라스윗 · '라라스윗 Lalasweet
+[공식몰 최저가]' · land=https://lalasweet.kr/product · thumb=static\thumbnails\m_1300154385621859.jpg · ch=d854a0d445ef · 2026-06-12
+  [분리 유지] 51건 · 서로다른 썸네일해시 51종 · 라라스윗 · '라라스윗 lalasweet 💜[공식몰 최저가'
+    id=1958111478216617 · 라라스윗 · '라라스윗 Lalasweet
+💜[공식몰 최저가' · land=https://lalasweet.kr/product · thumb=static\thumbnails\m_1958111478216617.jpg · ch=664d8d885c77 · 2026-07-04
+    id=2040152446890319 · 라라스윗 · '라라스윗 Lalasweet
+💜[공식몰 최저가' · land=https://lalasweet.kr/product · thumb=static\thumbnails\m_2040152446890319.jpg · ch=dec531fe984b · 2026-07-04
+  [분리 유지] 48건 · 서로다른 썸네일해시 48종 · 웰릿 · 'novels lover in the seco'
+    id=1338260218337509 · 웰릿 · 'Novels Lover
+In the seco' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1338260218337509.jpg · ch=247ed19ad25c · 2026-07-08
+    id=25593581980313659 · 웰릿 · 'Novels Lover
+In the seco' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_25593581980313659.jpg · ch=3ab31d9ac08d · 2026-07-08
+  [분리 유지] 44건 · 서로다른 썸네일해시 44종 · 유로바디 · 'أماني - mugungfit.co.kr '
+    id=2371526703345883 · 유로바디 · 'أماني
+-
+MUGUNGFIT.CO.KR' · land=https://mugungfit.co.kr/prod · thumb=static\thumbnails\m_2371526703345883.jpg · ch=ace89c871e22 · 2026-06-20
+    id=4456366141302154 · 유로바디 · 'أماني
+-
+MUGUNGFIT.CO.KR' · land=https://mugungfit.co.kr/prod · thumb=static\thumbnails\m_4456366141302154.jpg · ch=d204587cedae · 2026-06-20
+  [분리 유지] 41건 · 서로다른 썸네일해시 41종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1447425660026480 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1447425660026480.jpg · ch=c719b06bd93d · 2026-06-20
+    id=838990635438835 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_838990635438835.jpg · ch=2fc2d8fdf117 · 2026-06-20
+  [분리 유지] 40건 · 서로다른 썸네일해시 39종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1323116596613397 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1323116596613397.jpg · ch=f5cf01d5caff · 2026-06-20
+    id=1883915568840437 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1883915568840437.jpg · ch=455a7428798e · 2026-06-20
+  [분리 유지] 40건 · 서로다른 썸네일해시 40종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1650982125941796 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1650982125941796.jpg · ch=5066fa4d6d70 · 2026-06-20
+    id=1522313899468439 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1522313899468439.jpg · ch=38f2d69fae14 · 2026-06-20
+  [분리 유지] 39건 · 서로다른 썸네일해시 32종 · 셀라딕스 · '광고 3개에서 이 크리에이티브 및 문구를 사'
+    id=2137199296837565 · 셀라딕스 · '광고 3개에서 이 크리에이티브 및 문구를 사' · land=https://oy.run/LyGzWlYVBgV0V · thumb=static\thumbnails\m_2137199296837565.jpg · ch=c0ed588d3ef8 · 2026-06-09
+    id=914435941607624 · 셀라딕스 · '광고 3개에서 이 크리에이티브 및 문구를 사' · land=https://oy.run/LyGzWlYVBgV0V · thumb=static\thumbnails\m_914435941607624.jpg · ch=8d46b0fd8887 · 2026-06-09
+  [분리 유지] 39건 · 서로다른 썸네일해시 39종 · 유로바디 · 'أماني - sanyangcut.co.kr'
+    id=1024175753277772 · 유로바디 · 'أماني
+-
+SANYANGCUT.CO.KR' · land=https://sanyangcut.co.kr/pro · thumb=static\thumbnails\m_1024175753277772.jpg · ch=cba0b0d3ea78 · 2026-06-20
+    id=26771607499199110 · 유로바디 · 'أماني
+-
+SANYANGCUT.CO.KR' · land=https://sanyangcut.co.kr/pro · thumb=static\thumbnails\m_26771607499199110.jpg · ch=34c1497dec04 · 2026-06-20
+  [분리 유지] 38건 · 서로다른 썸네일해시 38종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=2413149305859063 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2413149305859063.jpg · ch=f9e0460e5a93 · 2026-06-20
+    id=1306118384805726 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1306118384805726.jpg · ch=5eae91bd9387 · 2026-06-20
+  [분리 유지] 34건 · 서로다른 썸네일해시 34종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1649464682838172 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1649464682838172.jpg · ch=ff65b64c0173 · 2026-07-10
+    id=1991347901554051 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1991347901554051.jpg · ch=1fa99dda9e75 · 2026-07-10
+  [분리 유지] 31건 · 서로다른 썸네일해시 31종 · 유로바디 · 'أماني - reset80.co.kr - '
+    id=2875000182842612 · 유로바디 · 'أماني
+-
+RESET80.CO.KR
+-' · land=https://reset80.co.kr/produc · thumb=static\thumbnails\m_2875000182842612.jpg · ch=b2fcc3794a21 · 2026-06-20
+    id=1522127776039135 · 유로바디 · 'أماني
+-
+RESET80.CO.KR
+-' · land=https://reset80.co.kr/produc · thumb=static\thumbnails\m_1522127776039135.jpg · ch=157e80f3c69b · 2026-06-20
+  [분리 유지] 31건 · 서로다른 썸네일해시 30종 · 라라스윗 · '라라스윗 lalasweet 제주 최상급 첫물'
+    id=1000099692911577 · 라라스윗 · '라라스윗 Lalasweet
+제주 최상급 첫물' · land=https://lalasweet.kr/product · thumb=static\thumbnails\m_1000099692911577.jpg · ch=95f2063a2aab · 2026-07-04
+    id=2197952651048436 · 라라스윗 · '라라스윗 Lalasweet
+제주 최상급 첫물' · land=https://lalasweet.kr/product · thumb=static\thumbnails\m_2197952651048436.jpg · ch=684c3b621dd5 · 2026-07-04
+  [분리 유지] 30건 · 서로다른 썸네일해시 30종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1682631066095007 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1682631066095007.jpg · ch=55ddffbd2a63 · 2026-07-03
+    id=4448231942099198 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_4448231942099198.jpg · ch=e625336c67bf · 2026-07-03
+  [분리 유지] 30건 · 서로다른 썸네일해시 30종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1518304589967509 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1518304589967509.jpg · ch=bf6009974936 · 2026-07-10
+    id=954487894057174 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_954487894057174.jpg · ch=59947e37e846 · 2026-07-10
+  [분리 유지] 30건 · 서로다른 썸네일해시 30종 · 메디테라피 · 'meditherapy_official 메디테'
+    id=1001169329329230 · 메디테라피 · 'Meditherapy_official
+메디테' · land=https://meditherapy.co.kr/pr · thumb=static\thumbnails\m_1001169329329230.jpg · ch=862a09c72d2a · 2026-07-11
+    id=3234085116981855 · 메디테라피 · 'Meditherapy_official
+메디테' · land=https://meditherapy.co.kr/pr · thumb=static\thumbnails\m_3234085116981855.jpg · ch=bb9ee8f6ec62 · 2026-07-11
+  [분리 유지] 29건 · 서로다른 썸네일해시 29종 · 다한방 · 'spaß www.coupang.com spa'
+    id=974247121972471 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_974247121972471.jpg · ch=e483022c7ada · 2026-06-30
+    id=1290248836589630 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1290248836589630.jpg · ch=aeded5414868 · 2026-06-30
+  [분리 유지] 29건 · 서로다른 썸네일해시 29종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=1283977070485848 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1283977070485848.jpg · ch=ca88c379b487 · 2026-07-03
+    id=1549003710131194 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1549003710131194.jpg · ch=a6dcd4f1e14d · 2026-07-03
+  [분리 유지] 28건 · 서로다른 썸네일해시 28종 · 다한방 · 'spaß - sanyangcut.co.kr '
+    id=2165738004276561 · 다한방 · 'Spaß
+-
+SANYANGCUT.CO.KR' · land=https://sanyangcut.co.kr/pro · thumb=static\thumbnails\m_2165738004276561.jpg · ch=fa9845a3435f · 2026-06-30
+    id=26920538100964514 · 다한방 · 'Spaß
+-
+SANYANGCUT.CO.KR' · land=https://sanyangcut.co.kr/pro · thumb=static\thumbnails\m_26920538100964514.jpg · ch=1bc552d773ac · 2026-06-30
+  [분리 유지] 28건 · 서로다른 썸네일해시 28종 · 다한방 · 'spaß www.coupang.com spa'
+    id=751406818060443 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_751406818060443.jpg · ch=bb7cec6d5d00 · 2026-06-30
+    id=980066928046701 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_980066928046701.jpg · ch=696a7c0b5300 · 2026-06-30
+  [분리 유지] 28건 · 서로다른 썸네일해시 28종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=954583667550450 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_954583667550450.jpg · ch=64c3bfbfc2ff · 2026-07-10
+    id=1309441643882594 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1309441643882594.jpg · ch=d434d8680eb9 · 2026-07-10
+  [분리 유지] 27건 · 서로다른 썸네일해시 22종 · 셀라딕스 · '광고 2개에서 이 크리에이티브 및 문구를 사'
+    id=2072801703274232 · 셀라딕스 · '광고 2개에서 이 크리에이티브 및 문구를 사' · land=https://oy.run/LyGzWlYVBgV0V · thumb=static\thumbnails\m_2072801703274232.jpg · ch=b01c85f1330f · 2026-06-09
+    id=2561736844246517 · 셀라딕스 · '광고 2개에서 이 크리에이티브 및 문구를 사' · land=https://oy.run/LyGzWlYVBgV0V · thumb=static\thumbnails\m_2561736844246517.jpg · ch=b01c85f1330f · 2026-06-09
+  [분리 유지] 27건 · 서로다른 썸네일해시 27종 · 메디테라피 · 'meditherapy_official 메디테'
+    id=1517522209209197 · 메디테라피 · 'Meditherapy_official
+메디테' · land=https://meditherapy.co.kr/pr · thumb=static\thumbnails\m_1517522209209197.jpg · ch=ccda5a2c3dac · 2026-06-29
+    id=1532451534996183 · 메디테라피 · 'Meditherapy_official
+메디테' · land=https://meditherapy.co.kr/pr · thumb=static\thumbnails\m_1532451534996183.jpg · ch=5200e0c6f361 · 2026-07-11
+  [분리 유지] 27건 · 서로다른 썸네일해시 26종 · 다한방 · 'spaß www.coupang.com spa'
+    id=1552761279855252 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1552761279855252.jpg · ch=cc483782eefc · 2026-07-07
+    id=1424579622827322 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1424579622827322.jpg · ch=24532a3aad16 · 2026-07-07
+  [분리 유지] 27건 · 서로다른 썸네일해시 27종 · 다한방 · 'spaß www.coupang.com spa'
+    id=1475086333667025 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1475086333667025.jpg · ch=7b101300edaa · 2026-07-07
+    id=3534304056718493 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_3534304056718493.jpg · ch=ff65b64c0173 · 2026-07-07
+  [분리 유지] 26건 · 서로다른 썸네일해시 26종 · 다한방 · 'spaß - mugungfit.co.kr -'
+    id=1585201643177566 · 다한방 · 'Spaß
+-
+MUGUNGFIT.CO.KR
+-' · land=https://mugungfit.co.kr/prod · thumb=static\thumbnails\m_1585201643177566.jpg · ch=c76d463204c1 · 2026-06-30
+    id=1559455875530436 · 다한방 · 'Spaß
+-
+MUGUNGFIT.CO.KR
+-' · land=https://mugungfit.co.kr/prod · thumb=static\thumbnails\m_1559455875530436.jpg · ch=b4c558d98440 · 2026-06-30
+  [분리 유지] 26건 · 서로다른 썸네일해시 26종 · 다한방 · 'spaß www.coupang.com spa'
+    id=858336527308049 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_858336527308049.jpg · ch=ec7ede04c0ae · 2026-06-30
+    id=1492630832307079 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1492630832307079.jpg · ch=c814b4a693fc · 2026-06-30
+  [분리 유지] 26건 · 서로다른 썸네일해시 26종 · 다한방 · 'spaß www.coupang.com spa'
+    id=2363356574160804 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2363356574160804.jpg · ch=2b6400f168e9 · 2026-06-30
+    id=1500827308346440 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1500827308346440.jpg · ch=b61fcff98df5 · 2026-06-30
+  [분리 유지] 26건 · 서로다른 썸네일해시 5종 · 웰릿 · 'hydrangea diary in the s'
+    id=1817217165637078 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1817217165637078.jpg · ch=d7afbdeb52f9 · 2026-07-11
+    id=2055887054973957 · 웰릿 · 'Hydrangea Diary
+In the s' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_2055887054973957.jpg · ch=d7afbdeb52f9 · 2026-07-11
+  [분리 유지] 26건 · 서로다른 썸네일해시 5종 · 웰릿 · 'billionaire's love in th'
+    id=871160435821328 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_871160435821328.jpg · ch=391c55d4a2bc · 2026-07-11
+    id=1429672712108175 · 웰릿 · 'Billionaire's Love
+In th' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1429672712108175.jpg · ch=5677aea3b1be · 2026-07-11
+  [분리 유지] 25건 · 서로다른 썸네일해시 25종 · 다한방 · 'spaß www.coupang.com spa'
+    id=2250518405774460 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2250518405774460.jpg · ch=696a7c0b5300 · 2026-06-30
+    id=2738944186479790 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2738944186479790.jpg · ch=9f2a00f1bc13 · 2026-06-30
+  [분리 유지] 25건 · 서로다른 썸네일해시 24종 · 유로바디 · 'أماني www.coupang.com أم'
+    id=996622239902905 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_996622239902905.jpg · ch=5c15b604b504 · 2026-07-03
+    id=891605043346719 · 유로바디 · 'أماني
+WWW.COUPANG.COM
+أم' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_891605043346719.jpg · ch=845e86cdf946 · 2026-07-03
+  [분리 유지] 24건 · 서로다른 썸네일해시 24종 · 다한방 · 'spaß www.coupang.com spa'
+    id=1364875705478608 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1364875705478608.jpg · ch=dfaf8dff98db · 2026-06-30
+    id=949258807909998 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_949258807909998.jpg · ch=1202e5d8ed71 · 2026-06-30
+  [분리 유지] 24건 · 서로다른 썸네일해시 24종 · 다한방 · 'spaß www.coupang.com spa'
+    id=26960974523558963 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_26960974523558963.jpg · ch=c82360c1451e · 2026-06-30
+    id=968382926077820 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_968382926077820.jpg · ch=4c16db414afb · 2026-06-30
+  [분리 유지] 24건 · 서로다른 썸네일해시 24종 · 다한방 · 'spaß www.coupang.com spa'
+    id=967088566044235 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_967088566044235.jpg · ch=53224cfec6c4 · 2026-07-07
+    id=1679547936802002 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1679547936802002.jpg · ch=97a8f0d7749a · 2026-07-07
+  [분리 유지] 24건 · 서로다른 썸네일해시 24종 · 다한방 · 'spaß www.coupang.com spa'
+    id=1511266090455691 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1511266090455691.jpg · ch=bb02598614c2 · 2026-07-07
+    id=970835889021926 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_970835889021926.jpg · ch=1ccbd1c9181a · 2026-07-07
+  [분리 유지] 24건 · 서로다른 썸네일해시 10종 · 웰릿 · 'interesting story in the'
+    id=1257150193221250 · 웰릿 · 'Interesting story
+In the' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_1257150193221250.jpg · ch=7ac43746dd7a · 2026-07-08
+    id=2454631618319915 · 웰릿 · 'Interesting story
+In the' · land=https://www.fixbt.com/market · thumb=static\thumbnails\m_2454631618319915.jpg · ch=a4663401dd95 · 2026-07-11
+  [분리 유지] 23건 · 서로다른 썸네일해시 23종 · 다한방 · 'spaß www.coupang.com spa'
+    id=2309237739879547 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2309237739879547.jpg · ch=2bd3da63b7e4 · 2026-06-30
+    id=2024839768464670 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2024839768464670.jpg · ch=b47cca58cf31 · 2026-06-30
+  [분리 유지] 23건 · 서로다른 썸네일해시 23종 · 다한방 · 'spaß www.coupang.com spa'
+    id=1010937674828675 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_1010937674828675.jpg · ch=b15bf9c1cf74 · 2026-06-30
+    id=2482650838870348 · 다한방 · 'Spaß
+WWW.COUPANG.COM
+Spa' · land=https://www.coupang.com/vp/p · thumb=static\thumbnails\m_2482650838870348.jpg · ch=ca82030c6384 · 2026-06-30
+
+===== 기술 검증 =====
+  ROW_NUMBER+필터(platform,LIKE)+정렬+LIMIT/OFFSET 실행: ✅ OK, 반환 5행
+  예시 대표행: 리셋80(dup 27), 리셋80(dup 14), 리셋80(dup 10)
+  개별보기 34,311건 vs 묶기 32,467건 (묶기시 1,844건 숨김)
+  dedupe_key 저장된 행: 24,644 → DB 컬럼에 영속(배포본은 썸네일 없이 이 값 재사용, 재해싱 불필요)

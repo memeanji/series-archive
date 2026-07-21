@@ -42,6 +42,7 @@ AD_COLS = [
     # Google: 법인(광고주)과 브랜드 분리 + 광고단위 브랜드 재매칭
     "advertiser_name", "brand_status", "match_method", "match_confidence", "manual_override",
     "content_hash", "dedupe_key",   # 썸네일 SHA-256 + 영상 중복 그룹 키(재수집 시 재계산)
+    "first_seen_at", "is_preserved",  # 최초 발견일(1회 고정, 분석용) + 수동 보존 표시(retention 제외)
 ]
 SOCIAL_COLS = [
     "id", "brand_name", "platform", "video_id", "embed_url", "title", "channel_title",
@@ -157,6 +158,28 @@ def backfill_dedupe_keys(conn: sqlite3.Connection = None, only_missing: bool = T
     if own:
         conn.close()
     return n
+
+
+def backfill_seen_columns(conn: sqlite3.Connection = None) -> tuple[int, int]:
+    """first_seen_at / last_seen_at 백필(빈 값만). 행 삭제·사용자데이터 변경 없음.
+    - first_seen_at: 가장 오래된 ad_view_snapshots.snapshot_date → created_at → started_at (분석/표시용)
+    - last_seen_at : 빈 값만 last_crawled_at → collected_at → created_at 로 보정(삭제 기준)
+    반환: (first_seen 채운 행수, last_seen 채운 행수). 재실행 idempotent."""
+    own = conn is None
+    conn = conn or get_conn()
+    f = conn.execute("""
+        UPDATE ad_library_ads SET first_seen_at = COALESCE(
+            (SELECT MIN(s.snapshot_date) FROM ad_view_snapshots s WHERE s.ad_id = ad_library_ads.id),
+            NULLIF(created_at, ''), NULLIF(started_at, ''))
+        WHERE first_seen_at IS NULL OR first_seen_at = ''""").rowcount
+    l = conn.execute("""
+        UPDATE ad_library_ads SET last_seen_at = COALESCE(
+            NULLIF(last_crawled_at, ''), NULLIF(collected_at, ''), created_at)
+        WHERE last_seen_at IS NULL OR last_seen_at = ''""").rowcount
+    conn.commit()
+    if own:
+        conn.close()
+    return f, l
 
 
 def get_conn() -> sqlite3.Connection:
@@ -308,7 +331,9 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                  ("manual_override", "INTEGER DEFAULT 0"),
                  ("match_reason", "TEXT"),           # 왜 매칭됐는지(화면 표시용)
                  ("content_hash", "TEXT"),           # 로컬 썸네일 SHA-256(1회 계산·재사용)
-                 ("dedupe_key", "TEXT")):            # 영상 중복 그룹 키(보수적). ''/NULL=개별 유지
+                 ("dedupe_key", "TEXT"),             # 영상 중복 그룹 키(보수적). ''/NULL=개별 유지
+                 ("first_seen_at", "TEXT"),          # 최초 발견 시각(재수집 시 유지). 분석/표시용
+                 ("is_preserved", "INTEGER DEFAULT 0")):  # 1=수동 보존(60일 지나도 retention 제외)
         if c not in cols:
             conn.execute(f"ALTER TABLE ad_library_ads ADD COLUMN {c} {t}")
     # brands 테이블 page_id 컬럼
@@ -381,6 +406,8 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_ala_collected ON ad_library_ads(collected_at)",
         "CREATE INDEX IF NOT EXISTS idx_ala_dedupe ON ad_library_ads(dedupe_key)",
         "CREATE INDEX IF NOT EXISTS idx_ala_brandid ON ad_library_ads(brand_id)",
+        # retention(보관정책): last_seen_at 기준 만료 대상 조회
+        "CREATE INDEX IF NOT EXISTS idx_ala_lastseen ON ad_library_ads(last_seen_at)",
         # 소셜 매칭 조인(ROW_NUMBER PARTITION BY ad_id ORDER BY match_score)
         "CREATE INDEX IF NOT EXISTS idx_asm_ad ON ad_social_matches(ad_id, match_score, social_id)",
         # 소셜 브랜드 카운트/조인
@@ -392,6 +419,7 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
             conn.execute(ddl)
         except Exception:  # noqa: BLE001
             pass
+    backfill_seen_columns(conn)   # first_seen_at/last_seen_at 빈값 백필(idempotent, 삭제 없음)
     migrate_base64_thumbnails()
     migrate_brands()
     restore_scripts_from_store()   # Supabase에 백업된 스크립트 복원(영구 보존)
@@ -1050,7 +1078,11 @@ def ingest_ad_library(ads: list[dict]) -> int:
             "last_crawled_at": _now_ts,        # 이번 크롤로 row 갱신됨(ad_id upsert)
             "video_status": _vstatus,
             "page_id": a.get("page_id") or (prev or {}).get("page_id") or "",
-            "last_seen_at": _now_ts,           # 이번 크롤에서 라이브러리에 보였음
+            "last_seen_at": _now_ts,           # 이번 크롤에서 라이브러리에 보였음(매 크롤 갱신)
+            # 최초 발견일: 기존값 있으면 유지, 없으면 started_at→now (1회 고정, 분석용)
+            "first_seen_at": (prev or {}).get("first_seen_at") or a.get("started_at") or _now_ts,
+            # 수동 보존 표시: 사용자가 켠 값 유지(재수집이 덮지 않음)
+            "is_preserved": (prev or {}).get("is_preserved") or 0,
             "advertiser_name": a.get("advertiser_name") or (prev or {}).get("advertiser_name") or "",
             # 매칭 결과는 별도 매칭단계가 세팅 → 재수집 시 보존(수동지정 우선)
             "brand_status": (prev or {}).get("brand_status") or "",
@@ -1934,6 +1966,16 @@ def update_bookmark(ad_id: str, value: bool, username: str = "") -> None:
         BS.add(ad_id, username) if value else BS.remove(ad_id)
     except Exception:  # noqa: BLE001
         pass
+
+
+def update_preserved(ad_id: str, value: bool) -> None:
+    """수동 보존 표시 토글. is_preserved=1 이면 보관정책(60일)이 지나도 삭제 제외.
+    북마크와는 별개 개념(북마크=관심 저장, 보존=retention 삭제방지). 재수집 시 ingest가 값 유지."""
+    conn = get_conn()
+    conn.execute("UPDATE ad_library_ads SET is_preserved=?, updated_at=? WHERE id=?",
+                 (1 if value else 0, _now(), ad_id))
+    conn.commit()
+    conn.close()
 
 
 def exclude_ad(ad_id: str, value: bool = True) -> None:
