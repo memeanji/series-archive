@@ -1014,12 +1014,80 @@ def _quick_score(ad: dict) -> int:
     return max(0, min(100, s))
 
 
+def _landing_domain(url: str) -> str:
+    """랜딩 URL → 소문자 도메인(www. 제거). 실패 시 빈 문자열."""
+    import re as _re
+    m = _re.match(r"https?://([^/]+)", (url or "").strip(), _re.I)
+    return m.group(1).lower().replace("www.", "") if m else ""
+
+
+# 브랜드 무관 광고가 같은 page_id로 딸려 들어오는 문제(2026-07-30 AMPLE:N 1,321건) 방지용.
+#   brand_match_rules 에 pattern_type 3종을 두고 ingest 단계에서 거른다.
+#     exclude_ad_id          : 그 광고 ID는 다시 수집해도 저장 안 함
+#     exclude_landing_domain : 그 랜딩 도메인(서브도메인 포함) 광고는 저장 안 함
+#     require_brand_keyword  : 그 브랜드는 카피/제목/랜딩에 브랜드 키워드가 있어야만 저장
+_BLOCK_TYPES = ("exclude_ad_id", "exclude_landing_domain", "require_brand_keyword")
+
+
+def load_ingest_blocklist(conn=None) -> dict:
+    """ingest 차단 규칙을 읽어 dict로. {ids:set, domains:set, require:{brand:[kw,...]}}"""
+    own = conn is None
+    conn = conn or get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT pattern_type, pattern, brand_name FROM brand_match_rules "
+            f"WHERE pattern_type IN ({','.join(['?']*len(_BLOCK_TYPES))})", _BLOCK_TYPES).fetchall()
+    except Exception:  # noqa: BLE001  (테이블 없으면 차단 없음)
+        rows = []
+    out = {"ids": set(), "domains": set(), "require": {}}
+    for r in rows:
+        t, p, b = r[0], (r[1] or "").strip(), (r[2] or "").strip()
+        if not p:
+            continue
+        if t == "exclude_ad_id":
+            out["ids"].add(p)
+        elif t == "exclude_landing_domain":
+            out["domains"].add(p.lower().replace("www.", ""))
+        elif t == "require_brand_keyword":
+            out["require"].setdefault(p, []).append(b.lower())
+    if own:
+        conn.close()
+    return out
+
+
+def _blocked_reason(a: dict, bl: dict) -> str:
+    """차단 규칙에 걸리면 사유 문자열, 통과면 빈 문자열."""
+    aid = str(a.get("id") or a.get("platform_ad_id") or "")
+    if aid and aid in bl["ids"]:
+        return "excluded_ad_id"
+    d = _landing_domain(a.get("landing_url") or "")
+    if d:
+        # 정확히 일치하거나 차단 도메인의 서브도메인이면 차단(lexus.com → fresno.lexus.com)
+        for bd in bl["domains"]:
+            if d == bd or d.endswith("." + bd):
+                return f"excluded_domain:{bd}"
+    brand = a.get("brand_name") or a.get("advertiser_name") or ""
+    kws = bl["require"].get(brand)
+    if kws:
+        blob = " ".join(str(a.get(k) or "") for k in
+                        ("ad_title", "ad_copy", "landing_url", "original_ad_url")).lower()
+        if not any(k and k in blob for k in kws):
+            return f"brand_keyword_missing:{brand}"
+    return ""
+
+
 def ingest_ad_library(ads: list[dict]) -> int:
     conn = get_conn()
     n = 0
+    bl = load_ingest_blocklist(conn)
+    blocked = 0
     for a in ads:
         aid = a.get("id") or a.get("platform_ad_id")
         if not aid:
+            continue
+        why = _blocked_reason(a, bl)
+        if why:                      # 차단 규칙 해당 → 저장 안 함(재수집 방지)
+            blocked += 1
             continue
         tags = a.get("tags") or (a.get("hook_tags") or []) + (a.get("format_tags") or [])
         prev = conn.execute("SELECT * FROM ad_library_ads WHERE id=?", (aid,)).fetchone()
@@ -1098,7 +1166,20 @@ def ingest_ad_library(ads: list[dict]) -> int:
         n += 1
     conn.commit()
     conn.close()
+    if blocked:
+        print(f"  [차단] 재수집 차단 규칙으로 {blocked}건 저장 안 함")
     return n
+
+
+def add_ingest_block(pattern_type: str, pattern: str, brand_name: str = "(제외)") -> None:
+    """ingest 차단 규칙 1건 등록. pattern_type: exclude_ad_id/exclude_landing_domain/require_brand_keyword"""
+    if pattern_type not in _BLOCK_TYPES:
+        raise ValueError(f"pattern_type must be one of {_BLOCK_TYPES}")
+    conn = get_conn()
+    conn.execute("INSERT OR REPLACE INTO brand_match_rules(pattern_type,pattern,brand_name,created_at)"
+                 " VALUES(?,?,?,?)", (pattern_type, pattern, brand_name, _now()))
+    conn.commit()
+    conn.close()
 
 
 def mark_video_expired(ad_id: str) -> None:
