@@ -250,6 +250,14 @@ def apply(days: int, push: bool = False) -> dict:
 
     print(f"[RETENTION APPLY] 광고 {deleted:,}건 삭제 · 썸네일 {removed:,}개 삭제 · VACUUM · demo.db 재생성 완료")
 
+    # 6-1) Supabase 쪽도 같은 정책으로 정리(60일). 장기보존(is_preserved=1) 브랜드는 대상에서 빠진다.
+    #      로컬만 지우면 Supabase에 옛 데이터가 남아 앱(=Supabase 읽기)에서 계속 보인다.
+    try:
+        import jobs.supabase_retention as SR
+        SR.run(apply=True)
+    except Exception as e:  # noqa: BLE001  (Supabase 실패가 로컬 정리를 되돌리지 않게)
+        print(f"  [Supabase retention] 건너뜀: {type(e).__name__}: {e}")
+
     # 7) git 반영(삭제 스테이징 포함)
     if push:
         msg = f"retention: {days}일+ 미수집 광고 {deleted}건 정리(썸네일 {removed} 삭제) {today}"

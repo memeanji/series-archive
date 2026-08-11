@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -413,6 +414,35 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     conn.close()
 
 
+# 무거운 초기화를 다시 돌리기까지의 간격(초). env INIT_REFRESH_SEC 로 조정, 0이면 항상 수행.
+_INIT_REFRESH_SEC = int(os.environ.get("INIT_REFRESH_SEC", "21600"))   # 기본 6시간
+
+
+def _init_recently_done(conn: sqlite3.Connection) -> bool:
+    """최근 _INIT_REFRESH_SEC 안에 전체 초기화를 마쳤으면 True(→ 이번 부팅은 건너뜀)."""
+    if _INIT_REFRESH_SEC <= 0:
+        return False
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS app_init_state(k TEXT PRIMARY KEY, v TEXT)")
+        r = conn.execute("SELECT v FROM app_init_state WHERE k='last_full_init'").fetchone()
+        if not r or not r[0]:
+            return False
+        import datetime as _dt
+        last = _dt.datetime.fromisoformat(r[0])
+        return (_dt.datetime.now() - last).total_seconds() < _INIT_REFRESH_SEC
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _mark_init_done(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS app_init_state(k TEXT PRIMARY KEY, v TEXT)")
+        conn.execute("INSERT OR REPLACE INTO app_init_state(k,v) VALUES('last_full_init',?)", (_now(),))
+        conn.commit()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
     """목록/카운트/매칭 조인이 매 새로고침마다 1만+행을 풀스캔하지 않도록 보조 인덱스 생성.
     모두 IF NOT EXISTS — 이미 있으면 무시. 데이터/스키마 변경 없음(읽기 성능만 개선)."""
@@ -438,11 +468,17 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
             conn.execute(ddl)
         except Exception:  # noqa: BLE001
             pass
+    if _init_recently_done(conn):
+        # 최근에 한 번 다 돌렸으면 건너뛴다. 인덱스는 이미 있고 백필/복원은 멱등이라 매 부팅마다
+        # 다시 할 이유가 없다(실측: 백필·복원이 init_db 3.7초 중 3.6초, 그중 Supabase 왕복 2.5초).
+        # ⚠️ 표식은 DB 안에 두므로, Cloud 가 demo.db 로 재시드하면 표식도 사라져 자동으로 다시 돈다.
+        return
     backfill_seen_columns(conn)   # first_seen_at/last_seen_at 빈값 백필(idempotent, 삭제 없음)
     migrate_base64_thumbnails()
     migrate_brands()
     restore_scripts_from_store()   # Supabase에 백업된 스크립트 복원(영구 보존)
     restore_bookmarks_from_store()  # Supabase 북마크 복원(Cloud 재배포 후 유실 방지·팀 공유)
+    _mark_init_done(conn)
 
 
 def _migrate_legacy(conn: sqlite3.Connection) -> int:
@@ -939,31 +975,38 @@ def filter_options() -> dict:
 
 
 def brand_counts() -> list[dict]:
-    """등록 브랜드 전체. 📺소셜수는 approved 기준 + needs/rejected 별도(툴팁용)."""
+    """등록 브랜드 전체. 📺소셜수는 approved 기준 + needs/rejected 별도(툴팁용).
+
+    ★2026-08-11 최적화: 예전엔 브랜드마다 상관 서브쿼리 8개(=92브랜드 × 8 = 736회 스캔)를 돌려
+      5.5~7.2초가 걸렸다. 같은 결과를 **GROUP BY 2개 + 파이썬 조인**으로 계산한다(실측 10ms 내외).
+    """
     conn = get_conn()
-    rows = conn.execute("""
-        SELECT b.display_name,
-          (SELECT COUNT(*) FROM ad_library_ads a WHERE a.brand_name=b.display_name) ad_n,
-          (SELECT COUNT(*) FROM ad_library_ads a WHERE a.brand_name=b.display_name
-             AND a.platform='meta') meta_n,
-          (SELECT COUNT(*) FROM ad_library_ads a WHERE a.brand_name=b.display_name
-             AND a.platform='google') google_n,
-          (SELECT COALESCE(MAX(CASE WHEN a.status='live' THEN 1 ELSE 0 END),0)
-             FROM ad_library_ads a WHERE a.brand_name=b.display_name) live,
-          (SELECT COUNT(*) FROM social_videos s WHERE s.brand_name=b.display_name
-             AND s.review_status='approved') soc_ok,
-          (SELECT COUNT(*) FROM social_videos s WHERE s.brand_name=b.display_name
-             AND s.review_status='needs_review') soc_rev,
-          (SELECT COUNT(*) FROM social_videos s WHERE s.brand_name=b.display_name
-             AND s.review_status='rejected') soc_rej
-        FROM brands b WHERE b.is_active=1
-        ORDER BY (ad_n + soc_ok + soc_rev) DESC, b.display_name
-    """).fetchall()
+    ads = {}
+    for r in conn.execute(
+            "SELECT brand_name, COUNT(*) n, "
+            "SUM(CASE WHEN platform='meta' THEN 1 ELSE 0 END) meta_n, "
+            "SUM(CASE WHEN platform='google' THEN 1 ELSE 0 END) google_n, "
+            "MAX(CASE WHEN status='live' THEN 1 ELSE 0 END) live "
+            "FROM ad_library_ads GROUP BY brand_name"):
+        ads[r["brand_name"]] = (r["n"], r["meta_n"] or 0, r["google_n"] or 0, r["live"] or 0)
+    soc = {}
+    for r in conn.execute("SELECT brand_name, COALESCE(review_status,'needs_review') st, COUNT(*) n "
+                          "FROM social_videos GROUP BY 1, 2"):
+        d = soc.setdefault(r["brand_name"], {})
+        d[r["st"]] = r["n"]
+    names = [r["display_name"] for r in
+             conn.execute("SELECT display_name FROM brands WHERE is_active=1")]
     conn.close()
-    return [{"name": r["display_name"], "ad": r["ad_n"],
-             "meta": r["meta_n"], "google": r["google_n"], "live": r["live"],
-             "approved": r["soc_ok"], "needs": r["soc_rev"], "rejected": r["soc_rej"]}
-            for r in rows]
+    out = []
+    for nm in names:
+        a = ads.get(nm, (0, 0, 0, 0))
+        s2 = soc.get(nm, {})
+        out.append({"name": nm, "ad": a[0], "meta": a[1], "google": a[2], "live": a[3],
+                    "approved": s2.get("approved", 0), "needs": s2.get("needs_review", 0),
+                    "rejected": s2.get("rejected", 0)})
+    # 정렬 기준은 기존과 동일: (광고 + 승인소셜 + 검토소셜) 내림차순 → 이름
+    out.sort(key=lambda x: (-(x["ad"] + x["approved"] + x["needs"]), x["name"]))
+    return out
 
 
 def brand_diagnostics() -> list[dict]:
@@ -1946,11 +1989,16 @@ def add_ad_snapshot(ad_id: str, views, likes, comments) -> None:
 
 
 def get_ad_snapshots(ad_id: str, days: int = 30) -> list[dict]:
+    # 화이트리스트 브랜드 광고면 Supabase 에서 그 광고 추이만 1회 조회(미러엔 스냅샷을 담지 않는다).
     try:
         import services.supabase_read as sr
-        conn = sr.conn(sr.ad_brand(ad_id)) or get_conn()
-    except Exception:  # noqa: BLE001
-        conn = get_conn()
+        if sr.ad_brand(ad_id):
+            rows = sr.fetch_snapshots(ad_id, days)
+            if rows:
+                return rows
+    except Exception:  # noqa: BLE001  (실패 시 아래 로컬 경로로)
+        pass
+    conn = get_conn()
     rows = [dict(r) for r in conn.execute(
         "SELECT snapshot_date, views, likes, comments FROM ad_view_snapshots "
         "WHERE ad_id=? ORDER BY snapshot_date DESC LIMIT ?", (ad_id, days)).fetchall()]

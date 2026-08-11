@@ -105,21 +105,24 @@ def _schema_sql() -> list[str]:
         con.close()
 
 
+# 한 요청에 넣는 ad_id 개수. 200 → 400 으로 올려 왕복 횟수를 절반으로(매칭 85행에 3.7초 걸리던 원인).
+ID_CHUNK = int(config.secret("SUPABASE_ID_CHUNK") or 400)
+
+
 def _build_mirror(brand: str, path: Path) -> dict:
-    """Supabase → 미러 SQLite. 반환: 적재 건수 요약."""
+    """Supabase → 미러 SQLite. **목록 화면에 필요한 것만** 담는다.
+
+    ★2026-08-11 최적화: 예전엔 조회수 스냅샷까지 전부 받아 테키라 기준 14.1초가 걸렸다
+      (스냅샷 13,952행 = 8.7초, 전체의 63%). 스냅샷은 **상세 모달의 추이 그래프에서만** 쓰이므로
+      미러에서 빼고, 상세 진입 시 그 광고 것만 직접 조회한다(`fetch_snapshots`).
+    """
     t0 = time.time()
     ads = _fetch("ad_library_ads", f"select=*&brand_name=eq.{brand}")
     ids = [a["id"] for a in ads]
-    snaps, matches, socials, soc_snaps = [], [], [], []
-    for i in range(0, len(ids), 200):          # URL 길이 제한 → 200개씩
-        chunk = ids[i:i + 200]
-        snaps += _fetch("ad_view_snapshots", f"select=*&ad_id=in.{_in_list(chunk)}")
-        matches += _fetch("ad_social_matches", f"select=*&ad_id=in.{_in_list(chunk)}")
+    snaps, matches, soc_snaps = [], [], []
+    for i in range(0, len(ids), ID_CHUNK):
+        matches += _fetch("ad_social_matches", f"select=*&ad_id=in.{_in_list(ids[i:i + ID_CHUNK])}")
     socials = _fetch("social_videos", f"select=*&brand_name=eq.{brand}")
-    sids = [s["id"] for s in socials]
-    for i in range(0, len(sids), 200):
-        soc_snaps += _fetch("social_video_snapshots",
-                            f"select=*&social_video_id=in.{_in_list(sids[i:i + 200])}")
     brand_rows = _fetch("brands", f"select=*&display_name=eq.{brand}")
     fetched = time.time() - t0
 
@@ -190,6 +193,16 @@ def ad_brand(ad_id: str) -> str:
         except Exception:  # noqa: BLE001
             continue
     return ""
+
+
+def fetch_snapshots(ad_id: str, days: int = 120) -> list[dict]:
+    """상세 모달용 — 그 광고의 조회수 추이만 Supabase에서 직접(요청 1회). 미러에는 담지 않는다."""
+    if not (ad_id and enabled()):
+        return []
+    rows = _fetch("ad_view_snapshots",
+                  f"select=snapshot_date,views,likes,comments&ad_id=eq.{ad_id}"
+                  f"&order=snapshot_date.desc&limit={int(days)}")
+    return list(reversed(rows))
 
 
 def storage_url(path: str) -> str:

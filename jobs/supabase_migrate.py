@@ -262,7 +262,8 @@ def upsert(table: str, rows: list[dict], on_conflict: str | None, apply: bool) -
     return {"sent": sent, "failed": failed}
 
 
-def migrate_tables(data: dict, thumbs: dict[str, list[str]], apply: bool) -> dict:
+def migrate_tables(data: dict, thumbs: dict[str, list[str]], apply: bool,
+                   preserve: bool = True) -> dict:
     cols = data["_cols"]
     res = {}
     ads = []
@@ -274,7 +275,8 @@ def migrate_tables(data: dict, thumbs: dict[str, list[str]], apply: bool) -> dic
             "thumbnail_url": public_url(key) if key else "",
             "orig_thumbnail_url": a.get("thumbnail_url") or "",
             "local_thumbnail_path": key,          # 로컬 경로 대신 Storage 경로만 저장
-            "is_preserved": 1,                    # 18개 브랜드 = 장기 보존 → retention 제외
+            # 장기보존 브랜드만 1. 나머지는 원본 값(0) 그대로 둬서 60일 retention이 적용되게 한다.
+            "is_preserved": 1 if preserve else (a.get("is_preserved") or 0),
         }))
     res["ad_library_ads"] = upsert("ad_library_ads", ads, "id", apply)
     res["ad_view_snapshots"] = upsert(
@@ -335,6 +337,8 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--plan")
     ap.add_argument("--stage")
+    ap.add_argument("--no-preserve", action="store_true",
+                    help="장기보존 표시를 하지 않는다(=60일 retention 대상으로 이전)")
     a = ap.parse_args()
 
     global STAGE
@@ -367,7 +371,7 @@ def main() -> None:
         ensure_bucket(a.apply)
         res["storage"] = upload_thumbs(files, a.apply, a.workers)
     if a.tables or a.all:
-        res["db"] = migrate_tables(data, thumbs, a.apply)
+        res["db"] = migrate_tables(data, thumbs, a.apply, preserve=not a.no_preserve)
     if not (a.thumbs or a.tables or a.all):
         print("\n(dry-run 집계만 수행 — 실제 이전은 --apply 와 --thumbs/--tables/--all 필요)")
     REPORT.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")

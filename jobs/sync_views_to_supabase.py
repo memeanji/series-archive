@@ -97,6 +97,15 @@ def sync(verbose: bool = True) -> dict:
                                     "WHERE yt_views > 0") if r["id"] in have]
     n_ads = _post("ad_library_ads", ad_rows, "id") if ad_rows else 0
 
+    # ②-1 last_seen_at 동기화 — **60일 retention 의 판단 근거**.
+    #     로컬 크롤이 "오늘도 살아있다"고 갱신한 값을 Supabase 에 반영하지 않으면,
+    #     실제로는 게재 중인 광고가 Supabase 에서 오래된 것으로 보여 60일 뒤 지워진다.
+    seen_rows = [{"id": r["id"], "last_seen_at": r["last_seen_at"]}
+                 for r in con.execute("SELECT id, last_seen_at FROM ad_library_ads "
+                                      "WHERE last_seen_at >= date('now','-3 day')")
+                 if r["id"] in have]
+    n_seen = _post("ad_library_ads", seen_rows, "id") if seen_rows else 0
+
     # ③ 오늘 저장된 스냅샷
     snap_rows = [{"ad_id": r["ad_id"], "snapshot_date": r["snapshot_date"], "views": r["views"],
                   "likes": r["likes"], "comments": r["comments"], "created_at": r["created_at"],
@@ -108,9 +117,9 @@ def sync(verbose: bool = True) -> dict:
     con.close()
 
     if verbose:
-        print(f"Supabase 동기화 — 최신조회수 {n_state} · 광고현재값 {n_ads} · 오늘스냅샷 {n_snap} "
-              f"(대상 광고 {len(have):,}건 기준)")
-    return {"view_state": n_state, "ads": n_ads, "snapshots": n_snap}
+        print(f"Supabase 동기화 — 최신조회수 {n_state} · 광고현재값 {n_ads} · last_seen {n_seen} · "
+              f"오늘스냅샷 {n_snap} (대상 광고 {len(have):,}건 기준)")
+    return {"view_state": n_state, "ads": n_ads, "last_seen": n_seen, "snapshots": n_snap}
 
 
 if __name__ == "__main__":
