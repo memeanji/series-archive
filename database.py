@@ -183,7 +183,21 @@ def backfill_seen_columns(conn: sqlite3.Connection = None) -> tuple[int, int]:
     return f, l
 
 
-def get_conn() -> sqlite3.Connection:
+def get_conn(local: bool = False) -> sqlite3.Connection:
+    """DB 커넥션.
+
+    `SUPABASE_READ_ALL=true`(번들 DB 없는 배포본)이면 **Supabase 미러**를 돌려준다.
+    조회 SQL은 하나도 바꾸지 않고 데이터 출처만 바뀌므로, 화면 결과는 기존과 동일하다.
+    `local=True` 는 부팅/스키마 생성처럼 진짜 로컬 파일이 필요한 경우에만 쓴다."""
+    if not local:
+        try:
+            import services.supabase_read as _sr
+            if _sr.read_all():
+                c = _sr.conn_all()
+                if c is not None:
+                    return c
+        except Exception as e:  # noqa: BLE001
+            print(f"  [DB] Supabase 미러 실패 → 로컬 사용: {type(e).__name__}: {e}")
     DATA.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
@@ -201,15 +215,18 @@ def _read_conn(brand: str | None = None):
     """조회 전용 커넥션. `SUPABASE_READ_BRANDS` 에 든 브랜드면 **Supabase 미러**, 아니면 로컬 SQLite.
     Supabase 쪽이 조금이라도 어긋나면 즉시 SQLite로 폴백한다(앱이 멈추지 않게).
     반환 (conn, source) — source 는 'supabase' | 'sqlite' (성능/진단 로그용)."""
-    if brand:
-        try:
-            import services.supabase_read as sr   # lazy: 미설정이면 비용 0
-            if sr.handles(brand):
-                c = sr.conn(brand)
-                if c is not None:
-                    return c, "supabase"
-        except Exception as e:  # noqa: BLE001
-            print(f"  [읽기] Supabase 경로 실패 → SQLite 폴백: {type(e).__name__}: {e}")
+    try:
+        import services.supabase_read as sr       # lazy: 미설정이면 비용 0
+        if sr.read_all():                          # 배포본: 번들 DB 없이 Supabase 단독
+            c = sr.conn_all()
+            if c is not None:
+                return c, "supabase"
+        elif brand and sr.handles(brand):
+            c = sr.conn(brand)
+            if c is not None:
+                return c, "supabase"
+    except Exception as e:  # noqa: BLE001
+        print(f"  [읽기] Supabase 경로 실패 → SQLite 폴백: {type(e).__name__}: {e}")
     return get_conn(), "sqlite"
 
 
@@ -237,9 +254,10 @@ def init_db(seed_users: Optional[dict] = None) -> None:
     is_cloud = "/mount/src" in str(ROOT).replace("\\", "/")
     seed = ROOT / "sample_data" / "demo.db"
     if not DB_PATH.exists():
+        DATA.mkdir(parents=True, exist_ok=True)
         if seed.exists():
-            DATA.mkdir(parents=True, exist_ok=True)
             shutil.copy(seed, DB_PATH)
+        # 번들 DB가 없는 배포본(Supabase 단독)이면 빈 스키마만 만들고 진행 — 읽기는 Supabase가 담당
     elif is_cloud and seed.exists():
         seed_build = _db_build_of(seed)
         if seed_build and seed_build != _db_build_of(DB_PATH):
@@ -251,7 +269,8 @@ def init_db(seed_users: Optional[dict] = None) -> None:
                     except Exception:  # noqa: BLE001
                         pass
             shutil.copy(seed, DB_PATH)
-    conn = get_conn()
+    # 스키마는 항상 **로컬 파일**에 만든다 — Supabase 미러가 이 스키마를 그대로 복제해 쓰기 때문.
+    conn = get_conn(local=True)
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS ad_library_ads (
         id TEXT PRIMARY KEY, brand_name TEXT, ad_title TEXT, ad_copy TEXT,

@@ -41,3 +41,6 @@ secrets_cloud_paste.toml
 # ── 썸네일은 Supabase Storage(series-archive/thumbnails)가 원본 — 레포에는 두지 않는다(2026-08-11) ──
 #    로컬 디스크 파일은 그대로 유지되며, 앱은 DB에 저장된 공개 URL로 이미지를 불러온다.
 static/thumbnails/
+
+# 배포용 Secrets 원문(서비스 키 포함) — 절대 커밋 금지
+_deploy_secrets.toml
