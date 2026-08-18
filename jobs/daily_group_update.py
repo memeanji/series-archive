@@ -83,8 +83,10 @@ def main(weekday: int = None) -> None:
     database.regrade()
     database.migrate_brands()
 
-    # ── Supabase 신규분 동기화 — **git push 와 완전히 분리**(push 를 꺼도 항상 수행) ──
-    #    새 광고/브랜드/썸네일만 올린다. 이미 올라간 건 건너뛰므로 재실행해도 중복이 안 생긴다.
+    # ── Supabase 동기화 — **git push 와 완전히 분리**(push 를 꺼도 항상 수행) ──
+    #    ① 새 광고/브랜드/썸네일 업로드(이미 올라간 건 건너뜀 → 재실행해도 중복 없음)
+    #    ② 재크롤로 값이 바뀐 **기존** 광고의 collected_at/last_crawled_at/영상상태 PATCH.
+    #       ②가 없으면 앱의 '수집일'이 최초 업로드 시점에 얼어붙는다(2026-08-18 수정).
     try:
         import jobs.supabase_sync_new as SN
         SN.run(apply=True)
