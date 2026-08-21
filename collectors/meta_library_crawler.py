@@ -231,10 +231,13 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
                  headless: bool = True, shot: bool = False, retries: int = 1,
                  page_id: str = "", ad_id: str = "",
                  max_scroll: int = 80, no_new_ads_limit: int = 5,
-                 media_type: str = "all", publisher_platform: str = "") -> list[dict]:
+                 media_type: str = "all", publisher_platform: str = "",
+                 launch_opts: dict = None) -> list[dict]:
     """Playwright 렌더 → 다단계 썸네일 추출 → 실패 시 카드 screenshot 폴백.
     page_id 주면 광고주 전체 크롤, ad_id 주면 단건. media_type=all/video/image,
-    publisher_platform=facebook/instagram 로 경로 다중화(수집률↑)."""
+    publisher_platform=facebook/instagram 로 경로 다중화(수집률↑).
+    launch_opts: 배포(리눅스 컨테이너)에서만 쓰는 chromium.launch 추가 인자
+    (executable_path/--no-sandbox 등). None 이면 기존 정기 크롤과 완전히 동일하게 동작한다."""
     from playwright.sync_api import sync_playwright
 
     _pf = f"&publisher_platforms[0]={publisher_platform}" if publisher_platform else ""
@@ -254,7 +257,7 @@ def search_brand(brand: str, country: str = "KR", scrolls: int = 6,
     stats = {"img": 0, "poster": 0, "bg": 0, "screenshot": 0, "failed": 0}
 
     with sync_playwright() as p:
-        br = p.chromium.launch(headless=headless)
+        br = p.chromium.launch(headless=headless, **(launch_opts or {}))
         ctx = br.new_context(locale="ko-KR", user_agent=UA,
                              viewport={"width": 1440, "height": 1000})
         page = ctx.new_page()

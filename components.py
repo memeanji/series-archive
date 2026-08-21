@@ -542,22 +542,79 @@ def render_google_review() -> None:
                     database.assign_google_brand(ad["id"], exclude=True); st.rerun()
 
 
-def _collect_ids(ids: list) -> list:
-    """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집. ID별 결과 리스트 반환."""
+def _collect_ids(ids: list) -> dict:
+    """미수집 광고 ID 를 Meta Ad Library 단건 크롤로 즉시 수집.
+
+    반환: {"stages": [...5단계...], "results": [ID별], "supabase": {...}, "log": "원본출력"}
+    실패해도 **어느 단계에서** 멈췄는지 화면에 띄울 수 있게 stages 를 항상 채운다."""
     import json as _json
-    results: list = []
+    out: dict = {"stages": [], "results": [], "supabase": {}, "log": ""}
     with st.spinner(f"광고 ID {len(ids)}개 수집 중… (Meta Ad Library, 최대 1~2분)"):
         try:
             r = subprocess.run([sys.executable, str(ROOT / "jobs" / "collect_by_id.py"), *map(str, ids)],
                                capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+            raw = (r.stdout or "") + (("\n" + r.stderr) if r.stderr else "")
+            out["log"] = raw[-4000:]
             for ln in (r.stdout or "").splitlines():
                 if ln.startswith("RESULT_JSON:"):
-                    results = _json.loads(ln[len("RESULT_JSON:"):])
+                    payload = _json.loads(ln[len("RESULT_JSON:"):])
+                    if isinstance(payload, dict):
+                        out.update({k: payload.get(k, out[k]) for k in ("stages", "results", "supabase")})
+                    else:                       # 예전 형식(리스트) 호환
+                        out["results"] = payload
+            if not out["stages"] and not out["results"]:
+                # 서브프로세스가 RESULT_JSON 을 못 뱉음 = 스크립트 자체가 죽은 경우
+                tail = (r.stderr or r.stdout or "").strip().splitlines()[-4:]
+                out["stages"] = [{"name": "launch", "label": "⓪ 수집 프로세스 실행",
+                                  "ok": False, "detail": " / ".join(tail)[:400] or f"exit {r.returncode}",
+                                  "skipped": False}]
         except subprocess.TimeoutExpired:
-            st.error("시간 초과 — 잠시 후 다시 시도")
+            out["stages"] = [{"name": "timeout", "label": "⏱ 시간 초과(10분)", "ok": False,
+                              "detail": "Meta Ad Library 응답 지연 — 잠시 후 다시 시도",
+                              "skipped": False}]
         except Exception as e:  # noqa: BLE001
-            st.error(f"수집 실패: {e}")
-    return results
+            out["stages"] = [{"name": "launch", "label": "⓪ 수집 프로세스 실행", "ok": False,
+                              "detail": f"{type(e).__name__}: {e}", "skipped": False}]
+    return out
+
+
+def _render_collect_stages(payload: dict) -> None:
+    """수집 단계별 성공/실패를 표로 — 실패 시 '어디서' 막혔는지 바로 보이게."""
+    stages = payload.get("stages") or []
+    if not stages:
+        return
+    rows = []
+    stopped = False
+    for s in stages:
+        if s.get("skipped"):
+            icon, color = "⏭", S.SUB
+        elif s.get("ok"):
+            icon, color = "✅", S.LIVE
+        else:
+            icon, color = "❌", S.END_RED
+            stopped = True
+        rows.append(
+            f"<tr><td style='padding:5px 10px;white-space:nowrap;color:{color}'>{icon} "
+            f"{_h.escape(str(s.get('label') or s.get('name')))}</td>"
+            f"<td style='padding:5px 10px;color:{S.SUB};font-size:12px'>"
+            f"{_h.escape(str(s.get('detail') or ''))}</td></tr>")
+    # 실행되지 않은 뒷단계도 '미실행'으로 보여줘야 어디서 끊겼는지 분명해진다
+    done = {s.get("name") for s in stages}
+    if stopped:
+        for name, label in (("import", "① 크롤러 준비(playwright)"), ("browser", "② 크로미움 기동"),
+                            ("meta", "③ Meta Ad Library 조회"), ("db", "④ DB 저장"),
+                            ("supabase", "⑤ Supabase 반영")):
+            if name not in done:
+                rows.append(f"<tr><td style='padding:5px 10px;white-space:nowrap;color:{S.OFF_GRAY}'>"
+                            f"⚪ {label}</td><td style='padding:5px 10px;color:{S.OFF_GRAY};"
+                            f"font-size:12px'>앞 단계 실패로 미실행</td></tr>")
+    st.markdown(
+        f"<table style='width:100%;border-collapse:collapse;border:1px solid {S.BORDER};"
+        f"border-radius:8px;overflow:hidden;font-size:13px'>{''.join(rows)}</table>",
+        unsafe_allow_html=True)
+    if stopped and payload.get("log"):
+        with st.expander("원본 로그 보기", expanded=False):
+            st.code(payload["log"][-2500:], language="text")
 
 
 def _run_collect(display: str) -> None:
@@ -2295,9 +2352,14 @@ def render_id_search(raw: str) -> None:
         mc = st.columns([1.4, 1, 3])
         if mc[0].button(f"📥 미수집 광고 바로 수집하기 ({len(missing)})", key="idsearch_collect",
                         type="primary", use_container_width=True):
-            res = _collect_ids(missing)
-            st.session_state["idsearch_collect_res"] = res
+            payload = _collect_ids(missing)
+            st.session_state["idsearch_collect_res"] = payload
             st.cache_data.clear()      # 새 광고가 검색결과에 바로 보이게
+            try:                       # 배포본은 Supabase 미러를 읽으므로 미러도 다시 받게 한다
+                import services.supabase_read as _sr
+                _sr.invalidate()
+            except Exception:  # noqa: BLE001
+                pass
             st.rerun()
         first = missing[0]
         mc[1].markdown(
@@ -2311,9 +2373,16 @@ def render_id_search(raw: str) -> None:
         st.markdown(f"<div style='display:flex;gap:9px;flex-wrap:wrap;margin-top:5px'>{links}</div>",
                     unsafe_allow_html=True)
 
-    # 직전 수집 결과 요약(부분 성공/실패 + 사유)
-    cres = st.session_state.get("idsearch_collect_res")
-    if cres:
+    # 직전 수집 결과 요약(부분 성공/실패 + 단계별 진단)
+    payload = st.session_state.get("idsearch_collect_res")
+    if payload:
+        if isinstance(payload, list):          # 예전 세션 형식 호환
+            payload = {"stages": [], "results": payload, "supabase": {}}
+        cres = payload.get("results") or []
+        _render_collect_stages(payload)
+        sb = payload.get("supabase") or {}
+        if sb.get("verified"):
+            st.caption(f"☁️ Supabase 반영 확인: {', '.join(sb['verified'])}")
         ok_new = [r for r in cres if r.get("is_new")]
         had = [r for r in cres if r.get("ok") and not r.get("is_new")]
         fail = [r for r in cres if not r.get("ok")]
@@ -2324,6 +2393,10 @@ def render_id_search(raw: str) -> None:
             unsafe_allow_html=True)
         for r in fail:
             st.caption(f"❌ {r['id']} — {r.get('reason','실패')}")
+        for r in ok_new:
+            if r.get("advertiser"):
+                st.caption(f"🏷 {r['id']} → 브랜드 **{r['advertiser']}** "
+                           f"({r.get('brand_source','')})")
         if any(r.get("page_id") for r in ok_new):
             pids = ", ".join(f"{r['id']}→page_id {r['page_id']}" for r in ok_new if r.get("page_id"))
             st.caption(f"🏢 광고주 page_id 추출: {pids} (브랜드 수집관리에서 매칭 가능)")

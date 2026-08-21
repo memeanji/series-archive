@@ -6,10 +6,13 @@ pandas>=2.0              # 7일 추이 차트
 youtube-transcript-api>=1.2  # YouTube 자막(스크립트)
 gspread>=6.0             # 구글시트 스토리보드 컷별 자막 입력(서비스계정)
 
-# ── 아래는 '수집(크롤링)'에만 필요 — Cloud(보기 전용)에선 불필요해 제외 ──
-# 로컬/Docker에서 크롤하려면 별도 설치:
-#   pip install playwright>=1.40 && playwright install chromium
-# (앱 실행 시점에 import 하지 않으므로 Cloud 빌드에는 영향 없음)
+# ── 크롤링(Playwright) ──
+# 배포본의 '미수집 광고 바로 수집하기'(jobs/collect_by_id.py)가 Meta Ad Library 를
+# 직접 렌더해야 해서 Cloud 에도 필요하다. 예전엔 '보기 전용'이라 빼뒀는데,
+# 그래서 배포본에서 No module named 'playwright' 로 실패했다(2026-08-21 수정).
+# 브라우저 바이너리는 packages.txt 의 apt chromium 을 쓰고(다운로드 0),
+# 없으면 services/browser.py 가 런타임에 `playwright install chromium` 으로 받는다.
+playwright>=1.40         # 앱 렌더에서는 import 하지 않음(수집 잡에서만 lazy import)
 
 # ── R2 썸네일 업로드(잡 전용) — 앱 렌더는 public URL 문자열만 쓰므로 lazy import ──
 boto3>=1.34              # Cloudflare R2(S3 호환) 업로드/삭제 (services/thumbnail_store.py)

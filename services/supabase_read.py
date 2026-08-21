@@ -160,6 +160,23 @@ def _mirror_path(brand: str) -> Path:
     return CACHE / f"supabase_{h}.db"
 
 
+def invalidate(brand: str = "") -> int:
+    """미러 캐시를 버려 다음 조회 때 Supabase 에서 다시 받게 한다.
+
+    '미수집 광고 바로 수집하기' 처럼 **방금 Supabase 에 쓴 내용을 바로 화면에 보여야** 할 때 쓴다
+    (MIRROR_TTL 300초를 기다리지 않게). brand 를 주면 그 브랜드 미러만, 비우면 전부."""
+    targets = [_mirror_path(brand)] if brand else list(CACHE.glob("supabase_*.db"))
+    n = 0
+    for p in targets:
+        try:
+            if p.exists():
+                p.unlink()
+                n += 1
+        except Exception:  # noqa: BLE001
+            pass
+    return n
+
+
 def _schema_sql() -> list[str]:
     """로컬 DB의 **모든 테이블 DDL**을 복사 — 미러가 같은 스키마여야 같은 SQL이 돈다.
 
