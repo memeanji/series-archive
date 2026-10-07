@@ -163,6 +163,43 @@ def _yt_fallback_ui(ad: dict, vid: str) -> None:
         bc[1].link_button("🔎 투명성센터에서 보기", turl, use_container_width=True)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _sb_google_video_urls(ids: tuple) -> dict:
+    """Supabase ad_library_ads 에서 **지금 화면에 필요한 Google 광고 ID만** id→video_url 조회(GET 전용).
+    전체를 받지 않으므로 PostgREST 1,000행 페이지 문제가 없다(요청당 100 ID). 실패 시 {} → 기존 값 유지."""
+    try:
+        import requests
+        import services.supabase_read as _sr
+        if not _sr.enabled() or not ids:
+            return {}
+        out = {}
+        for i in range(0, len(ids), 100):
+            chunk = ids[i:i + 100]
+            r = requests.get(f"{_sr._base()}/rest/v1/ad_library_ads", headers=_sr._headers(), timeout=10,
+                             params={"select": "id,video_url", "platform": "eq.google",
+                                     "id": "in.(" + ",".join(chunk) + ")"})
+            r.raise_for_status()
+            out.update({x["id"]: x["video_url"] for x in r.json() if (x.get("video_url") or "").strip()})
+        return out
+    except Exception:  # noqa: BLE001  (조회 실패 → 보강 없이 기존 렌더)
+        return {}
+
+
+def _apply_sb_video_urls(ads: list) -> None:
+    """Google 광고의 video_url 을 Supabase 값으로 보강 — **렌더용 메모리 dict 에만** 적용(DB UPDATE 없음).
+    Supabase 에 값이 있으면 그 값을 우선, 없으면 기존(로컬) 값 유지. Meta 등 다른 플랫폼은 건드리지 않음."""
+    gids = tuple(sorted({str(a["id"]) for a in ads if a.get("platform") == "google" and a.get("id")}))
+    if not gids:
+        return
+    m = _sb_google_video_urls(gids)
+    for a in ads:
+        if a.get("platform") == "google":
+            v = m.get(str(a.get("id")))
+            if v:
+                a["video_url"] = v
+                a["_video_url_src"] = "supabase"
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _file_data_uri(rel_path: str) -> str:
     """로컬 static 이미지 → data URI (렌더 순간 변환, 캐시). DB엔 저장 안 함."""
@@ -517,6 +554,7 @@ def render_google_review() -> None:
     if nav[1].button("다음 ▶", disabled=len(rows_all) <= (page + 1) * SIZE, key="grv_next"):
         st.session_state["_grv_page"] = page + 1; st.rerun()
     allb = sorted(database.brand_index_groups().keys())
+    _apply_sb_video_urls(rows)   # Google: Supabase video_url 로 메모리 보강(DB 변경 없음)
     for i in range(0, len(rows), 4):
         cols = st.columns(4)
         for col, ad in zip(cols, rows[i:i + 4]):
@@ -901,6 +939,8 @@ def render_ad_card(ad: dict, idx: int) -> None:
     aid = ad.get("id")
     plat = ad.get("platform", "")
     is_video = ad.get("media_type") == "video"
+    if plat == "google" and (ad.get("video_url") or "").strip():
+        is_video = True        # Google: video_url 이 있으면 영상(썸네일 표시 로직은 그대로)
     th = get_display_thumbnail(ad)
     thumb = th["src"]
 
@@ -1451,6 +1491,10 @@ def render_ad_detail(ad: dict) -> None:
     plat = ad.get("platform", "")
     marked = bool(ad.get("is_bookmarked"))
 
+    # Google: 재생 소스는 Supabase ad_library_ads.video_url 우선(메모리 보강만, DB 변경 없음)
+    if plat == "google":
+        ad = dict(ad)
+        _apply_sb_video_urls([ad])
     # ── YouTube 임베드 가능 여부 사전 판단(영상별 1회 조회 후 DB 캐시) ──
     vurl = ad.get("video_url") or ""
     yt_vid = YT.extract_video_id(vurl) if "youtu" in vurl else None
@@ -2406,6 +2450,7 @@ def render_id_search(raw: str) -> None:
         st.info("입력한 ID가 모두 검색됐어요.")
         return
 
+    _apply_sb_video_urls(rows)   # Google: Supabase video_url 로 메모리 보강(DB 변경 없음)
     for i in range(0, len(rows), 4):
         cols = st.columns(4)
         for col, ad in zip(cols, rows[i:i + 4]):
@@ -2419,6 +2464,7 @@ def render_ad_grid(rows: list[dict], total: int, page: int, page_size: int) -> N
         render_empty_state("조건에 맞는 광고가 없습니다")
         return
     total_pages = max(1, (total + page_size - 1) // page_size)
+    _apply_sb_video_urls(rows)   # Google: Supabase video_url 로 메모리 보강(DB 변경 없음)
     for i in range(0, len(rows), 4):
         cols = st.columns(4)
         for col, ad in zip(cols, rows[i:i + 4]):
@@ -2763,6 +2809,7 @@ def render_top(ads: list[dict]) -> None:
         st.info("소셜 원본 영상(TikTok/YouTube 등)이 매칭·등급화되면 여기에 모입니다. "
                 "현재는 소셜 데이터가 없어 비어 있습니다.")
         return
+    _apply_sb_video_urls(top)    # Google: Supabase video_url 로 메모리 보강(DB 변경 없음)
     for i in range(0, len(top), 4):
         cols = st.columns(4)
         for col, ad in zip(cols, top[i:i + 4]):
