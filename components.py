@@ -188,7 +188,8 @@ def _sb_google_video_urls(ids: tuple) -> dict:
 def _apply_sb_video_urls(ads: list) -> None:
     """Google 광고의 video_url 을 Supabase 값으로 보강 — **렌더용 메모리 dict 에만** 적용(DB UPDATE 없음).
     Supabase 에 값이 있으면 그 값을 우선, 없으면 기존(로컬) 값 유지. Meta 등 다른 플랫폼은 건드리지 않음."""
-    gids = tuple(sorted({str(a["id"]) for a in ads if a.get("platform") == "google" and a.get("id")}))
+    gids = tuple(sorted({str(a["id"]) for a in ads if a.get("platform") == "google" and a.get("id")
+                         and not str(a["id"]).startswith("pk_")}))
     if not gids:
         return
     m = _sb_google_video_urls(gids)
@@ -1049,12 +1050,14 @@ def render_ad_card(ad: dict, idx: int) -> None:
             if full:
                 render_ad_detail(full)
         marked = bool(ad.get("is_bookmarked"))
-        if b[1].button("★" if marked else "☆", key=f"bm_{aid}_{idx}",
+        if str(aid).startswith("pk_"):     # 읽기 전용 광고 — 북마크/제외(쓰기) 버튼 생략
+            pass
+        elif b[1].button("★" if marked else "☆", key=f"bm_{aid}_{idx}",
                        use_container_width=True, type=("primary" if marked else "secondary"),
                        help="북마크 해제" if marked else "북마크 저장"):
             database.update_bookmark(aid, not marked, st.session_state.get('username',''))
             _reload()
-        if b[2].button("🚫", key=f"exc_{aid}_{idx}", use_container_width=True,
+        if not str(aid).startswith("pk_") and b[2].button("🚫", key=f"exc_{aid}_{idx}", use_container_width=True,
                        help="잘못 수집된 광고 — archive에서 제외(숨김)"):
             database.exclude_ad(aid, True)
             _reload()
@@ -1506,12 +1509,13 @@ def render_ad_detail(ad: dict) -> None:
 
     # ── 헤더: 브랜드명(가장 크게) + 우측 [보존 토글] + [북마크 별] (개념 구분) ──
     preserved = bool(ad.get("is_preserved"))
+    _ro = str(aid).startswith("pk_")       # 읽기 전용 광고(쓰기 버튼 생략, 출처 표기 없음)
     hc = st.columns([7, 1, 1])
     hc[0].markdown(f"<div style='font-size:23px;font-weight:800;color:{S.PRIMARY};"
                    f"letter-spacing:-.3px;line-height:1.25;margin-top:2px'>"
                    f"{_h.escape(_g(ad,'brand_name','-'))}</div>", unsafe_allow_html=True)
     # 보존: retention(60일 자동정리)에서 이 광고를 제외. 북마크와 별개.
-    if hc[1].button("🔒 보존" if preserved else "🔓 보존", key=f"preservetop_{aid}",
+    if not _ro and hc[1].button("🔒 보존" if preserved else "🔓 보존", key=f"preservetop_{aid}",
                     use_container_width=True,
                     type=("primary" if preserved else "secondary"),
                     help=("자동정리(60일) 보존 중 — 눌러서 해제" if preserved
@@ -1519,7 +1523,7 @@ def render_ad_detail(ad: dict) -> None:
         database.update_preserved(aid, not preserved)
         _reload()
     # 북마크: 관심 광고 저장(별개 개념)
-    if hc[2].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
+    if not _ro and hc[2].button("★" if marked else "☆", key=f"bmtop_{aid}", use_container_width=True,
                     type=("primary" if marked else "secondary"),
                     help="북마크 해제" if marked else "북마크 저장"):
         database.update_bookmark(aid, not marked, st.session_state.get('username',''))
@@ -1689,8 +1693,19 @@ def render_ad_detail(ad: dict) -> None:
                         unsafe_allow_html=True)
 
         st.divider()
-        _render_video_script(ad)
+        if _ro:
+            st.markdown("##### 영상 스크립트")
+            if (ad.get("transcript") or "").strip():
+                st.markdown(f"<div style='background:#F8FAFC;border-radius:10px;padding:14px;"
+                            f"font-size:13px;line-height:1.7;white-space:pre-wrap'>"
+                            f"{_h.escape(ad['transcript'])}</div>", unsafe_allow_html=True)
+            else:
+                st.caption("스크립트가 없습니다.")
+        else:
+            _render_video_script(ad)
 
+    if _ro:          # 메모/이미지/YouTube 연결은 우리 DB 광고에만(쓰기 대상)
+        return
     # ── 내 분석 메모 + 하단 액션(메모 저장 · 원본 보기 · YouTube 연결) ──
     st.divider()
     st.markdown("##### 📝 내 분석 메모")

@@ -717,10 +717,22 @@ def _group_key(f: dict) -> str:
     return "a.id"
 
 
+def _with_picker(conn, tab: str, f: dict) -> None:
+    """선택 브랜드의 참고 Google 광고를 이 조회 커넥션에서만 합쳐 보이게(TEMP VIEW, DB 변경 없음)."""
+    if tab in ("meta", "TOP"):
+        return
+    try:
+        import services.picker_overlay as _po
+        _po.install(conn, f.get("brand"))
+    except Exception as e:  # noqa: BLE001  (실패해도 기존 화면 그대로)
+        print(f"  [참고광고] 생략: {type(e).__name__}: {e}")
+
+
 def count_ads(tab: str, f: dict) -> int:
     global LAST_READ_SOURCE
     where, p = _where(tab, f)
     conn, src = _read_conn(f.get("brand"))
+    _with_picker(conn, tab, f)
     try:
         n = conn.execute(f"SELECT COUNT(DISTINCT {_grp(f)}) {_JOIN} WHERE {where}", p).fetchone()[0]
     except Exception as e:  # noqa: BLE001  (미러 이상 → 로컬로 다시)
@@ -729,6 +741,7 @@ def count_ads(tab: str, f: dict) -> int:
             raise
         print(f"  [읽기] Supabase 미러 쿼리 실패 → SQLite 재시도: {e}")
         conn, src = get_conn(), "sqlite"
+        _with_picker(conn, tab, f)
         n = conn.execute(f"SELECT COUNT(DISTINCT {_grp(f)}) {_JOIN} WHERE {where}", p).fetchone()[0]
     conn.close()
     LAST_READ_SOURCE = src
@@ -750,6 +763,7 @@ def load_ads_page(tab: str, f: dict, page: int = 1, page_size: int = 12) -> list
     order = _outer_order(_order(tab, f.get("sort", "")))
     global LAST_READ_SOURCE
     conn, src = _read_conn(f.get("brand"))
+    _with_picker(conn, tab, f)
     sql = (f"SELECT * FROM (SELECT {cols} {_JOIN} WHERE {where}) t "
            f"WHERE t.rn=1 {order} LIMIT ? OFFSET ?")
     args = p + [page_size, max(0, (page - 1) * page_size)]
@@ -762,6 +776,7 @@ def load_ads_page(tab: str, f: dict, page: int = 1, page_size: int = 12) -> list
             raise
         print(f"  [읽기] Supabase 미러 쿼리 실패 → SQLite 재시도: {e}")
         conn, src = get_conn(), "sqlite"
+        _with_picker(conn, tab, f)
         rows = conn.execute(sql, args).fetchall()
     conn.close()
     LAST_READ_SOURCE = src
@@ -787,6 +802,9 @@ def get_ad_full(ad_id: str) -> Optional[dict]:
     """상세 모달용 — 1건 전체 + 매칭 소셜 + 등급.
     화이트리스트 브랜드 광고면 Supabase 미러에서(썸네일도 Storage URL로), 아니면 로컬 SQLite."""
     global LAST_READ_SOURCE
+    import services.picker_overlay as _po
+    if _po.is_picker_id(ad_id):                # 참고 Google 광고(읽기 전용) — 1건 조회
+        return _po.get_full(ad_id)
     conn, LAST_READ_SOURCE = get_conn(), "sqlite"
     try:
         import services.supabase_read as _sr
@@ -1016,9 +1034,18 @@ def brand_counts() -> list[dict]:
     names = [r["display_name"] for r in
              conn.execute("SELECT display_name FROM brands WHERE is_active=1")]
     conn.close()
+    # 참고 Google 광고가 연결된 브랜드는 is_active(자동수집 여부)와 무관하게 목록에 표시 + 수에 포함
+    try:
+        import services.picker_overlay as _po
+        pk = _po.brand_counts_extra()
+    except Exception:  # noqa: BLE001
+        pk = {}
+    names += [nm for nm in sorted(pk) if nm not in names]
     out = []
     for nm in names:
         a = ads.get(nm, (0, 0, 0, 0))
+        if pk.get(nm):
+            a = (a[0] + pk[nm], a[1], a[2] + pk[nm], a[3])
         s2 = soc.get(nm, {})
         out.append({"name": nm, "ad": a[0], "meta": a[1], "google": a[2], "live": a[3],
                     "approved": s2.get("approved", 0), "needs": s2.get("needs_review", 0),
